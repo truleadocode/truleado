@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { verifyFirebaseToken } from '@/lib/firebase/admin';
+import { verifyIdToken } from '@/lib/firebase/admin';
 
 export const runtime = 'nodejs';
 
@@ -26,8 +26,10 @@ export async function POST(request: NextRequest) {
     }
 
     const token = authHeader.substring(7);
-    const decodedToken = await verifyFirebaseToken(token);
-    if (!decodedToken) {
+    let decodedToken;
+    try {
+      decodedToken = await verifyIdToken(token);
+    } catch {
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
