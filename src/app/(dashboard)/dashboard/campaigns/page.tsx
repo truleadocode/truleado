@@ -34,7 +34,7 @@ interface Campaign {
     }
   }
   deliverables: { id: string }[]
-  creators: { id: string }[]
+  creators: { id: string; creator: { id: string; displayName: string } }[]
 }
 
 interface Project {

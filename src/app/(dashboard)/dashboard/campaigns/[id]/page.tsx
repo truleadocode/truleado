@@ -57,6 +57,12 @@ interface Creator {
   tiktokHandle: string | null
 }
 
+interface CampaignCreator {
+  id: string
+  status: string
+  creator: Creator
+}
+
 interface Campaign {
   id: string
   name: string
@@ -80,7 +86,7 @@ interface Campaign {
     }
   }
   deliverables: Deliverable[]
-  creators: Creator[]
+  creators: CampaignCreator[]
 }
 
 // Campaign state machine
@@ -456,21 +462,21 @@ export default function CampaignDetailPage() {
               </Card>
             ) : (
               <div className="space-y-3">
-                {campaign.creators.map((creator) => (
-                  <Card key={creator.id}>
+                {campaign.creators.map((campaignCreator) => (
+                  <Card key={campaignCreator.id}>
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <Avatar className="h-10 w-10">
                           <AvatarFallback>
-                            {getInitials(creator.displayName)}
+                            {getInitials(campaignCreator.creator.displayName)}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="font-medium">{creator.displayName}</p>
+                          <p className="font-medium">{campaignCreator.creator.displayName}</p>
                           <div className="flex gap-2 text-xs text-muted-foreground">
-                            {creator.instagramHandle && <span>@{creator.instagramHandle}</span>}
-                            {creator.youtubeHandle && <span>YT: {creator.youtubeHandle}</span>}
-                            {creator.tiktokHandle && <span>TT: @{creator.tiktokHandle}</span>}
+                            {campaignCreator.creator.instagramHandle && <span>@{campaignCreator.creator.instagramHandle}</span>}
+                            {campaignCreator.creator.youtubeHandle && <span>YT: {campaignCreator.creator.youtubeHandle}</span>}
+                            {campaignCreator.creator.tiktokHandle && <span>TT: @{campaignCreator.creator.tiktokHandle}</span>}
                           </div>
                         </div>
                       </div>

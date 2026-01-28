@@ -267,7 +267,10 @@ export const queries = {
         }
         creators {
           id
-          displayName
+          creator {
+            id
+            displayName
+          }
         }
       }
     }
@@ -311,10 +314,14 @@ export const queries = {
         }
         creators {
           id
-          displayName
-          instagramHandle
-          youtubeHandle
-          tiktokHandle
+          status
+          creator {
+            id
+            displayName
+            instagramHandle
+            youtubeHandle
+            tiktokHandle
+          }
         }
       }
     }
