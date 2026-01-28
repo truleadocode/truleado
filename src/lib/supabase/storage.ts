@@ -1,10 +1,11 @@
 /**
  * Supabase Storage Utilities
  * 
- * Handles file uploads to Supabase Storage buckets.
+ * Handles file uploads to Supabase Storage buckets via API route.
+ * We use an API route because Firebase JWTs aren't compatible with
+ * Supabase Storage's direct authentication.
  */
 
-import { createSupabaseClient } from './client';
 import { getIdToken } from '@/lib/firebase/client';
 
 export type StorageBucket = 'campaign-attachments' | 'deliverables';
@@ -18,28 +19,7 @@ interface UploadResult {
 }
 
 /**
- * Generate a unique file path for storage
- */
-function generateFilePath(
-  bucket: StorageBucket,
-  entityId: string,
-  fileName: string
-): string {
-  const timestamp = Date.now();
-  const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-  
-  switch (bucket) {
-    case 'campaign-attachments':
-      return `campaigns/${entityId}/${timestamp}_${sanitizedFileName}`;
-    case 'deliverables':
-      return `deliverables/${entityId}/${timestamp}_${sanitizedFileName}`;
-    default:
-      return `${entityId}/${timestamp}_${sanitizedFileName}`;
-  }
-}
-
-/**
- * Upload a file to Supabase Storage
+ * Upload a file to Supabase Storage via API route
  */
 export async function uploadFile(
   bucket: StorageBucket,
@@ -52,83 +32,34 @@ export async function uploadFile(
     throw new Error('Not authenticated');
   }
   
-  const supabase = createSupabaseClient(token);
-  const filePath = generateFilePath(bucket, entityId, file.name);
+  // Create form data
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('bucket', bucket);
+  formData.append('entityId', entityId);
   
-  // Upload the file
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(filePath, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
+  // Upload via API route
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+    body: formData,
+  });
   
-  if (error) {
-    console.error('Upload error:', error);
-    throw new Error(`Failed to upload file: ${error.message}`);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || 'Upload failed');
   }
-  
-  // Get public URL (for signed URLs, use getSignedUrl instead)
-  const { data: urlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path);
   
   return {
     path: data.path,
-    url: urlData.publicUrl,
-    fileName: file.name,
-    fileSize: file.size,
-    mimeType: file.type,
+    url: data.url,
+    fileName: data.fileName,
+    fileSize: data.fileSize,
+    mimeType: data.mimeType,
   };
-}
-
-/**
- * Get a signed URL for private file access
- */
-export async function getSignedUrl(
-  bucket: StorageBucket,
-  path: string,
-  expiresIn: number = 3600 // 1 hour default
-): Promise<string> {
-  const token = await getIdToken();
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-  
-  const supabase = createSupabaseClient(token);
-  
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .createSignedUrl(path, expiresIn);
-  
-  if (error) {
-    throw new Error(`Failed to get signed URL: ${error.message}`);
-  }
-  
-  return data.signedUrl;
-}
-
-/**
- * Delete a file from storage
- */
-export async function deleteFile(
-  bucket: StorageBucket,
-  path: string
-): Promise<void> {
-  const token = await getIdToken();
-  if (!token) {
-    throw new Error('Not authenticated');
-  }
-  
-  const supabase = createSupabaseClient(token);
-  
-  const { error } = await supabase.storage
-    .from(bucket)
-    .remove([path]);
-  
-  if (error) {
-    throw new Error(`Failed to delete file: ${error.message}`);
-  }
 }
 
 /**
