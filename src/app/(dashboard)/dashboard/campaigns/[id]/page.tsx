@@ -48,8 +48,10 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
 import { DatePicker } from '@/components/ui/date-picker'
 import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-editor'
+import { FileUpload, FileItem } from '@/components/ui/file-upload'
 import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
+import { uploadFile } from '@/lib/supabase/storage'
 
 interface DeliverableVersion {
   id: string
@@ -290,28 +292,29 @@ export default function CampaignDetailPage() {
     }
   }
 
-  const handleAddAttachment = async () => {
-    // For now, prompt for URL - in production, this would be a file upload to Supabase Storage
-    const fileUrl = window.prompt('Enter file URL:')
-    if (!fileUrl) return
-    
-    const fileName = window.prompt('Enter file name:', fileUrl.split('/').pop() || 'attachment')
-    if (!fileName) return
-    
+  const handleFileUpload = async (file: File) => {
     try {
+      // Upload to Supabase Storage
+      const result = await uploadFile('campaign-attachments', campaignId, file)
+      
+      // Save attachment record to database
       await graphqlRequest(mutations.addCampaignAttachment, {
         campaignId,
-        fileName,
-        fileUrl,
+        fileName: result.fileName,
+        fileUrl: result.url,
+        fileSize: result.fileSize,
+        mimeType: result.mimeType,
       })
-      toast({ title: 'Attachment added' })
+      
+      toast({ title: 'File uploaded', description: `${file.name} uploaded successfully` })
       await fetchCampaign()
     } catch (err) {
       toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to add attachment', 
+        title: 'Upload failed', 
+        description: err instanceof Error ? err.message : 'Failed to upload file', 
         variant: 'destructive' 
       })
+      throw err // Re-throw so FileUpload component shows error state
     }
   }
 
@@ -647,59 +650,35 @@ export default function CampaignDetailPage() {
                 <Paperclip className="h-5 w-5" />
                 Attachments
               </h2>
-              {!isArchived && (
-                <Button variant="outline" size="sm" onClick={handleAddAttachment}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Add File
-                </Button>
-              )}
             </div>
             
+            {/* File Upload Area */}
+            {!isArchived && (
+              <FileUpload 
+                onUpload={handleFileUpload}
+                maxSize={50 * 1024 * 1024} // 50MB
+                className="mb-4"
+              />
+            )}
+            
+            {/* Existing Attachments */}
             {campaign.attachments.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p>No attachments yet</p>
-                {!isArchived && (
-                  <p className="text-sm mt-1">Add briefs, brand guidelines, or reference materials</p>
-                )}
-              </div>
+              !isArchived ? null : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                  <p>No attachments</p>
+                </div>
+              )
             ) : (
               <div className="space-y-2">
                 {campaign.attachments.map((attachment) => (
-                  <div 
-                    key={attachment.id} 
-                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded bg-background flex items-center justify-center">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <a 
-                          href={attachment.fileUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="font-medium hover:underline"
-                        >
-                          {attachment.fileName}
-                        </a>
-                        <p className="text-xs text-muted-foreground">
-                          {formatFileSize(attachment.fileSize)}
-                          {attachment.fileSize && ' • '}
-                          {formatDate(attachment.createdAt)}
-                        </p>
-                      </div>
-                    </div>
-                    {!isArchived && (
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={() => handleRemoveAttachment(attachment.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                      </Button>
-                    )}
-                  </div>
+                  <FileItem
+                    key={attachment.id}
+                    fileName={attachment.fileName}
+                    fileSize={attachment.fileSize}
+                    fileUrl={attachment.fileUrl}
+                    onRemove={!isArchived ? () => handleRemoveAttachment(attachment.id) : undefined}
+                  />
                 ))}
               </div>
             )}
