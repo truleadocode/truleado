@@ -97,12 +97,14 @@ export async function uploadDeliverableVersion(
     fileName,
     fileSize,
     mimeType,
+    caption,
   }: {
     deliverableId: string;
     fileUrl: string;
     fileName?: string;
     fileSize?: number;
     mimeType?: string;
+    caption?: string;
   },
   ctx: GraphQLContext
 ) {
@@ -130,14 +132,19 @@ export async function uploadDeliverableVersion(
     );
   }
   
-  // Get next version number
+  if (!fileName || fileName.trim().length === 0) {
+    throw validationError('File name is required for versioning', 'fileName');
+  }
+  
+  // Get next version number scoped to this file name
   const { data: lastVersion } = await supabaseAdmin
     .from('deliverable_versions')
     .select('version_number')
     .eq('deliverable_id', deliverableId)
+    .eq('file_name', fileName)
     .order('version_number', { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
   
   const nextVersionNumber = (lastVersion?.version_number || 0) + 1;
   
@@ -150,6 +157,7 @@ export async function uploadDeliverableVersion(
       file_name: fileName,
       file_size: fileSize,
       mime_type: mimeType,
+      caption: caption?.trim() || null,
       submitted_by: user.id,
     })
     .select()

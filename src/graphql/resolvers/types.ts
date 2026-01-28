@@ -309,6 +309,7 @@ export const typeResolvers = {
     fileName: (parent: { file_name: string | null }) => parent.file_name,
     fileSize: (parent: { file_size: number | null }) => parent.file_size,
     mimeType: (parent: { mime_type: string | null }) => parent.mime_type,
+    caption: (parent: { caption: string | null }) => parent.caption,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     deliverable: async (parent: UserRow) => {
       const { data } = await supabaseAdmin

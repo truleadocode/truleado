@@ -80,7 +80,8 @@ External Services
 ### Storage
 - **Files**: Supabase Storage
 - **Use cases**:
-  - Deliverable uploads
+  - Deliverable uploads (content files)
+  - Campaign attachments (briefs, reference docs)
   - Invoices
   - Reports
 
@@ -244,11 +245,32 @@ Attached at:
 
 ## 10. Deliverables & Content Management
 
-- Each deliverable supports multiple versions
-- Only latest version is active
-- Approved version is locked
+- Each **deliverable** is campaign-scoped.
+- A deliverable can have **multiple files**, each with its own version history:
+  - `deliverable_versions` table stores:
+    - `file_name`
+    - `version_number`
+    - `file_url` (Supabase storage path)
+    - `caption` (optional copy/caption from uploader)
+  - Uniqueness is enforced on `(deliverable_id, file_name, version_number)`.
+- The **latest version per file** is shown as “Latest” in the UI, but **all versions remain visible and downloadable**.
+- Approved deliverables are locked for new uploads.
 
-Files stored in Supabase Storage with metadata in DB.
+### 10.1 File Storage & Access
+
+- Files are stored in **private Supabase Storage buckets**:
+  - `campaign-attachments` – campaign-level documents, briefs, reference files.
+  - `deliverables` – content files for deliverable versions.
+- Because Firebase JWTs are not directly compatible with Supabase Storage auth:
+  - Uploads go through `POST /api/upload` (Next.js route):
+    - Verifies Firebase token server-side.
+    - Uses Supabase **service role** key to upload into the correct bucket/path.
+    - Returns **storage path**, not a public URL.
+  - Downloads go through `POST /api/download`:
+    - Verifies Firebase token.
+    - Uses service role to create a **short-lived signed URL**.
+    - Frontend opens the signed URL in a new tab.
+- The GraphQL layer stores only storage **paths** (as `String`), never public URLs.
 
 ---
 

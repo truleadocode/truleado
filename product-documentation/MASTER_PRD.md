@@ -207,13 +207,13 @@ Draft → Active → Content In Review → Approved → Completed → Archived
 
 ## 8. Deliverables & Content Management
 
-- Deliverables are campaign-scoped
-- Each deliverable supports:
-  - Versioning
-  - Comments
-  - Rejections
-  - Re-uploads
-- Final approved version is immutable
+- Deliverables are campaign-scoped.
+- Each deliverable can contain **multiple files** (e.g., post image, story asset, caption doc).
+- For each file:
+  - The system tracks a **version history** (v1, v2, v3…).
+  - Uploaders can provide **optional copy/caption** with each version, visible to reviewers.
+  - Rejections and re-uploads create new versions, preserving history.
+- Final approved deliverables are immutable (no new versions allowed after approval).
 
 ---
 

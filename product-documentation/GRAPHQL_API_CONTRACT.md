@@ -67,12 +67,19 @@ enum DeliverableStatus {
 enum CampaignCreatorStatus {
   INVITED
   ACCEPTED
+  DECLINED
   REMOVED
 }
 
 enum ApprovalDecision {
   APPROVED
   REJECTED
+}
+
+enum ApprovalLevel {
+  INTERNAL
+  CLIENT
+  FINAL
 }
 
 enum AnalyticsType {
@@ -190,7 +197,7 @@ type CampaignAttachment {
   id: ID!
   campaign: Campaign!
   fileName: String!
-  fileUrl: URL!
+  fileUrl: String!   # Supabase storage path (signed URLs used for download)
   fileSize: Int
   mimeType: String
   uploadedBy: User
@@ -227,7 +234,7 @@ type Deliverable {
   campaign: Campaign!
   title: String!
   description: String
-  deliverableType: String
+  deliverableType: String!
   status: DeliverableStatus!
   dueDate: DateTime
   versions: [DeliverableVersion!]!
@@ -239,10 +246,11 @@ type DeliverableVersion {
   id: ID!
   deliverable: Deliverable!
   versionNumber: Int!
-  fileUrl: URL
+  fileUrl: String
   fileName: String
   fileSize: Int
   mimeType: String
+  caption: String
   uploadedBy: User
   createdAt: DateTime!
 }
@@ -256,9 +264,9 @@ type DeliverableVersion {
 type Approval {
   id: ID!
   deliverable: Deliverable!
-  version: DeliverableVersion
+  deliverableVersion: DeliverableVersion!
+  approvalLevel: ApprovalLevel!
   decision: ApprovalDecision!
-  level: String!
   comment: String
   decidedBy: User!
   decidedAt: DateTime!
@@ -474,7 +482,7 @@ type Mutation {
   addCampaignAttachment(
     campaignId: ID!
     fileName: String!
-    fileUrl: URL!
+    fileUrl: String!   # Supabase storage path, not public URL
     fileSize: Int
     mimeType: String
   ): CampaignAttachment!
@@ -503,30 +511,33 @@ type Mutation {
   createDeliverable(
     campaignId: ID!
     title: String!
+    deliverableType: String!
     description: String
-    deliverableType: String
     dueDate: DateTime
   ): Deliverable!
   
   uploadDeliverableVersion(
     deliverableId: ID!
-    fileUrl: URL!
+    fileUrl: String!
     fileName: String
     fileSize: Int
     mimeType: String
+    caption: String
   ): DeliverableVersion!
   
   submitDeliverableForReview(deliverableId: ID!): Deliverable!
   
   approveDeliverable(
     deliverableId: ID!
-    level: String!
+    versionId: ID!
+    approvalLevel: ApprovalLevel!
     comment: String
   ): Approval!
   
   rejectDeliverable(
     deliverableId: ID!
-    level: String!
+    versionId: ID!
+    approvalLevel: ApprovalLevel!
     comment: String!
   ): Approval!
 }

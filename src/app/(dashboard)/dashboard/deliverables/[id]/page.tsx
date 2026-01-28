@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -44,6 +44,7 @@ interface DeliverableVersion {
   fileSize: number | null
   mimeType: string | null
   createdAt: string
+  caption?: string | null
   uploadedBy: {
     id: string
     name: string | null
@@ -54,7 +55,7 @@ interface DeliverableVersion {
 interface Approval {
   id: string
   decision: string
-  level: string
+  approvalLevel: string
   comment: string | null
   decidedAt: string
   decidedBy: {
@@ -76,6 +77,7 @@ interface Deliverable {
     id: string
     name: string
     status: string
+    campaignType: string
     project: {
       id: string
       name: string
@@ -90,12 +92,12 @@ interface Deliverable {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pending: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-4 w-4" /> },
-  submitted: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-4 w-4" /> },
-  internal_review: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-4 w-4" /> },
-  client_review: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-4 w-4" /> },
-  approved: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-4 w-4" /> },
-  rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-4 w-4" /> },
+  PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-4 w-4" /> },
+  SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-4 w-4" /> },
+  INTERNAL_REVIEW: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-4 w-4" /> },
+  CLIENT_REVIEW: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-4 w-4" /> },
+  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-4 w-4" /> },
+  REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-4 w-4" /> },
 }
 
 export default function DeliverableDetailPage() {
@@ -113,6 +115,12 @@ export default function DeliverableDetailPage() {
   const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve')
   const [approvalComment, setApprovalComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [captionDialogOpen, setCaptionDialogOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [captionText, setCaptionText] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [targetFileName, setTargetFileName] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const fetchDeliverable = useCallback(async () => {
     try {
@@ -132,23 +140,58 @@ export default function DeliverableDetailPage() {
     fetchDeliverable()
   }, [fetchDeliverable])
 
+  // Drag & drop upload (new file for this deliverable)
   const handleFileUpload = async (file: File) => {
-    if (!deliverable) return
+    if (!deliverable || uploading || captionDialogOpen) return
+    setPendingFile(file)
+    setTargetFileName(null) // new file, versioning based on this name
+    setCaptionText('')
+    setCaptionDialogOpen(true)
+  }
+
+  // Per-file "Upload new version" button
+  const handleUploadNewVersionClick = (fileName: string) => {
+    setTargetFileName(fileName)
+    setCaptionText('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFileInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingFile(file)
+    setCaptionDialogOpen(true)
+  }
+
+  const handleConfirmUpload = async () => {
+    if (!deliverable || !pendingFile) return
     
+    setUploading(true)
     try {
       // Upload to Supabase Storage
-      const result = await uploadFile('deliverables', deliverableId, file)
+      const result = await uploadFile('deliverables', deliverableId, pendingFile)
+
+      // If targetFileName is set, version under that logical file; else use real name
+      const effectiveFileName = targetFileName || result.fileName
       
-      // Create version record
+      // Create version record with optional caption
       await graphqlRequest(mutations.uploadDeliverableVersion, {
         deliverableId,
         fileUrl: result.path,
-        fileName: result.fileName,
+        fileName: effectiveFileName,
         fileSize: result.fileSize,
         mimeType: result.mimeType,
+        caption: captionText || null,
       })
       
       toast({ title: 'Version uploaded', description: `Version uploaded successfully` })
+      setCaptionDialogOpen(false)
+      setPendingFile(null)
+      setCaptionText('')
+      setTargetFileName(null)
       await fetchDeliverable()
     } catch (err) {
       toast({ 
@@ -156,7 +199,8 @@ export default function DeliverableDetailPage() {
         description: err instanceof Error ? err.message : 'Failed to upload', 
         variant: 'destructive' 
       })
-      throw err
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -183,7 +227,7 @@ export default function DeliverableDetailPage() {
     if (!deliverable || deliverable.versions.length === 0) return
     
     const latestVersion = deliverable.versions[0]
-    const approvalLevel = deliverable.status === 'internal_review' ? 'internal' : 'client'
+    const approvalLevel = deliverable.status === 'INTERNAL_REVIEW' ? 'internal' : 'client'
     
     setSubmitting(true)
     try {
@@ -260,11 +304,11 @@ export default function DeliverableDetailPage() {
     return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
-  const canUpload = deliverable && ['pending', 'rejected'].includes(deliverable.status)
-  const canSubmit = deliverable && deliverable.status === 'pending' && deliverable.versions.length > 0
-  const canResubmit = deliverable && deliverable.status === 'rejected' && deliverable.versions.length > 0
-  const canApprove = deliverable && ['internal_review', 'client_review'].includes(deliverable.status)
-  const isApproved = deliverable?.status === 'approved'
+  const canUpload = deliverable && ['PENDING', 'REJECTED'].includes(deliverable.status)
+  const canSubmit = deliverable && deliverable.status === 'PENDING' && deliverable.versions.length > 0
+  const canResubmit = deliverable && deliverable.status === 'REJECTED' && deliverable.versions.length > 0
+  const canApprove = deliverable && ['INTERNAL_REVIEW', 'CLIENT_REVIEW'].includes(deliverable.status)
+  const isApproved = deliverable?.status === 'APPROVED'
 
   if (loading) {
     return (
@@ -300,7 +344,18 @@ export default function DeliverableDetailPage() {
     )
   }
 
-  const statusConfig = STATUS_CONFIG[deliverable.status] || STATUS_CONFIG.pending
+  const statusConfig = STATUS_CONFIG[deliverable.status] || STATUS_CONFIG.PENDING
+
+  // Group versions by fileName so each file shows its own version history
+  const versionsByFile: Record<string, DeliverableVersion[]> = deliverable.versions.reduce(
+    (acc, version) => {
+      const key = version.fileName || 'Untitled file'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(version)
+      return acc
+    },
+    {} as Record<string, DeliverableVersion[]>
+  )
 
   return (
     <>
@@ -425,50 +480,92 @@ export default function DeliverableDetailPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-3">
-                {deliverable.versions.map((version, index) => (
-                  <Card key={version.id} className={index === 0 ? 'ring-2 ring-primary' : ''}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
+              <div className="space-y-4">
+                {Object.entries(versionsByFile).map(([fileName, versions]) => {
+                  const sorted = [...versions].sort(
+                    (a, b) => b.versionNumber - a.versionNumber
+                  )
+                  const latest = sorted[0]
+                  return (
+                    <Card key={fileName} className="border">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
-                            <span className="text-sm font-bold">v{version.versionNumber}</span>
+                            <FileCheck className="h-5 w-5 text-blue-600" />
                           </div>
                           <div>
-                            <p className="font-medium">
-                              {version.fileName || `Version ${version.versionNumber}`}
-                              {index === 0 && (
-                                <span className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded">
-                                  Latest
-                                </span>
-                              )}
-                            </p>
+                            <CardTitle className="text-sm font-medium">
+                              {fileName}
+                            </CardTitle>
                             <p className="text-xs text-muted-foreground">
-                              {formatFileSize(version.fileSize)} • {formatDateTime(version.createdAt)}
+                              Latest v{latest.versionNumber} • {formatDateTime(latest.createdAt)}
                             </p>
                           </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDownload(version.fileUrl)}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {version.uploadedBy && (
-                        <div className="mt-3 pt-3 border-t flex items-center gap-2 text-sm text-muted-foreground">
-                          <Avatar className="h-5 w-5">
-                            <AvatarFallback className="text-xs">
-                              {getInitials(version.uploadedBy.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span>Uploaded by {version.uploadedBy.name || version.uploadedBy.email}</span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleUploadNewVersionClick(fileName)}
+                            disabled={!canUpload}
+                          >
+                            <Upload className="h-3 w-3 mr-1" />
+                            New version
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDownload(latest.fileUrl)}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardHeader>
+                      <CardContent className="pt-2 space-y-2">
+                        {sorted.map((version, index) => (
+                          <div
+                            key={version.id}
+                            className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                              index === 0 ? 'border-primary/50 bg-primary/5' : 'border-muted'
+                            }`}
+                          >
+                            <div>
+                              <p className="text-sm font-medium">
+                                v{version.versionNumber}
+                                {index === 0 && (
+                                  <span className="ml-2 text-[10px] uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
+                                    Latest
+                                  </span>
+                                )}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatFileSize(version.fileSize)} • {formatDateTime(version.createdAt)}
+                              </p>
+                              {version.caption && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Caption: {version.caption}
+                                </p>
+                              )}
+                              {version.uploadedBy && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  Uploaded by {version.uploadedBy.name || version.uploadedBy.email}
+                                </p>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleDownload(version.fileUrl)}
+                            >
+                              <Download className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -506,7 +603,7 @@ export default function DeliverableDetailPage() {
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
                             <p className="font-medium capitalize">
-                              {approval.decision} - {approval.level} Review
+                              {approval.decision} - {approval.approvalLevel.toLowerCase()} Review
                             </p>
                             <span className="text-xs text-muted-foreground">
                               {formatDateTime(approval.decidedAt)}
@@ -536,23 +633,23 @@ export default function DeliverableDetailPage() {
             <CardContent className="p-4">
               <h3 className="font-medium mb-2">Approval Workflow</h3>
               <div className="flex items-center gap-2 text-sm">
-                <span className={deliverable.status === 'pending' ? 'font-medium' : 'text-muted-foreground'}>
+                <span className={deliverable.status === 'PENDING' ? 'font-medium' : 'text-muted-foreground'}>
                   1. Upload
                 </span>
                 <span className="text-muted-foreground">→</span>
-                <span className={deliverable.status === 'submitted' ? 'font-medium' : 'text-muted-foreground'}>
+                <span className={deliverable.status === 'SUBMITTED' ? 'font-medium' : 'text-muted-foreground'}>
                   2. Submit
                 </span>
                 <span className="text-muted-foreground">→</span>
-                <span className={deliverable.status === 'internal_review' ? 'font-medium' : 'text-muted-foreground'}>
+                <span className={deliverable.status === 'INTERNAL_REVIEW' ? 'font-medium' : 'text-muted-foreground'}>
                   3. Internal Review
                 </span>
                 <span className="text-muted-foreground">→</span>
-                <span className={deliverable.status === 'client_review' ? 'font-medium' : 'text-muted-foreground'}>
+                <span className={deliverable.status === 'CLIENT_REVIEW' ? 'font-medium' : 'text-muted-foreground'}>
                   4. Client Review
                 </span>
                 <span className="text-muted-foreground">→</span>
-                <span className={deliverable.status === 'approved' ? 'font-medium text-green-600' : 'text-muted-foreground'}>
+                <span className={deliverable.status === 'APPROVED' ? 'font-medium text-green-600' : 'text-muted-foreground'}>
                   5. Approved
                 </span>
               </div>
@@ -601,6 +698,64 @@ export default function DeliverableDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Caption / Copy Dialog for uploads */}
+      <Dialog open={captionDialogOpen} onOpenChange={(open) => {
+        setCaptionDialogOpen(open)
+        if (!open) {
+          setPendingFile(null)
+          setCaptionText('')
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add caption / copy</DialogTitle>
+            <DialogDescription>
+              Optional copy or caption that will be shown to reviewers along with this file.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            {pendingFile && (
+              <p className="text-sm text-muted-foreground">
+                File: <span className="font-medium">{pendingFile.name}</span>
+              </p>
+            )}
+            <Label htmlFor="caption">Caption / Copy</Label>
+            <textarea
+              id="caption"
+              rows={3}
+              value={captionText}
+              onChange={(e) => setCaptionText(e.target.value)}
+              placeholder="Optional caption or post copy..."
+              className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCaptionDialogOpen(false)
+                setPendingFile(null)
+                setCaptionText('')
+              }}
+              disabled={uploading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmUpload} disabled={uploading}>
+              {uploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hidden input for per-file \"New version\" uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileInputChange}
+      />
     </>
   )
 }

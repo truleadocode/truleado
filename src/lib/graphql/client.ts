@@ -290,6 +290,7 @@ export const queries = {
           id
           name
           status
+          campaignType
           project {
             id
             name
@@ -304,6 +305,7 @@ export const queries = {
           versionNumber
           fileUrl
           fileName
+          caption
           fileSize
           mimeType
           createdAt
@@ -316,7 +318,7 @@ export const queries = {
         approvals {
           id
           decision
-          level
+          approvalLevel
           comment
           decidedAt
           decidedBy {
@@ -571,8 +573,8 @@ export const mutations = {
   `,
   
   uploadDeliverableVersion: `
-    mutation UploadDeliverableVersion($deliverableId: ID!, $fileUrl: String!, $fileName: String, $fileSize: Int, $mimeType: String) {
-      uploadDeliverableVersion(deliverableId: $deliverableId, fileUrl: $fileUrl, fileName: $fileName, fileSize: $fileSize, mimeType: $mimeType) {
+    mutation UploadDeliverableVersion($deliverableId: ID!, $fileUrl: String!, $fileName: String, $fileSize: Int, $mimeType: String, $caption: String) {
+      uploadDeliverableVersion(deliverableId: $deliverableId, fileUrl: $fileUrl, fileName: $fileName, fileSize: $fileSize, mimeType: $mimeType, caption: $caption) {
         id
         versionNumber
         fileUrl
@@ -596,7 +598,7 @@ export const mutations = {
       approveDeliverable(deliverableId: $deliverableId, versionId: $versionId, approvalLevel: $approvalLevel, comment: $comment) {
         id
         decision
-        level
+        approvalLevel
       }
     }
   `,
@@ -606,7 +608,7 @@ export const mutations = {
       rejectDeliverable(deliverableId: $deliverableId, versionId: $versionId, approvalLevel: $approvalLevel, comment: $comment) {
         id
         decision
-        level
+        approvalLevel
       }
     }
   `,

@@ -154,6 +154,7 @@ CREATE TABLE campaigns (
   campaign_type TEXT CHECK (campaign_type IN ('influencer','social')) NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
+  brief TEXT,
   status TEXT CHECK (status IN ('draft','active','in_review','approved','completed','archived')) DEFAULT 'draft',
   start_date DATE,
   end_date DATE,
@@ -214,9 +215,12 @@ CREATE TABLE deliverable_versions (
   file_name TEXT,
   file_size INTEGER,
   mime_type TEXT,
+  caption TEXT,
   uploaded_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (deliverable_id, version_number)
+  -- Versions are scoped per file name so a single deliverable
+  -- can have multiple files, each with its own version history.
+  UNIQUE (deliverable_id, file_name, version_number)
 );
 ```
 
@@ -228,13 +232,33 @@ CREATE TABLE deliverable_versions (
 CREATE TABLE approvals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   deliverable_id UUID NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
-  deliverable_version_id UUID REFERENCES deliverable_versions(id),
-  level TEXT CHECK (level IN ('internal','client','final')) NOT NULL,
+  deliverable_version_id UUID NOT NULL REFERENCES deliverable_versions(id) ON DELETE CASCADE,
+  approval_level TEXT CHECK (approval_level IN ('internal','client','final')) NOT NULL,
   decision TEXT CHECK (decision IN ('approved','rejected')) NOT NULL,
   comment TEXT,
-  decided_by UUID REFERENCES users(id),
+  decided_by UUID NOT NULL REFERENCES users(id),
   decided_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+```
+
+---
+
+### 5.4 campaign_attachments
+
+```sql
+CREATE TABLE campaign_attachments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  file_name TEXT NOT NULL,
+  file_url TEXT NOT NULL,
+  file_size INTEGER,
+  mime_type TEXT,
+  uploaded_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_campaign_attachments_campaign 
+  ON campaign_attachments(campaign_id);
 ```
 
 ---

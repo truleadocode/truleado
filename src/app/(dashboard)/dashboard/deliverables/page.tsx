@@ -46,12 +46,12 @@ interface Client {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  pending: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-3 w-3" /> },
-  submitted: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-3 w-3" /> },
-  internal_review: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-3 w-3" /> },
-  client_review: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-3 w-3" /> },
-  approved: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-3 w-3" /> },
-  rejected: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-3 w-3" /> },
+  PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-3 w-3" /> },
+  SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-3 w-3" /> },
+  INTERNAL_REVIEW: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-3 w-3" /> },
+  CLIENT_REVIEW: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-3 w-3" /> },
+  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-3 w-3" /> },
+  REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-3 w-3" /> },
 }
 
 interface DeliverableWithCampaign extends Deliverable {
@@ -134,7 +134,7 @@ export default function DeliverablesPage() {
       d.campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.campaign.clientName.toLowerCase().includes(searchQuery.toLowerCase())
     
-    const matchesStatus = statusFilter === 'all' || d.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || d.status === statusFilter.toUpperCase()
     
     return matchesSearch && matchesStatus
   })
@@ -166,7 +166,7 @@ export default function DeliverablesPage() {
           >
             All ({deliverables.length})
           </Button>
-          {['pending', 'submitted', 'internal_review', 'client_review', 'approved', 'rejected'].map((status) => {
+          {['PENDING', 'SUBMITTED', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'APPROVED', 'REJECTED'].map((status) => {
             const config = STATUS_CONFIG[status]
             return (
               <Button

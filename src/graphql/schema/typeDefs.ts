@@ -217,6 +217,7 @@ export const typeDefs = gql`
     fileName: String
     fileSize: Int
     mimeType: String
+    caption: String
     uploadedBy: User
     createdAt: DateTime!
   }
@@ -473,6 +474,7 @@ export const typeDefs = gql`
       fileName: String
       fileSize: Int
       mimeType: String
+      caption: String
     ): DeliverableVersion!
     
     # Submit deliverable for review
