@@ -201,6 +201,14 @@ export const typeResolvers = {
         .eq('campaign_id', parent.id);
       return data || [];
     },
+    attachments: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_attachments')
+        .select('*')
+        .eq('campaign_id', parent.id)
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
     activityLogs: async (parent: WithId) => {
       const { data } = await supabaseAdmin
         .from('activity_logs')
@@ -217,6 +225,32 @@ export const typeResolvers = {
         .from('users')
         .select('*')
         .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+  },
+
+  CampaignAttachment: {
+    // Field mappings
+    fileName: (parent: { file_name: string }) => parent.file_name,
+    fileUrl: (parent: { file_url: string }) => parent.file_url,
+    fileSize: (parent: { file_size: number | null }) => parent.file_size,
+    mimeType: (parent: { mime_type: string | null }) => parent.mime_type,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    campaign: async (parent: { campaign_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+    uploadedBy: async (parent: { uploaded_by: string | null }) => {
+      if (!parent.uploaded_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.uploaded_by)
         .single();
       return data;
     },

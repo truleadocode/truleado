@@ -282,6 +282,7 @@ export const queries = {
         id
         name
         description
+        brief
         status
         campaignType
         startDate
@@ -322,6 +323,14 @@ export const queries = {
             youtubeHandle
             tiktokHandle
           }
+        }
+        attachments {
+          id
+          fileName
+          fileUrl
+          fileSize
+          mimeType
+          createdAt
         }
       }
     }
@@ -427,6 +436,54 @@ export const mutations = {
         id
         status
       }
+    }
+  `,
+  
+  updateCampaignDetails: `
+    mutation UpdateCampaignDetails($campaignId: ID!, $name: String, $description: String) {
+      updateCampaignDetails(campaignId: $campaignId, name: $name, description: $description) {
+        id
+        name
+        description
+      }
+    }
+  `,
+  
+  setCampaignDates: `
+    mutation SetCampaignDates($campaignId: ID!, $startDate: DateTime, $endDate: DateTime) {
+      setCampaignDates(campaignId: $campaignId, startDate: $startDate, endDate: $endDate) {
+        id
+        startDate
+        endDate
+      }
+    }
+  `,
+  
+  updateCampaignBrief: `
+    mutation UpdateCampaignBrief($campaignId: ID!, $brief: String!) {
+      updateCampaignBrief(campaignId: $campaignId, brief: $brief) {
+        id
+        brief
+      }
+    }
+  `,
+  
+  addCampaignAttachment: `
+    mutation AddCampaignAttachment($campaignId: ID!, $fileName: String!, $fileUrl: URL!, $fileSize: Int, $mimeType: String) {
+      addCampaignAttachment(campaignId: $campaignId, fileName: $fileName, fileUrl: $fileUrl, fileSize: $fileSize, mimeType: $mimeType) {
+        id
+        fileName
+        fileUrl
+        fileSize
+        mimeType
+        createdAt
+      }
+    }
+  `,
+  
+  removeCampaignAttachment: `
+    mutation RemoveCampaignAttachment($attachmentId: ID!) {
+      removeCampaignAttachment(attachmentId: $attachmentId)
     }
   `,
 };

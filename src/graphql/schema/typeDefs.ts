@@ -163,6 +163,7 @@ export const typeDefs = gql`
     project: Project!
     name: String!
     description: String
+    brief: String
     campaignType: CampaignType!
     status: CampaignStatus!
     startDate: DateTime
@@ -170,8 +171,20 @@ export const typeDefs = gql`
     deliverables: [Deliverable!]!
     creators: [CampaignCreator!]!
     users: [CampaignUser!]!
+    attachments: [CampaignAttachment!]!
     activityLogs: [ActivityLog!]!
     createdBy: User
+    createdAt: DateTime!
+  }
+  
+  type CampaignAttachment {
+    id: ID!
+    campaign: Campaign!
+    fileName: String!
+    fileUrl: URL!
+    fileSize: Int
+    mimeType: String
+    uploadedBy: User
     createdAt: DateTime!
   }
 
@@ -404,6 +417,34 @@ export const typeDefs = gql`
       campaignType: CampaignType!
       description: String
     ): Campaign!
+    
+    # Campaign updates (specific, not generic)
+    updateCampaignDetails(
+      campaignId: ID!
+      name: String
+      description: String
+    ): Campaign!
+    
+    setCampaignDates(
+      campaignId: ID!
+      startDate: DateTime
+      endDate: DateTime
+    ): Campaign!
+    
+    updateCampaignBrief(
+      campaignId: ID!
+      brief: String!
+    ): Campaign!
+    
+    addCampaignAttachment(
+      campaignId: ID!
+      fileName: String!
+      fileUrl: URL!
+      fileSize: Int
+      mimeType: String
+    ): CampaignAttachment!
+    
+    removeCampaignAttachment(attachmentId: ID!): Boolean!
     
     # Campaign state transitions (explicit, state-machine aligned)
     activateCampaign(campaignId: ID!): Campaign!

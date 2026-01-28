@@ -8,6 +8,11 @@ import { createAgency, createClient } from './agency';
 import {
   createProject,
   createCampaign,
+  updateCampaignDetails,
+  setCampaignDates,
+  updateCampaignBrief,
+  addCampaignAttachment,
+  removeCampaignAttachment,
   activateCampaign,
   submitCampaignForReview,
   approveCampaign,
@@ -42,6 +47,11 @@ export const mutationResolvers = {
   // Project & Campaign Lifecycle
   createProject,
   createCampaign,
+  updateCampaignDetails,
+  setCampaignDates,
+  updateCampaignBrief,
+  addCampaignAttachment,
+  removeCampaignAttachment,
   activateCampaign,
   submitCampaignForReview,
   approveCampaign,

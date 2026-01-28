@@ -279,6 +279,351 @@ export async function archiveCampaign(
 }
 
 /**
+ * Update campaign details (name, description)
+ */
+export async function updateCampaignDetails(
+  _: unknown,
+  {
+    campaignId,
+    name,
+    description,
+  }: {
+    campaignId: string;
+    name?: string;
+    description?: string;
+  },
+  ctx: GraphQLContext
+) {
+  await requireCampaignAccess(ctx, campaignId, Permission.MANAGE_CAMPAIGN);
+  
+  const { data: campaign, error: fetchError } = await supabaseAdmin
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId)
+    .single();
+  
+  if (fetchError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+  
+  // Can't update archived campaigns
+  if (campaign.status === 'archived') {
+    throw invalidStateError('Cannot modify archived campaigns');
+  }
+  
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) {
+    if (name.trim().length < 2) {
+      throw validationError('Campaign name must be at least 2 characters', 'name');
+    }
+    updates.name = name.trim();
+  }
+  if (description !== undefined) {
+    updates.description = description?.trim() || null;
+  }
+  
+  if (Object.keys(updates).length === 0) {
+    return campaign;
+  }
+  
+  const beforeState = { ...campaign };
+  
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('campaigns')
+    .update(updates)
+    .eq('id', campaignId)
+    .select()
+    .single();
+  
+  if (updateError || !updated) {
+    throw new Error('Failed to update campaign');
+  }
+  
+  // Log activity
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign',
+      entityId: campaignId,
+      action: 'details_updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState,
+      afterState: updated,
+    });
+  }
+  
+  return updated;
+}
+
+/**
+ * Set campaign dates
+ */
+export async function setCampaignDates(
+  _: unknown,
+  {
+    campaignId,
+    startDate,
+    endDate,
+  }: {
+    campaignId: string;
+    startDate?: string;
+    endDate?: string;
+  },
+  ctx: GraphQLContext
+) {
+  await requireCampaignAccess(ctx, campaignId, Permission.MANAGE_CAMPAIGN);
+  
+  const { data: campaign, error: fetchError } = await supabaseAdmin
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId)
+    .single();
+  
+  if (fetchError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+  
+  // Can't update archived campaigns
+  if (campaign.status === 'archived') {
+    throw invalidStateError('Cannot modify archived campaigns');
+  }
+  
+  // Validate dates if both provided
+  if (startDate && endDate) {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (end < start) {
+      throw validationError('End date must be after start date', 'endDate');
+    }
+  }
+  
+  const beforeState = { ...campaign };
+  
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('campaigns')
+    .update({
+      start_date: startDate || null,
+      end_date: endDate || null,
+    })
+    .eq('id', campaignId)
+    .select()
+    .single();
+  
+  if (updateError || !updated) {
+    throw new Error('Failed to update campaign dates');
+  }
+  
+  // Log activity
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign',
+      entityId: campaignId,
+      action: 'dates_updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState,
+      afterState: updated,
+      metadata: { startDate, endDate },
+    });
+  }
+  
+  return updated;
+}
+
+/**
+ * Update campaign brief (rich text)
+ */
+export async function updateCampaignBrief(
+  _: unknown,
+  {
+    campaignId,
+    brief,
+  }: {
+    campaignId: string;
+    brief: string;
+  },
+  ctx: GraphQLContext
+) {
+  await requireCampaignAccess(ctx, campaignId, Permission.MANAGE_CAMPAIGN);
+  
+  const { data: campaign, error: fetchError } = await supabaseAdmin
+    .from('campaigns')
+    .select('*')
+    .eq('id', campaignId)
+    .single();
+  
+  if (fetchError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+  
+  // Can't update archived campaigns
+  if (campaign.status === 'archived') {
+    throw invalidStateError('Cannot modify archived campaigns');
+  }
+  
+  const beforeState = { ...campaign };
+  
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('campaigns')
+    .update({ brief })
+    .eq('id', campaignId)
+    .select()
+    .single();
+  
+  if (updateError || !updated) {
+    throw new Error('Failed to update campaign brief');
+  }
+  
+  // Log activity
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign',
+      entityId: campaignId,
+      action: 'brief_updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState,
+      afterState: updated,
+    });
+  }
+  
+  return updated;
+}
+
+/**
+ * Add attachment to campaign
+ */
+export async function addCampaignAttachment(
+  _: unknown,
+  {
+    campaignId,
+    fileName,
+    fileUrl,
+    fileSize,
+    mimeType,
+  }: {
+    campaignId: string;
+    fileName: string;
+    fileUrl: string;
+    fileSize?: number;
+    mimeType?: string;
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  await requireCampaignAccess(ctx, campaignId, Permission.MANAGE_CAMPAIGN);
+  
+  const { data: campaign, error: fetchError } = await supabaseAdmin
+    .from('campaigns')
+    .select('status')
+    .eq('id', campaignId)
+    .single();
+  
+  if (fetchError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+  
+  // Can't update archived campaigns
+  if (campaign.status === 'archived') {
+    throw invalidStateError('Cannot modify archived campaigns');
+  }
+  
+  const { data: attachment, error } = await supabaseAdmin
+    .from('campaign_attachments')
+    .insert({
+      campaign_id: campaignId,
+      file_name: fileName,
+      file_url: fileUrl,
+      file_size: fileSize || null,
+      mime_type: mimeType || null,
+      uploaded_by: user.id,
+    })
+    .select()
+    .single();
+  
+  if (error || !attachment) {
+    throw new Error('Failed to add attachment');
+  }
+  
+  // Log activity
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign_attachment',
+      entityId: attachment.id,
+      action: 'created',
+      actorId: user.id,
+      actorType: 'user',
+      afterState: attachment,
+    });
+  }
+  
+  return attachment;
+}
+
+/**
+ * Remove attachment from campaign
+ */
+export async function removeCampaignAttachment(
+  _: unknown,
+  { attachmentId }: { attachmentId: string },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  
+  // Get the attachment to find the campaign
+  const { data: attachment, error: fetchError } = await supabaseAdmin
+    .from('campaign_attachments')
+    .select('*, campaigns!inner(id, status)')
+    .eq('id', attachmentId)
+    .single();
+  
+  if (fetchError || !attachment) {
+    throw notFoundError('Attachment', attachmentId);
+  }
+  
+  const campaigns = attachment.campaigns as { id: string; status: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.MANAGE_CAMPAIGN);
+  
+  // Can't update archived campaigns
+  if (campaigns.status === 'archived') {
+    throw invalidStateError('Cannot modify archived campaigns');
+  }
+  
+  const { error: deleteError } = await supabaseAdmin
+    .from('campaign_attachments')
+    .delete()
+    .eq('id', attachmentId);
+  
+  if (deleteError) {
+    throw new Error('Failed to remove attachment');
+  }
+  
+  // Log activity
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign_attachment',
+      entityId: attachmentId,
+      action: 'deleted',
+      actorId: user.id,
+      actorType: 'user',
+      beforeState: attachment,
+    });
+  }
+  
+  return true;
+}
+
+/**
  * Assign a user to a campaign
  */
 export async function assignUserToCampaign(

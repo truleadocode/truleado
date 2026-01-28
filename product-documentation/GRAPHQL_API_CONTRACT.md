@@ -172,6 +172,7 @@ type Campaign {
   project: Project!
   name: String!
   description: String
+  brief: String                    # Rich text campaign brief
   campaignType: CampaignType!
   status: CampaignStatus!
   startDate: DateTime
@@ -179,8 +180,20 @@ type Campaign {
   deliverables: [Deliverable!]!
   creators: [CampaignCreator!]!
   users: [CampaignUser!]!
+  attachments: [CampaignAttachment!]!  # Campaign files
   activityLogs: [ActivityLog!]!
   createdBy: User
+  createdAt: DateTime!
+}
+
+type CampaignAttachment {
+  id: ID!
+  campaign: Campaign!
+  fileName: String!
+  fileUrl: URL!
+  fileSize: Int
+  mimeType: String
+  uploadedBy: User
   createdAt: DateTime!
 }
 
@@ -439,6 +452,34 @@ type Mutation {
     campaignType: CampaignType!
     description: String
   ): Campaign!
+  
+  # Campaign updates (specific, not generic)
+  updateCampaignDetails(
+    campaignId: ID!
+    name: String
+    description: String
+  ): Campaign!
+  
+  setCampaignDates(
+    campaignId: ID!
+    startDate: DateTime
+    endDate: DateTime
+  ): Campaign!
+  
+  updateCampaignBrief(
+    campaignId: ID!
+    brief: String!
+  ): Campaign!
+  
+  addCampaignAttachment(
+    campaignId: ID!
+    fileName: String!
+    fileUrl: URL!
+    fileSize: Int
+    mimeType: String
+  ): CampaignAttachment!
+  
+  removeCampaignAttachment(attachmentId: ID!): Boolean!
   
   # Campaign state transitions
   activateCampaign(campaignId: ID!): Campaign!

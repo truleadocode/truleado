@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -8,7 +8,6 @@ import {
   Megaphone,
   Building2,
   Briefcase,
-  User,
   Calendar,
   FileCheck,
   Users,
@@ -19,10 +18,17 @@ import {
   Send,
   CheckCircle,
   Flag,
-  ArrowRight,
+  Paperclip,
+  FileText,
+  Trash2,
+  Upload,
+  X,
+  Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,8 +36,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
+import { DatePicker } from '@/components/ui/date-picker'
+import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-editor'
 import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 
@@ -64,10 +80,20 @@ interface CampaignCreator {
   creator: Creator
 }
 
+interface Attachment {
+  id: string
+  fileName: string
+  fileUrl: string
+  fileSize: number | null
+  mimeType: string | null
+  createdAt: string
+}
+
 interface Campaign {
   id: string
   name: string
   description: string | null
+  brief: string | null
   status: string
   campaignType: string
   startDate: string | null
@@ -88,6 +114,7 @@ interface Campaign {
   }
   deliverables: Deliverable[]
   creators: CampaignCreator[]
+  attachments: Attachment[]
 }
 
 // Campaign state machine
@@ -109,8 +136,21 @@ export default function CampaignDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  
+  // Edit dialogs state
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [datesDialogOpen, setDatesDialogOpen] = useState(false)
+  const [briefEditing, setBriefEditing] = useState(false)
+  
+  // Form states
+  const [editName, setEditName] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editStartDate, setEditStartDate] = useState<Date | undefined>()
+  const [editEndDate, setEditEndDate] = useState<Date | undefined>()
+  const [editBrief, setEditBrief] = useState('')
+  const [saving, setSaving] = useState(false)
 
-  const fetchCampaign = async () => {
+  const fetchCampaign = useCallback(async () => {
     try {
       const data = await graphqlRequest<{ campaign: Campaign }>(
         queries.campaign,
@@ -122,11 +162,22 @@ export default function CampaignDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [campaignId])
 
   useEffect(() => {
     fetchCampaign()
-  }, [campaignId])
+  }, [fetchCampaign])
+
+  // Initialize edit forms when campaign loads
+  useEffect(() => {
+    if (campaign) {
+      setEditName(campaign.name)
+      setEditDescription(campaign.description || '')
+      setEditStartDate(campaign.startDate ? new Date(campaign.startDate) : undefined)
+      setEditEndDate(campaign.endDate ? new Date(campaign.endDate) : undefined)
+      setEditBrief(campaign.brief || '')
+    }
+  }, [campaign])
 
   const handleStatusTransition = async () => {
     if (!campaign) return
@@ -160,7 +211,7 @@ export default function CampaignDetailPage() {
         title: 'Campaign updated',
         description: `Campaign is now ${transition.next.replace('_', ' ')}`,
       })
-      await fetchCampaign() // Refresh data
+      await fetchCampaign()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update campaign status')
     } finally {
@@ -168,45 +219,132 @@ export default function CampaignDetailPage() {
     }
   }
 
-  const handleEditCampaign = () => {
-    toast({
-      title: 'Coming soon',
-      description: 'Campaign editing will be available in a future update',
-    })
+  const handleSaveDetails = async () => {
+    if (!campaign) return
+    
+    setSaving(true)
+    try {
+      await graphqlRequest(mutations.updateCampaignDetails, {
+        campaignId,
+        name: editName,
+        description: editDescription || null,
+      })
+      toast({ title: 'Campaign updated', description: 'Campaign details saved successfully' })
+      setEditDialogOpen(false)
+      await fetchCampaign()
+    } catch (err) {
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to save', 
+        variant: 'destructive' 
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleSetDates = () => {
-    toast({
-      title: 'Coming soon',
-      description: 'Date management will be available in a future update',
-    })
+  const handleSaveDates = async () => {
+    if (!campaign) return
+    
+    setSaving(true)
+    try {
+      await graphqlRequest(mutations.setCampaignDates, {
+        campaignId,
+        startDate: editStartDate?.toISOString() || null,
+        endDate: editEndDate?.toISOString() || null,
+      })
+      toast({ title: 'Dates updated', description: 'Campaign dates saved successfully' })
+      setDatesDialogOpen(false)
+      await fetchCampaign()
+    } catch (err) {
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to save dates', 
+        variant: 'destructive' 
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleManageCreators = () => {
-    router.push(`/dashboard/creators?campaignId=${campaignId}`)
+  const handleSaveBrief = async () => {
+    if (!campaign) return
+    
+    setSaving(true)
+    try {
+      await graphqlRequest(mutations.updateCampaignBrief, {
+        campaignId,
+        brief: editBrief,
+      })
+      toast({ title: 'Brief saved', description: 'Campaign brief updated successfully' })
+      setBriefEditing(false)
+      await fetchCampaign()
+    } catch (err) {
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to save brief', 
+        variant: 'destructive' 
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddAttachment = async () => {
+    // For now, prompt for URL - in production, this would be a file upload to Supabase Storage
+    const fileUrl = window.prompt('Enter file URL:')
+    if (!fileUrl) return
+    
+    const fileName = window.prompt('Enter file name:', fileUrl.split('/').pop() || 'attachment')
+    if (!fileName) return
+    
+    try {
+      await graphqlRequest(mutations.addCampaignAttachment, {
+        campaignId,
+        fileName,
+        fileUrl,
+      })
+      toast({ title: 'Attachment added' })
+      await fetchCampaign()
+    } catch (err) {
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to add attachment', 
+        variant: 'destructive' 
+      })
+    }
+  }
+
+  const handleRemoveAttachment = async (attachmentId: string) => {
+    if (!confirm('Remove this attachment?')) return
+    
+    try {
+      await graphqlRequest(mutations.removeCampaignAttachment, { attachmentId })
+      toast({ title: 'Attachment removed' })
+      await fetchCampaign()
+    } catch (err) {
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to remove attachment', 
+        variant: 'destructive' 
+      })
+    }
   }
 
   const handleArchiveCampaign = async () => {
     if (!campaign) return
-    
-    if (!confirm('Are you sure you want to archive this campaign? This action cannot be undone.')) {
-      return
-    }
+    if (!confirm('Are you sure you want to archive this campaign? This action cannot be undone.')) return
     
     setArchiving(true)
-    
     try {
       await graphqlRequest(mutations.archiveCampaign, { campaignId })
-      toast({
-        title: 'Campaign archived',
-        description: 'The campaign has been archived successfully',
-      })
+      toast({ title: 'Campaign archived' })
       router.push('/dashboard/campaigns')
     } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to archive campaign',
-        variant: 'destructive',
+      toast({ 
+        title: 'Error', 
+        description: err instanceof Error ? err.message : 'Failed to archive', 
+        variant: 'destructive' 
       })
     } finally {
       setArchiving(false)
@@ -222,14 +360,16 @@ export default function CampaignDetailPage() {
     })
   }
 
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
   const getInitials = (name: string | null | undefined) => {
     if (!name) return '?'
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
+    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
   const getStatusColor = (status: string) => {
@@ -248,6 +388,8 @@ export default function CampaignDetailPage() {
     }
     return colors[status.toUpperCase()] || 'bg-gray-100 text-gray-700'
   }
+
+  const isArchived = campaign?.status.toLowerCase() === 'archived'
 
   if (loading) {
     return (
@@ -294,6 +436,7 @@ export default function CampaignDetailPage() {
       />
       
       <div className="p-6 space-y-6">
+        {/* Top Actions Bar */}
         <div className="flex items-center justify-between">
           <Link
             href="/dashboard/campaigns"
@@ -304,15 +447,13 @@ export default function CampaignDetailPage() {
           </Link>
           
           <div className="flex items-center gap-3">
-            {currentTransition && (
+            {currentTransition && !isArchived && (
               <Button
                 className={currentTransition.color}
                 onClick={handleStatusTransition}
                 disabled={transitioning}
               >
-                {transitioning ? (
-                  <>Processing...</>
-                ) : (
+                {transitioning ? 'Processing...' : (
                   <>
                     {currentTransition.icon}
                     <span className="ml-2">{currentTransition.action}</span>
@@ -320,33 +461,38 @@ export default function CampaignDetailPage() {
                 )}
               </Button>
             )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <MoreHorizontal className="mr-2 h-4 w-4" />
-                  Actions
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleEditCampaign}>
-                  Edit Campaign
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleSetDates}>
-                  Set Dates
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={handleManageCreators}>
-                  Manage Creators
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem 
-                  className="text-destructive"
-                  onClick={handleArchiveCampaign}
-                  disabled={archiving}
-                >
-                  {archiving ? 'Archiving...' : 'Archive Campaign'}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {!isArchived && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <MoreHorizontal className="mr-2 h-4 w-4" />
+                    Actions
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit Campaign
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setDatesDialogOpen(true)}>
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Set Dates
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push(`/dashboard/creators?campaignId=${campaignId}`)}>
+                    <Users className="mr-2 h-4 w-4" />
+                    Manage Creators
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    className="text-destructive"
+                    onClick={handleArchiveCampaign}
+                    disabled={archiving}
+                  >
+                    {archiving ? 'Archiving...' : 'Archive Campaign'}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
 
@@ -358,7 +504,6 @@ export default function CampaignDetailPage() {
                 const currentIndex = arr.indexOf(campaign.status.toUpperCase())
                 const isComplete = index < currentIndex
                 const isCurrent = index === currentIndex
-                const isPending = index > currentIndex
                 
                 return (
                   <div key={status} className="flex items-center">
@@ -379,11 +524,7 @@ export default function CampaignDetailPage() {
                       </span>
                     </div>
                     {index < arr.length - 1 && (
-                      <div
-                        className={`h-0.5 w-12 mx-2 ${
-                          isComplete ? 'bg-green-500' : 'bg-muted'
-                        }`}
-                      />
+                      <div className={`h-0.5 w-12 mx-2 ${isComplete ? 'bg-green-500' : 'bg-muted'}`} />
                     )}
                   </div>
                 )
@@ -421,12 +562,18 @@ export default function CampaignDetailPage() {
                   </Link>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Deliverables</p>
-                  <p className="font-medium mt-1">{campaign.deliverables.length}</p>
+                  <p className="text-sm text-muted-foreground">Start Date</p>
+                  <p className="font-medium mt-1 flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    {formatDate(campaign.startDate)}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Creators</p>
-                  <p className="font-medium mt-1">{campaign.creators.length}</p>
+                  <p className="text-sm text-muted-foreground">End Date</p>
+                  <p className="font-medium mt-1 flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    {formatDate(campaign.endDate)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -440,17 +587,138 @@ export default function CampaignDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Campaign Brief Section */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Campaign Brief
+              </h2>
+              {!isArchived && (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => briefEditing ? handleSaveBrief() : setBriefEditing(true)}
+                  disabled={saving}
+                >
+                  {briefEditing ? (saving ? 'Saving...' : 'Save Brief') : 'Edit Brief'}
+                </Button>
+              )}
+            </div>
+            
+            {briefEditing ? (
+              <div className="space-y-3">
+                <RichTextEditor
+                  content={editBrief}
+                  onChange={setEditBrief}
+                  placeholder="Write your campaign brief here... Include objectives, target audience, key messages, etc."
+                />
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => {
+                    setEditBrief(campaign.brief || '')
+                    setBriefEditing(false)
+                  }}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : campaign.brief ? (
+              <RichTextContent content={campaign.brief} />
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                <p>No campaign brief yet</p>
+                {!isArchived && (
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setBriefEditing(true)}>
+                    Add Brief
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Attachments Section */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Paperclip className="h-5 w-5" />
+                Attachments
+              </h2>
+              {!isArchived && (
+                <Button variant="outline" size="sm" onClick={handleAddAttachment}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Add File
+                </Button>
+              )}
+            </div>
+            
+            {campaign.attachments.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                <p>No attachments yet</p>
+                {!isArchived && (
+                  <p className="text-sm mt-1">Add briefs, brand guidelines, or reference materials</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {campaign.attachments.map((attachment) => (
+                  <div 
+                    key={attachment.id} 
+                    className="flex items-center justify-between p-3 bg-muted/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded bg-background flex items-center justify-center">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                      <div>
+                        <a 
+                          href={attachment.fileUrl} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="font-medium hover:underline"
+                        >
+                          {attachment.fileName}
+                        </a>
+                        <p className="text-xs text-muted-foreground">
+                          {formatFileSize(attachment.fileSize)}
+                          {attachment.fileSize && ' • '}
+                          {formatDate(attachment.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                    {!isArchived && (
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => handleRemoveAttachment(attachment.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Deliverables Section */}
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Deliverables</h2>
-              <Button size="sm" asChild>
-                <Link href={`/dashboard/deliverables/new?campaignId=${campaign.id}`}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Deliverable
-                </Link>
-              </Button>
+              {!isArchived && (
+                <Button size="sm" asChild>
+                  <Link href={`/dashboard/deliverables/new?campaignId=${campaign.id}`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Deliverable
+                  </Link>
+                </Button>
+              )}
             </div>
 
             {campaign.deliverables.length === 0 ? (
@@ -461,12 +729,6 @@ export default function CampaignDetailPage() {
                   <p className="text-sm text-muted-foreground text-center mt-1">
                     Add deliverables to track content
                   </p>
-                  <Button size="sm" className="mt-3" asChild>
-                    <Link href={`/dashboard/deliverables/new?campaignId=${campaign.id}`}>
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Deliverable
-                    </Link>
-                  </Button>
                 </CardContent>
               </Card>
             ) : (
@@ -499,12 +761,14 @@ export default function CampaignDetailPage() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Creators</h2>
-              <Button size="sm" variant="outline" asChild>
-                <Link href={`/dashboard/creators?assign=${campaign.id}`}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Assign Creator
-                </Link>
-              </Button>
+              {!isArchived && (
+                <Button size="sm" variant="outline" asChild>
+                  <Link href={`/dashboard/creators?assign=${campaign.id}`}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Assign Creator
+                  </Link>
+                </Button>
+              )}
             </div>
 
             {campaign.creators.length === 0 ? (
@@ -515,11 +779,6 @@ export default function CampaignDetailPage() {
                   <p className="text-sm text-muted-foreground text-center mt-1">
                     Assign creators from your roster
                   </p>
-                  <Button size="sm" variant="outline" className="mt-3" asChild>
-                    <Link href="/dashboard/creators">
-                      View Creator Roster
-                    </Link>
-                  </Button>
                 </CardContent>
               </Card>
             ) : (
@@ -550,6 +809,86 @@ export default function CampaignDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Edit Campaign Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Campaign</DialogTitle>
+            <DialogDescription>
+              Update campaign name and description
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Campaign Name</Label>
+              <Input
+                id="name"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="Enter campaign name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <textarea
+                id="description"
+                rows={3}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Brief description of the campaign"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveDetails} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set Dates Dialog */}
+      <Dialog open={datesDialogOpen} onOpenChange={setDatesDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Campaign Dates</DialogTitle>
+            <DialogDescription>
+              Define the campaign timeline
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Start Date</Label>
+              <DatePicker
+                date={editStartDate}
+                onDateChange={setEditStartDate}
+                placeholder="Select start date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>End Date</Label>
+              <DatePicker
+                date={editEndDate}
+                onDateChange={setEditEndDate}
+                placeholder="Select end date"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDatesDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveDates} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Dates'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
