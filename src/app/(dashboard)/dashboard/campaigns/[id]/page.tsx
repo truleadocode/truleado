@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
+import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 
 interface DeliverableVersion {
@@ -100,12 +101,14 @@ const STATUS_TRANSITIONS: Record<string, { next: string; action: string; icon: R
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const { toast } = useToast()
   const campaignId = params.id as string
   
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [transitioning, setTransitioning] = useState(false)
+  const [archiving, setArchiving] = useState(false)
 
   const fetchCampaign = async () => {
     try {
@@ -153,11 +156,60 @@ export default function CampaignDetailPage() {
       }
       
       await graphqlRequest(mutation, { campaignId })
+      toast({
+        title: 'Campaign updated',
+        description: `Campaign is now ${transition.next.replace('_', ' ')}`,
+      })
       await fetchCampaign() // Refresh data
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update campaign status')
     } finally {
       setTransitioning(false)
+    }
+  }
+
+  const handleEditCampaign = () => {
+    toast({
+      title: 'Coming soon',
+      description: 'Campaign editing will be available in a future update',
+    })
+  }
+
+  const handleSetDates = () => {
+    toast({
+      title: 'Coming soon',
+      description: 'Date management will be available in a future update',
+    })
+  }
+
+  const handleManageCreators = () => {
+    router.push(`/dashboard/creators?campaignId=${campaignId}`)
+  }
+
+  const handleArchiveCampaign = async () => {
+    if (!campaign) return
+    
+    if (!confirm('Are you sure you want to archive this campaign? This action cannot be undone.')) {
+      return
+    }
+    
+    setArchiving(true)
+    
+    try {
+      await graphqlRequest(mutations.archiveCampaign, { campaignId })
+      toast({
+        title: 'Campaign archived',
+        description: 'The campaign has been archived successfully',
+      })
+      router.push('/dashboard/campaigns')
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to archive campaign',
+        variant: 'destructive',
+      })
+    } finally {
+      setArchiving(false)
     }
   }
 
@@ -276,12 +328,22 @@ export default function CampaignDetailPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Edit Campaign</DropdownMenuItem>
-                <DropdownMenuItem>Set Dates</DropdownMenuItem>
-                <DropdownMenuItem>Manage Creators</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleEditCampaign}>
+                  Edit Campaign
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleSetDates}>
+                  Set Dates
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleManageCreators}>
+                  Manage Creators
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-destructive">
-                  Archive Campaign
+                <DropdownMenuItem 
+                  className="text-destructive"
+                  onClick={handleArchiveCampaign}
+                  disabled={archiving}
+                >
+                  {archiving ? 'Archiving...' : 'Archive Campaign'}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

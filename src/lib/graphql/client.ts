@@ -420,4 +420,13 @@ export const mutations = {
       }
     }
   `,
+  
+  archiveCampaign: `
+    mutation ArchiveCampaign($campaignId: ID!) {
+      archiveCampaign(campaignId: $campaignId) {
+        id
+        status
+      }
+    }
+  `,
 };
