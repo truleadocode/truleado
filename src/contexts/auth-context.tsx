@@ -1,0 +1,268 @@
+"use client"
+
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { 
+  User as FirebaseUser,
+  onAuthStateChanged,
+  signOut as firebaseSignOut 
+} from 'firebase/auth'
+import { auth, signInWithEmail, signUpWithEmail, resetPassword, getIdToken } from '@/lib/firebase/client'
+
+interface User {
+  id: string
+  email: string | null
+  name: string | null
+}
+
+interface Agency {
+  id: string
+  name: string
+  role: string
+}
+
+interface AuthContextType {
+  user: User | null
+  agencies: Agency[]
+  currentAgency: Agency | null
+  firebaseUser: FirebaseUser | null
+  loading: boolean
+  error: string | null
+  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, name?: string) => Promise<void>
+  signOut: () => Promise<void>
+  resetPassword: (email: string) => Promise<void>
+  getToken: () => Promise<string | null>
+  setCurrentAgency: (agency: Agency) => void
+  clearError: () => void
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+interface AuthProviderProps {
+  children: React.ReactNode
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [agencies, setAgencies] = useState<Agency[]>([])
+  const [currentAgency, setCurrentAgencyState] = useState<Agency | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchUserData = useCallback(async (firebaseUser: FirebaseUser) => {
+    try {
+      const token = await firebaseUser.getIdToken()
+      
+      const response = await fetch('/api/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query: `
+            query GetMe {
+              me {
+                id
+                email
+                name
+                agencies {
+                  agency {
+                    id
+                    name
+                  }
+                  role
+                }
+              }
+            }
+          `,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (result.errors) {
+        console.error('GraphQL errors:', result.errors)
+        throw new Error(result.errors[0]?.message || 'Failed to fetch user data')
+      }
+
+      const userData = result.data?.me
+      if (userData) {
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          name: userData.name,
+        })
+
+        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string }; role: string }) => ({
+          id: membership.agency.id,
+          name: membership.agency.name,
+          role: membership.role,
+        })) || []
+
+        setAgencies(userAgencies)
+
+        // Set current agency from localStorage or first agency
+        const savedAgencyId = typeof window !== 'undefined' 
+          ? localStorage.getItem('currentAgencyId') 
+          : null
+        
+        const savedAgency = userAgencies.find((a: Agency) => a.id === savedAgencyId)
+        setCurrentAgencyState(savedAgency || userAgencies[0] || null)
+      }
+    } catch (err) {
+      console.error('Error fetching user data:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load user data')
+    }
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setFirebaseUser(firebaseUser)
+      
+      if (firebaseUser) {
+        await fetchUserData(firebaseUser)
+      } else {
+        setUser(null)
+        setAgencies([])
+        setCurrentAgencyState(null)
+      }
+      
+      setLoading(false)
+    })
+
+    return () => unsubscribe()
+  }, [fetchUserData])
+
+  const handleSignIn = async (email: string, password: string) => {
+    setError(null)
+    setLoading(true)
+    try {
+      await signInWithEmail(email, password)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sign in'
+      setError(message)
+      setLoading(false)
+      throw err
+    }
+  }
+
+  const handleSignUp = async (email: string, password: string, name?: string) => {
+    setError(null)
+    setLoading(true)
+    try {
+      const userCredential = await signUpWithEmail(email, password)
+      
+      // Create user in our database
+      const token = await userCredential.user.getIdToken()
+      
+      const response = await fetch('/api/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          query: `
+            mutation CreateUserOnSignup($input: CreateUserInput!) {
+              createUser(input: $input) {
+                id
+                email
+                name
+              }
+            }
+          `,
+          variables: {
+            input: {
+              email,
+              name: name || email.split('@')[0],
+            },
+          },
+        }),
+      })
+
+      const result = await response.json()
+      if (result.errors) {
+        console.error('Error creating user:', result.errors)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sign up'
+      setError(message)
+      setLoading(false)
+      throw err
+    }
+  }
+
+  const handleSignOut = async () => {
+    setError(null)
+    try {
+      await firebaseSignOut(auth)
+      setUser(null)
+      setAgencies([])
+      setCurrentAgencyState(null)
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentAgencyId')
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sign out'
+      setError(message)
+      throw err
+    }
+  }
+
+  const handleResetPassword = async (email: string) => {
+    setError(null)
+    try {
+      await resetPassword(email)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to send reset email'
+      setError(message)
+      throw err
+    }
+  }
+
+  const getToken = async () => {
+    if (!firebaseUser) return null
+    return getIdToken()
+  }
+
+  const setCurrentAgency = (agency: Agency) => {
+    setCurrentAgencyState(agency)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentAgencyId', agency.id)
+    }
+  }
+
+  const clearError = () => setError(null)
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        agencies,
+        currentAgency,
+        firebaseUser,
+        loading,
+        error,
+        signIn: handleSignIn,
+        signUp: handleSignUp,
+        signOut: handleSignOut,
+        resetPassword: handleResetPassword,
+        getToken,
+        setCurrentAgency,
+        clearError,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
