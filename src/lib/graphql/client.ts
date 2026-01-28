@@ -469,7 +469,7 @@ export const mutations = {
   `,
   
   addCampaignAttachment: `
-    mutation AddCampaignAttachment($campaignId: ID!, $fileName: String!, $fileUrl: URL!, $fileSize: Int, $mimeType: String) {
+    mutation AddCampaignAttachment($campaignId: ID!, $fileName: String!, $fileUrl: String!, $fileSize: Int, $mimeType: String) {
       addCampaignAttachment(campaignId: $campaignId, fileName: $fileName, fileUrl: $fileUrl, fileSize: $fileSize, mimeType: $mimeType) {
         id
         fileName

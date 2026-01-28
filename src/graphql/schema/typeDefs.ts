@@ -181,7 +181,7 @@ export const typeDefs = gql`
     id: ID!
     campaign: Campaign!
     fileName: String!
-    fileUrl: URL!
+    fileUrl: String!  # Storage path (not URL) - use signed URLs for download
     fileSize: Int
     mimeType: String
     uploadedBy: User
@@ -439,7 +439,7 @@ export const typeDefs = gql`
     addCampaignAttachment(
       campaignId: ID!
       fileName: String!
-      fileUrl: URL!
+      fileUrl: String!  # Storage path
       fileSize: Int
       mimeType: String
     ): CampaignAttachment!
