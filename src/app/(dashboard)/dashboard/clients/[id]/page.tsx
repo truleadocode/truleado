@@ -30,7 +30,7 @@ import { graphqlRequest, queries } from '@/lib/graphql/client'
 interface Project {
   id: string
   name: string
-  status: string
+  isArchived: boolean
   campaigns: {
     id: string
     name: string
@@ -269,8 +269,8 @@ export default function ClientDetailPage() {
                           </CardDescription>
                         </div>
                       </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)}`}>
-                        {project.status}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${project.isArchived ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
+                        {project.isArchived ? 'Archived' : 'Active'}
                       </span>
                     </div>
                   </CardHeader>

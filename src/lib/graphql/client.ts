@@ -88,7 +88,6 @@ export const fragments = {
     fragment ProjectFields on Project {
       id
       name
-      status
       startDate
       endDate
       isArchived
@@ -155,7 +154,7 @@ export const queries = {
         projects {
           id
           name
-          status
+          isArchived
           campaigns {
             id
             name
