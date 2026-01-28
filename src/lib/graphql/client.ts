@@ -240,6 +240,85 @@ export const queries = {
       }
     }
   `,
+  
+  campaigns: `
+    query GetCampaigns($projectId: ID!) {
+      campaigns(projectId: $projectId) {
+        id
+        name
+        description
+        status
+        campaignType
+        startDate
+        endDate
+        createdAt
+        project {
+          id
+          name
+          client {
+            id
+            name
+          }
+        }
+        deliverables {
+          id
+          title
+          status
+        }
+        creators {
+          id
+          displayName
+        }
+      }
+    }
+  `,
+  
+  campaign: `
+    query GetCampaign($id: ID!) {
+      campaign(id: $id) {
+        id
+        name
+        description
+        status
+        campaignType
+        startDate
+        endDate
+        createdAt
+        project {
+          id
+          name
+          client {
+            id
+            name
+            accountManager {
+              id
+              name
+              email
+            }
+          }
+        }
+        deliverables {
+          id
+          title
+          status
+          deliverableType
+          dueDate
+          versions {
+            id
+            versionNumber
+            createdAt
+          }
+        }
+        creators {
+          id
+          displayName
+          instagramHandle
+          youtubeHandle
+          tiktokHandle
+        }
+      }
+    }
+  `,
 };
 
 /**
@@ -283,6 +362,54 @@ export const mutations = {
       archiveProject(id: $id) {
         id
         isArchived
+      }
+    }
+  `,
+  
+  createCampaign: `
+    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String) {
+      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description) {
+        id
+        name
+        status
+        campaignType
+        createdAt
+      }
+    }
+  `,
+  
+  activateCampaign: `
+    mutation ActivateCampaign($campaignId: ID!) {
+      activateCampaign(campaignId: $campaignId) {
+        id
+        status
+      }
+    }
+  `,
+  
+  submitCampaignForReview: `
+    mutation SubmitCampaignForReview($campaignId: ID!) {
+      submitCampaignForReview(campaignId: $campaignId) {
+        id
+        status
+      }
+    }
+  `,
+  
+  approveCampaign: `
+    mutation ApproveCampaign($campaignId: ID!) {
+      approveCampaign(campaignId: $campaignId) {
+        id
+        status
+      }
+    }
+  `,
+  
+  completeCampaign: `
+    mutation CompleteCampaign($campaignId: ID!) {
+      completeCampaign(campaignId: $campaignId) {
+        id
+        status
       }
     }
   `,
