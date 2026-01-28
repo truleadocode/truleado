@@ -53,6 +53,7 @@ export function RichTextEditor({
     ],
     content,
     editable,
+    immediatelyRender: false, // Fix SSR hydration mismatch
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML())
     },
