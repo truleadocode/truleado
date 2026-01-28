@@ -165,6 +165,64 @@ export const queries = {
     }
   `,
   
+  projects: `
+    query GetProjects($clientId: ID!) {
+      projects(clientId: $clientId) {
+        id
+        name
+        description
+        startDate
+        endDate
+        isArchived
+        createdAt
+        client {
+          id
+          name
+        }
+        campaigns {
+          id
+          name
+          status
+        }
+      }
+    }
+  `,
+  
+  project: `
+    query GetProject($id: ID!) {
+      project(id: $id) {
+        id
+        name
+        description
+        startDate
+        endDate
+        isArchived
+        createdAt
+        client {
+          id
+          name
+          accountManager {
+            id
+            name
+            email
+          }
+        }
+        campaigns {
+          id
+          name
+          status
+          startDate
+          endDate
+          deliverables {
+            id
+            title
+            status
+          }
+        }
+      }
+    }
+  `,
+  
   agencyUsers: `
     query GetAgencyUsers($agencyId: ID!) {
       agency(id: $agencyId) {
@@ -204,6 +262,27 @@ export const mutations = {
       archiveClient(id: $id) {
         id
         isActive
+      }
+    }
+  `,
+  
+  createProject: `
+    mutation CreateProject($clientId: ID!, $name: String!, $description: String) {
+      createProject(clientId: $clientId, name: $name, description: $description) {
+        id
+        name
+        description
+        isArchived
+        createdAt
+      }
+    }
+  `,
+  
+  archiveProject: `
+    mutation ArchiveProject($id: ID!) {
+      archiveProject(id: $id) {
+        id
+        isArchived
       }
     }
   `,
