@@ -276,6 +276,77 @@ export const queries = {
     }
   `,
   
+  deliverable: `
+    query GetDeliverable($id: ID!) {
+      deliverable(id: $id) {
+        id
+        title
+        description
+        deliverableType
+        status
+        dueDate
+        createdAt
+        campaign {
+          id
+          name
+          status
+          project {
+            id
+            name
+            client {
+              id
+              name
+            }
+          }
+        }
+        versions {
+          id
+          versionNumber
+          fileUrl
+          fileName
+          fileSize
+          mimeType
+          createdAt
+          uploadedBy {
+            id
+            name
+            email
+          }
+        }
+        approvals {
+          id
+          decision
+          level
+          comment
+          decidedAt
+          decidedBy {
+            id
+            name
+            email
+          }
+        }
+      }
+    }
+  `,
+
+  deliverables: `
+    query GetDeliverables($campaignId: ID!) {
+      deliverables(campaignId: $campaignId) {
+        id
+        title
+        description
+        deliverableType
+        status
+        dueDate
+        createdAt
+        versions {
+          id
+          versionNumber
+        }
+      }
+    }
+  `,
+
   campaign: `
     query GetCampaign($id: ID!) {
       campaign(id: $id) {
@@ -484,6 +555,59 @@ export const mutations = {
   removeCampaignAttachment: `
     mutation RemoveCampaignAttachment($attachmentId: ID!) {
       removeCampaignAttachment(attachmentId: $attachmentId)
+    }
+  `,
+  
+  // Deliverable mutations
+  createDeliverable: `
+    mutation CreateDeliverable($campaignId: ID!, $title: String!, $deliverableType: String!, $description: String, $dueDate: DateTime) {
+      createDeliverable(campaignId: $campaignId, title: $title, deliverableType: $deliverableType, description: $description, dueDate: $dueDate) {
+        id
+        title
+        status
+        deliverableType
+      }
+    }
+  `,
+  
+  uploadDeliverableVersion: `
+    mutation UploadDeliverableVersion($deliverableId: ID!, $fileUrl: String!, $fileName: String, $fileSize: Int, $mimeType: String) {
+      uploadDeliverableVersion(deliverableId: $deliverableId, fileUrl: $fileUrl, fileName: $fileName, fileSize: $fileSize, mimeType: $mimeType) {
+        id
+        versionNumber
+        fileUrl
+        fileName
+        createdAt
+      }
+    }
+  `,
+  
+  submitDeliverableForReview: `
+    mutation SubmitDeliverableForReview($deliverableId: ID!) {
+      submitDeliverableForReview(deliverableId: $deliverableId) {
+        id
+        status
+      }
+    }
+  `,
+  
+  approveDeliverable: `
+    mutation ApproveDeliverable($deliverableId: ID!, $versionId: ID!, $approvalLevel: ApprovalLevel!, $comment: String) {
+      approveDeliverable(deliverableId: $deliverableId, versionId: $versionId, approvalLevel: $approvalLevel, comment: $comment) {
+        id
+        decision
+        level
+      }
+    }
+  `,
+  
+  rejectDeliverable: `
+    mutation RejectDeliverable($deliverableId: ID!, $versionId: ID!, $approvalLevel: ApprovalLevel!, $comment: String!) {
+      rejectDeliverable(deliverableId: $deliverableId, versionId: $versionId, approvalLevel: $approvalLevel, comment: $comment) {
+        id
+        decision
+        level
+      }
     }
   `,
 };

@@ -213,7 +213,7 @@ export const typeDefs = gql`
     id: ID!
     deliverable: Deliverable!
     versionNumber: Int!
-    fileUrl: URL
+    fileUrl: String  # Storage path
     fileName: String
     fileSize: Int
     mimeType: String
@@ -469,7 +469,7 @@ export const typeDefs = gql`
     # Upload a new version of a deliverable
     uploadDeliverableVersion(
       deliverableId: ID!
-      fileUrl: URL!
+      fileUrl: String!  # Storage path
       fileName: String
       fileSize: Int
       mimeType: String
