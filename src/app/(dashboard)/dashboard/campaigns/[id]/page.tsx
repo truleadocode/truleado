@@ -51,7 +51,7 @@ import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-edito
 import { FileUpload, FileItem } from '@/components/ui/file-upload'
 import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
-import { uploadFile } from '@/lib/supabase/storage'
+import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
 
 interface DeliverableVersion {
   id: string
@@ -297,11 +297,11 @@ export default function CampaignDetailPage() {
       // Upload to Supabase Storage
       const result = await uploadFile('campaign-attachments', campaignId, file)
       
-      // Save attachment record to database
+      // Save attachment record to database (store path for signed URL generation)
       await graphqlRequest(mutations.addCampaignAttachment, {
         campaignId,
         fileName: result.fileName,
-        fileUrl: result.url,
+        fileUrl: result.path, // Store path, not public URL
         fileSize: result.fileSize,
         mimeType: result.mimeType,
       })
@@ -315,6 +315,20 @@ export default function CampaignDetailPage() {
         variant: 'destructive' 
       })
       throw err // Re-throw so FileUpload component shows error state
+    }
+  }
+
+  const handleDownloadFile = async (path: string, fileName: string) => {
+    try {
+      const signedUrl = await getSignedDownloadUrl('campaign-attachments', path)
+      // Open in new tab or trigger download
+      window.open(signedUrl, '_blank')
+    } catch (err) {
+      toast({ 
+        title: 'Download failed', 
+        description: err instanceof Error ? err.message : 'Failed to get download link', 
+        variant: 'destructive' 
+      })
     }
   }
 
@@ -676,7 +690,7 @@ export default function CampaignDetailPage() {
                     key={attachment.id}
                     fileName={attachment.fileName}
                     fileSize={attachment.fileSize}
-                    fileUrl={attachment.fileUrl}
+                    onDownload={() => handleDownloadFile(attachment.fileUrl, attachment.fileName)}
                     onRemove={!isArchived ? () => handleRemoveAttachment(attachment.id) : undefined}
                   />
                 ))}

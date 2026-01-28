@@ -92,15 +92,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get public URL
-    const { data: urlData } = supabaseAdmin.storage
-      .from(bucket)
-      .getPublicUrl(data.path);
-
+    // Return path (not public URL) - signed URLs will be generated on demand
     return NextResponse.json({
       success: true,
+      bucket: bucket,
       path: data.path,
-      url: urlData.publicUrl,
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.type,

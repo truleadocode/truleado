@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useRef } from 'react'
-import { Upload, File, X, AlertCircle, Loader2 } from 'lucide-react'
+import { Upload, File, X, AlertCircle, Loader2, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from './button'
 
@@ -180,12 +180,20 @@ export function FileUpload({
 interface FileItemProps {
   fileName: string
   fileSize?: number | null
-  fileUrl?: string
+  onDownload?: () => void
   onRemove?: () => void
   isRemoving?: boolean
+  isDownloading?: boolean
 }
 
-export function FileItem({ fileName, fileSize, fileUrl, onRemove, isRemoving }: FileItemProps) {
+export function FileItem({ 
+  fileName, 
+  fileSize, 
+  onDownload, 
+  onRemove, 
+  isRemoving,
+  isDownloading 
+}: FileItemProps) {
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -194,23 +202,27 @@ export function FileItem({ fileName, fileSize, fileUrl, onRemove, isRemoving }: 
 
   return (
     <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
-      <div className="flex items-center gap-3 min-w-0">
+      <div 
+        className={cn(
+          "flex items-center gap-3 min-w-0 flex-1",
+          onDownload && "cursor-pointer hover:opacity-80"
+        )}
+        onClick={onDownload}
+      >
         <div className="h-10 w-10 rounded bg-background flex items-center justify-center shrink-0">
-          <File className="h-5 w-5 text-muted-foreground" />
+          {isDownloading ? (
+            <Loader2 className="h-5 w-5 text-muted-foreground animate-spin" />
+          ) : (
+            <File className="h-5 w-5 text-muted-foreground" />
+          )}
         </div>
         <div className="min-w-0">
-          {fileUrl ? (
-            <a 
-              href={fileUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="font-medium hover:underline truncate block"
-            >
-              {fileName}
-            </a>
-          ) : (
-            <p className="font-medium truncate">{fileName}</p>
-          )}
+          <p className={cn(
+            "font-medium truncate",
+            onDownload && "text-primary hover:underline"
+          )}>
+            {fileName}
+          </p>
           {fileSize && (
             <p className="text-xs text-muted-foreground">
               {formatFileSize(fileSize)}
@@ -222,7 +234,10 @@ export function FileItem({ fileName, fileSize, fileUrl, onRemove, isRemoving }: 
         <Button 
           variant="ghost" 
           size="icon"
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
           disabled={isRemoving}
           className="shrink-0"
         >

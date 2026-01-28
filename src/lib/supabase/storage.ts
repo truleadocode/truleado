@@ -1,8 +1,8 @@
 /**
  * Supabase Storage Utilities
  * 
- * Handles file uploads to Supabase Storage buckets via API route.
- * We use an API route because Firebase JWTs aren't compatible with
+ * Handles file uploads/downloads to Supabase Storage buckets via API routes.
+ * We use API routes because Firebase JWTs aren't compatible with
  * Supabase Storage's direct authentication.
  */
 
@@ -12,7 +12,6 @@ export type StorageBucket = 'campaign-attachments' | 'deliverables';
 
 interface UploadResult {
   path: string;
-  url: string;
   fileName: string;
   fileSize: number;
   mimeType: string;
@@ -55,11 +54,38 @@ export async function uploadFile(
   
   return {
     path: data.path,
-    url: data.url,
     fileName: data.fileName,
     fileSize: data.fileSize,
     mimeType: data.mimeType,
   };
+}
+
+/**
+ * Get a signed URL for downloading a private file
+ */
+export async function getSignedDownloadUrl(
+  bucket: StorageBucket,
+  path: string
+): Promise<string> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+  
+  const params = new URLSearchParams({ bucket, path });
+  const response = await fetch(`/api/download?${params}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  });
+  
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.error || 'Failed to get download URL');
+  }
+  
+  return data.url;
 }
 
 /**
