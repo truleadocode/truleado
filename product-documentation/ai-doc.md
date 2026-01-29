@@ -2,19 +2,38 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
+**Last updated:** 2025-01-29. Next session: **test email delivery** (Novu + agency SMTP).
+
+---
+
+## Start here tomorrow (email testing)
+
+- **Goal:** Verify that notification emails are delivered when workflows run (agency SMTP and/or Novu default integration).
+- **Quick checks:**
+  1. **Agency SMTP:** Dashboard → Settings → Notifications. Save SMTP; confirm integration appears in Novu dashboard (Custom SMTP, identifier `agency-<id>`).
+  2. **Trigger:** Submit a deliverable for review or approve/reject one; confirm in-app Inbox (header bell) and **email** for the right recipients.
+  3. **Sample script:** `node scripts/trigger-sample-notification.js` (sends to `user@test.com`; ensure that user exists in DB).
+- **Relevant code:** `src/lib/novu/trigger.ts`, `src/graphql/resolvers/mutations/deliverable.ts` (notifyApprovalRequested, notifyApprovalDecided), `product-documentation/notification-service-implementation.md`.
+- **Env:** `NOVU_SECRET_KEY`, `NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER` (and optional per-agency SMTP in Settings).
+
 ---
 
 ## 0. Session Context for New Agent (Start Here)
 
 **What was done in recent sessions:**
 
-1. **Phase 3 — Client & Contacts (implemented)**  
-   - **DB**: Migration `00012_phase3_contacts.sql` — `contacts` table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS agency-scoped.  
-   - **GraphQL**: Type `Contact`; `Client.contacts`, `Client.clientApprovers`; `Client.approverUsers` includes (1) users from contacts with `is_client_approver` and `user_id`, (2) legacy client_users with role approver. Queries: `contact(id)`, `contacts(clientId)`, `contactsList(...)`. Mutations: `createContact`, `updateContact`, `deleteContact`.  
-   - **UI**: Client detail **Contacts** tab (list, add/edit/delete, toggle approver); **Global Contacts** at `/dashboard/contacts` (filters, search). Sidebar: "Contacts" link.  
-   - **Create Contact fix**: The Contacts tab was using `queries.createContact` / `updateContact` / `deleteContact` (those are mutations) → "non-empty query" errors. Fixed by using `mutations.*` in `src/app/(dashboard)/dashboard/clients/[id]/page.tsx`.
+1. **Phase 4/5 — Notifications & Agency Email (implemented)**  
+   - **Novu**: In-app Inbox in dashboard header (Novu React, dynamic import `ssr: false`); backend triggers via `@novu/node` using `NOVU_SECRET_KEY`. Subscriber ID = Truleado `user.id`; agency SMTP synced to Novu Custom SMTP per agency.  
+   - **DB**: Migration `00013_agency_email_config.sql` — `agency_email_config` (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped, agency_admin for write.  
+   - **GraphQL**: `agencyEmailConfig(agencyId)`, `saveAgencyEmailConfig(agencyId, input)` (agency_admin); types `AgencyEmailConfig`, `AgencyEmailConfigInput`.  
+   - **UI**: Settings → Notifications — SMTP form (agency admin only). Header shows Novu Inbox when `NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER` set.  
+   - **Triggers**: Submit-for-review → campaign approvers (`approval-requested`); status → client_review → client approvers; approve/reject → creator + other approvers (`approval-approved` / `approval-rejected`). Workflows in Novu: `approval-requested`, `approval-approved`, `approval-rejected`.  
+   - **Sample script**: `node scripts/trigger-sample-notification.js` (recipient user@test.com).  
+   - **Docs**: `product-documentation/notification-service-implementation.md`.
 
-2. **Client login portal (magic link)**  
+2. **Phase 3 — Client & Contacts (already done)** — Contacts table, Client Contacts tab, Global Contacts, GraphQL Contact/contactsList/createContact/updateContact/deleteContact.
+
+3. **Client login portal (magic link)**  
    - **Routes**: `/client` (dashboard placeholder), `/client/login`, `/client/verify`. Layout: `src/app/client/layout.tsx`.  
    - **Auth**: Firebase **Email Link** (passwordless). User enters email on `/client/login`; we validate via `POST /api/client-auth/request-magic-link` (contact `is_client_approver` by email), then `sendSignInLinkToEmail`. Email stored in `localStorage`; user opens link → `/client/verify` → `signInWithEmailLink` → `ensureClientUser` → redirect `/client`.  
    - **Backend**: `ensureClientUser` mutation creates `users` + `auth_identities` (provider `firebase_email_link`), links `contacts.user_id`; idempotent. `User.contact` added; `me` fetches `contact { id }` for redirect logic.  
@@ -22,12 +41,12 @@
    - **Dev-only**: `POST /api/client-auth/dev-magic-link` (localhost) returns the sign-in link so it can be displayed/copied when SMTP is not configured.  
    - **“Email already in use”**: If the email has an existing Firebase account (e.g. agency email/password), verify page shows “Use agency sign-in” and links to `/login`.
 
-3. **Deliverables**  
-   - **Delete version**: `deleteDeliverableVersion(deliverableVersionId)` mutation; delete button on deliverable detail when status `PENDING` or `REJECTED`; version must have no approvals; file removed from `deliverables` bucket.
+4. **Deliverables** — Delete version, caption audit, preview, approval workflow; notifications now trigger from deliverable mutations.
 
 **If you are a new agent:**  
 - Skim **§1–§5** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
-- Client portal: `src/app/client/*`, `src/app/api/client-auth/*`, `src/lib/firebase/client.ts` (magic-link helpers), `ensureClientUser` resolver, `User.contact` resolver.
+- Notifications: `src/lib/novu/*`, `src/graphql/resolvers/mutations/agency-email-config.ts`, deliverable.ts (trigger calls), `src/app/(dashboard)/dashboard/settings/notifications/page.tsx`, header Inbox.  
+- Client portal: `src/app/client/*`, `src/app/api/client-auth/*`, `ensureClientUser`, `User.contact`.
 
 ---
 
@@ -128,6 +147,7 @@ These Supabase migrations exist and should be applied in order:
 9. `00010_agency_code_for_join.sql` – adds `agency_code` to `agencies` (unique, generated on insert via trigger); used by `joinAgencyByCode`.
 10. `00011_phase2_approval_system.sql` – project_approvers table; deliverable status `pending_project_approval`; approval_level includes `project`; RLS for project_approvers.
 11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
+12. `00013_agency_email_config.sql` – **agency_email_config** table (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped; agency admin for insert/update/delete. Used for Novu per-agency SMTP.
 
 **Manual actions required in Supabase:**
 
@@ -293,7 +313,8 @@ These Supabase migrations exist and should be applied in order:
 
 These are **not yet implemented**, but are implied by PRD/LLD or recent conversations:
 
-1. **Assign client approvers to deliverable** when internal approval is completed (automatic assignment of contacts with `is_client_approver` to the deliverable’s approval process).
+1. **Verify email delivery** — Phase 4/5 notifications implemented (Novu + agency SMTP); confirm emails are received when triggering workflows (agency SMTP or Novu default integration).
+2. **Assign client approvers to deliverable** when internal approval is completed (automatic assignment of contacts with `is_client_approver` to the deliverable’s approval process).
 2. **Creator Roster & Campaign Creators**
    - UI for managing agency-wide creator roster.
    - Assigning creators to campaigns (`CampaignCreator` lifecycle and statuses).
@@ -311,7 +332,7 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
 
 When a new AI (or engineer) picks this up:
 
-1. **Re-run migrations** (or verify applied) in order `00001` → `00012` (including `00011_phase2_approval_system.sql`, `00012_phase3_contacts.sql`).
+1. **Re-run migrations** (or verify applied) in order `00001` → `00013` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`).
 2. **Ensure buckets exist** in Supabase: `campaign-attachments`, `deliverables`, with appropriate RLS.
 3. **Skim these files first**:
    - `product-documentation/MASTER_PRD.md`
@@ -340,6 +361,12 @@ When a new AI (or engineer) picks this up:
      - `src/app/api/client-auth/request-magic-link/route.ts`, `src/app/api/client-auth/dev-magic-link/route.ts`
      - `src/lib/firebase/client.ts` (sendClientSignInLink, isClientSignInLink, signInWithClientLink, CLIENT_MAGIC_LINK_EMAIL_KEY)
      - `ensureClientUser` in `src/graphql/resolvers/mutations/user.ts`; `User.contact` in `src/graphql/resolvers/types.ts`
+   - **Notifications (Novu)**:
+     - `src/lib/novu/client.ts`, `trigger.ts`, `integrations.ts`, `subscriber.ts`
+     - `src/graphql/resolvers/mutations/agency-email-config.ts`; deliverable.ts (triggerNotification, notifyApprovalRequested, notifyApprovalDecided)
+     - `src/app/(dashboard)/dashboard/settings/notifications/page.tsx`; header Inbox (`src/components/layout/header.tsx`); dashboard layout NovuProvider (`src/app/(dashboard)/layout.tsx`)
+     - `scripts/trigger-sample-notification.js`
+     - `product-documentation/notification-service-implementation.md`
 
 This should provide enough context for a new agent to continue seamlessly from where the last session left off.
 

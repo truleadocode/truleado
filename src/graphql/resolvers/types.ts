@@ -687,4 +687,17 @@ export const typeResolvers = {
     isRead: (parent: { is_read: boolean }) => parent.is_read,
     readAt: (parent: { read_at: string | null }) => parent.read_at,
   },
+
+  AgencyEmailConfig: {
+    agencyId: (parent: { agency_id: string }) => parent.agency_id,
+    smtpHost: (parent: { smtp_host: string }) => parent.smtp_host,
+    smtpPort: (parent: { smtp_port: number }) => parent.smtp_port,
+    smtpSecure: (parent: { smtp_secure: boolean }) => parent.smtp_secure,
+    smtpUsername: (parent: { smtp_username: string | null }) => parent.smtp_username,
+    fromEmail: (parent: { from_email: string }) => parent.from_email,
+    fromName: (parent: { from_name: string | null }) => parent.from_name,
+    novuIntegrationIdentifier: (parent: { novu_integration_identifier: string | null }) => parent.novu_integration_identifier,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+  },
 };

@@ -487,6 +487,34 @@ CREATE INDEX idx_notifications_user ON notifications(user_id, is_read);
 
 ---
 
+### 9.3 agency_email_config (Phase 4/5 – Novu)
+
+Per-agency SMTP configuration for notification emails. When saved, the app creates/updates a Novu Custom SMTP integration and stores its identifier. Migration: `00013_agency_email_config.sql`.
+
+```sql
+CREATE TABLE agency_email_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  smtp_host TEXT NOT NULL,
+  smtp_port INTEGER NOT NULL DEFAULT 587,
+  smtp_secure BOOLEAN NOT NULL DEFAULT false,
+  smtp_username TEXT,
+  smtp_password TEXT,
+  from_email TEXT NOT NULL,
+  from_name TEXT,
+  novu_integration_identifier TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (agency_id)
+);
+
+CREATE INDEX idx_agency_email_config_agency_id ON agency_email_config(agency_id);
+```
+
+RLS: agency members can SELECT; only agency admins can INSERT/UPDATE/DELETE.
+
+---
+
 ## 10. Hard Rules (Enforced by Design)
 
 - Authentication handled via Firebase

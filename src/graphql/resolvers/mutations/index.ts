@@ -43,6 +43,7 @@ import {
 import { fetchPreCampaignAnalytics } from './analytics';
 import { createPayment, markPaymentPaid } from './payment';
 import { markNotificationRead, markAllNotificationsRead } from './notification';
+import { saveAgencyEmailConfig } from './agency-email-config';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -102,4 +103,6 @@ export const mutationResolvers = {
   // Notifications
   markNotificationRead,
   markAllNotificationsRead,
+  // Agency email config (SMTP for Novu)
+  saveAgencyEmailConfig,
 };

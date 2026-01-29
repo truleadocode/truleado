@@ -8,7 +8,7 @@
  * Campaign Permission → Project Permission → Client Permission → Agency Permission → Deny
  */
 
-import { GraphQLContext, AuthenticatedUser } from '@/graphql/context';
+import { GraphQLContext, AuthenticatedUser, ContextContact } from '@/graphql/context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { forbiddenError, unauthenticatedError, notFoundError } from '@/graphql/errors';
 import { AgencyRole, CampaignRole, Permission, PermissionCheckResult } from './types';
@@ -361,5 +361,46 @@ export async function requireClientAccess(
     }
   }
   
+  return user;
+}
+
+/**
+ * Get the client ID for a deliverable (via campaign -> project -> client)
+ */
+export async function getClientIdForDeliverable(deliverableId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('deliverables')
+    .select('campaigns!inner(projects!inner(client_id))')
+    .eq('id', deliverableId)
+    .single();
+  if (error || !data?.campaigns) return null;
+  const projects = (data.campaigns as { projects: { client_id: string } }).projects;
+  return projects?.client_id ?? null;
+}
+
+/**
+ * Require that the current user is a client approver for this deliverable's client.
+ * Used for client portal: user must have ctx.contact with is_client_approver and
+ * deliverable's client must match contact.client_id.
+ */
+export async function requireClientApproverDeliverableAccess(
+  ctx: GraphQLContext,
+  deliverableId: string
+): Promise<AuthenticatedUser> {
+  const user = requireAuth(ctx);
+  if (!ctx.contact) {
+    throw forbiddenError('You must sign in via the client portal to access this deliverable');
+  }
+  const contact = ctx.contact as ContextContact;
+  if (!contact.isClientApprover) {
+    throw forbiddenError('Only client approvers can access this deliverable');
+  }
+  const clientId = await getClientIdForDeliverable(deliverableId);
+  if (!clientId) {
+    throw notFoundError('Deliverable', deliverableId);
+  }
+  if (clientId !== contact.clientId) {
+    throw forbiddenError('This deliverable does not belong to your client');
+  }
   return user;
 }

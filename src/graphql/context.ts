@@ -26,11 +26,23 @@ export interface AuthenticatedUser {
 }
 
 /**
+ * Linked contact (client portal user) - set when user was created via ensureClientUser
+ */
+export interface ContextContact {
+  id: string;
+  clientId: string;
+  isClientApprover: boolean;
+}
+
+/**
  * GraphQL context available to all resolvers
  */
 export interface GraphQLContext {
   // Authenticated user (null if not authenticated)
   user: AuthenticatedUser | null;
+  
+  // Linked contact for client portal users (null if not a contact-linked user)
+  contact: ContextContact | null;
   
   // Firebase decoded token (for additional claims if needed)
   decodedToken: DecodedIdToken | null;
@@ -62,6 +74,7 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
   // Base context (unauthenticated)
   const baseContext: GraphQLContext = {
     user: null,
+    contact: null,
     decodedToken: null,
     requestId,
     ipAddress,
@@ -135,9 +148,25 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
         isActive: m.is_active,
       })),
     };
+
+    // Load linked contact (for client portal users)
+    let contact: ContextContact | null = null;
+    const { data: contactRow } = await supabaseAdmin
+      .from('contacts')
+      .select('id, client_id, is_client_approver')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (contactRow) {
+      contact = {
+        id: contactRow.id,
+        clientId: contactRow.client_id,
+        isClientApprover: contactRow.is_client_approver ?? false,
+      };
+    }
     
     return {
       user: authenticatedUser,
+      contact,
       decodedToken,
       requestId,
       ipAddress,

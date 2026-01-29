@@ -17,7 +17,8 @@ This folder contains the canonical documents that define Truleado. Any implement
 | [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Jan 2026 |
 | [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
-| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; client portal, Phase 3, deliverables | Jan 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Jan 2026 |
+| [Notification Service Implementation](./notification-service-implementation.md) | Novu setup, agency SMTP, Inbox, workflows, triggers | Jan 2026 |
 
 ---
 
@@ -65,9 +66,9 @@ Campaign Permission
 - [x] Project management
 - [x] Campaign engine with state machine
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
+- [x] **Notifications (Phase 4/5)**: Novu in-app Inbox + email; agency SMTP at Settings → Notifications; workflows `approval-requested`, `approval-approved`, `approval-rejected`; sample script `scripts/trigger-sample-notification.js`
 - [ ] Creator roster
 - [ ] Audit logs
-- [ ] Basic notifications
 
 ### Excluded (Post-MVP)
 - Post-campaign analytics
@@ -133,6 +134,9 @@ When adding new features:
   - Verify page: on Firebase "email already in use" / "account exists with different credential", show "Use agency sign-in" and link to `/login`.
 - **Deliverables**: `deleteDeliverableVersion(deliverableVersionId)` mutation; delete button on deliverable detail when status PENDING/REJECTED; version must have no approvals; storage file removed.
 - **Docs**: `ai-doc.md` §0 Session Context, §5 Implemented Features, §8 How to Resume; GRAPHQL_API_CONTRACT (User.contact, ensureClientUser, deleteDeliverableVersion); TECHNICAL_LLD §4.5 Client Portal; DATABASE_SCHEMA_DDL (auth_identities `firebase_email_link`).
+- **Phase 4/5 — Notifications & Agency Email**:
+  - Novu: in-app Inbox (header), email via per-agency SMTP. Migration `00013_agency_email_config.sql`; GraphQL `agencyEmailConfig`, `saveAgencyEmailConfig`; Settings → Notifications SMTP form (agency admin). Triggers on submit-for-review, approval, reject; workflows `approval-requested`, `approval-approved`, `approval-rejected`. See `notification-service-implementation.md`. Sample trigger: `node scripts/trigger-sample-notification.js`.
+- **2025-01-29**: ai-doc handoff updated with "Start here tomorrow" for email delivery testing.
 
 ---
 

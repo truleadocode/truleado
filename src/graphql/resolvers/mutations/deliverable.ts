@@ -10,11 +10,14 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   requireAuth,
   requireCampaignAccess,
+  requireClientApproverDeliverableAccess,
   getAgencyIdForCampaign,
   Permission,
 } from '@/lib/rbac';
 import { validationError, notFoundError, invalidStateError, forbiddenError } from '../../errors';
 import { logActivity } from '@/lib/audit';
+import { triggerNotification } from '@/lib/novu/trigger';
+import { ensureSubscriber } from '@/lib/novu/subscriber';
 
 // Deliverable state transitions
 const DELIVERABLE_TRANSITIONS: Record<string, string[]> = {
@@ -25,6 +28,63 @@ const DELIVERABLE_TRANSITIONS: Record<string, string[]> = {
   rejected: ['submitted'], // Can resubmit after rejection
   approved: [], // Terminal state (immutable)
 };
+
+async function getCampaignApproverUserIds(campaignId: string): Promise<string[]> {
+  const { data } = await supabaseAdmin
+    .from('campaign_users')
+    .select('user_id')
+    .eq('campaign_id', campaignId)
+    .eq('role', 'approver');
+  return (data || []).map((r) => r.user_id);
+}
+
+async function notifyApprovalRequested(params: {
+  agencyId: string;
+  deliverableId: string;
+  deliverableTitle: string;
+  campaignId: string;
+  approvalLevel: string;
+  recipientUserIds: string[];
+}): Promise<void> {
+  const { agencyId, deliverableId, deliverableTitle, campaignId, approvalLevel, recipientUserIds } = params;
+  for (const userId of recipientUserIds) {
+    const { data: u } = await supabaseAdmin.from('users').select('id, email, full_name').eq('id', userId).single();
+    if (!u) continue;
+    await ensureSubscriber({ subscriberId: u.id, email: u.email, firstName: u.full_name?.split(' ')[0] ?? null, lastName: u.full_name?.split(' ').slice(1).join(' ') || null });
+    await triggerNotification({
+      workflowId: 'approval-requested',
+      subscriberId: u.id,
+      email: u.email ?? undefined,
+      agencyId,
+      data: { deliverableId, deliverableTitle, campaignId, approvalLevel, actionUrl: `/dashboard/deliverables/${deliverableId}` },
+    });
+  }
+}
+
+async function notifyApprovalDecided(params: {
+  agencyId: string;
+  deliverableId: string;
+  deliverableTitle: string;
+  decision: 'approved' | 'rejected';
+  decidedByName: string;
+  comment?: string | null;
+  recipientUserIds: string[];
+}): Promise<void> {
+  const { agencyId, deliverableId, deliverableTitle, decision, decidedByName, comment, recipientUserIds } = params;
+  const workflowId = decision === 'approved' ? 'approval-approved' : 'approval-rejected';
+  for (const userId of recipientUserIds) {
+    const { data: u } = await supabaseAdmin.from('users').select('id, email').eq('id', userId).single();
+    if (!u) continue;
+    await ensureSubscriber({ subscriberId: u.id, email: u.email });
+    await triggerNotification({
+      workflowId,
+      subscriberId: u.id,
+      email: u.email ?? undefined,
+      agencyId,
+      data: { deliverableId, deliverableTitle, decidedByName, comment: comment ?? undefined, actionUrl: `/dashboard/deliverables/${deliverableId}` },
+    });
+  }
+}
 
 /**
  * Create a deliverable in a campaign
@@ -256,7 +316,25 @@ export async function submitDeliverableForReview(
       afterState: updated,
     });
   }
-  
+
+  // Notify campaign approvers (approval requested)
+  if (agencyId) {
+    const approverIds = await getCampaignApproverUserIds(campaigns.id);
+    if (approverIds.length === 0) {
+      console.warn('[Novu] No campaign approvers to notify for campaign', campaigns.id, '- assign approvers in Campaign → Users');
+    } else {
+      console.log('[Novu] Notifying', approverIds.length, 'campaign approver(s) for approval-requested');
+      notifyApprovalRequested({
+        agencyId,
+        deliverableId,
+        deliverableTitle: updated.title,
+        campaignId: campaigns.id,
+        approvalLevel: 'internal',
+        recipientUserIds: approverIds,
+      }).catch((err) => console.error('[Novu] approval-requested notify failed:', err));
+    }
+  }
+
   return updated;
 }
 
@@ -312,7 +390,12 @@ async function createApproval(
       throw forbiddenError('Only project approvers can approve at project level');
     }
   } else if (level === 'client' || level === 'final') {
-    await requireCampaignAccess(ctx, campaign.id, Permission.APPROVE_CLIENT);
+    const hasAgency = ctx.user?.agencies?.some((a) => a.isActive) ?? false;
+    if (hasAgency) {
+      await requireCampaignAccess(ctx, campaign.id, Permission.APPROVE_CLIENT);
+    } else {
+      await requireClientApproverDeliverableAccess(ctx, deliverableId);
+    }
   }
 
   // Verify version belongs to this deliverable
@@ -399,6 +482,66 @@ async function createApproval(
         newStatus,
       },
     });
+  }
+
+  // Notify client approvers when status moves to client_review
+  if (newStatus === 'client_review') {
+    const { data: projectRow } = await supabaseAdmin.from('projects').select('client_id').eq('id', campaign.project_id).single();
+    const clientId = projectRow?.client_id;
+    if (clientId) {
+      const deliverableTitle = deliverable.title as string;
+      (async () => {
+        const { data: contacts } = await supabaseAdmin.from('contacts').select('id, user_id, email, first_name, last_name').eq('client_id', clientId).eq('is_client_approver', true);
+        for (const c of contacts || []) {
+          const subscriberId = c.user_id ?? c.id;
+          const email = c.email ?? undefined;
+          try {
+            await ensureSubscriber({ subscriberId, email, firstName: c.first_name, lastName: c.last_name });
+            await triggerNotification({
+              workflowId: 'approval-requested',
+              subscriberId,
+              email,
+              agencyId,
+              data: { deliverableId, deliverableTitle, campaignId: campaign.id, approvalLevel: 'client', actionUrl: `/dashboard/deliverables/${deliverableId}` },
+            });
+          } catch (err) {
+            console.error('Novu approval-requested (client):', err);
+          }
+        }
+      })();
+    }
+  }
+
+  // Notify approvers / creator about approval decision
+  const { data: submitterUser } = await supabaseAdmin.from('users').select('id, full_name').eq('id', user.id).single();
+  const decidedByName = submitterUser?.full_name ?? 'Someone';
+  const deliverableTitle = deliverable.title as string;
+  const recipientIds = new Set<string>();
+  const { data: d } = await supabaseAdmin.from('deliverables').select('created_by').eq('id', deliverableId).single();
+  if (d?.created_by) recipientIds.add(d.created_by);
+  if (level === 'internal') {
+    (await getCampaignApproverUserIds(campaign.id)).forEach((id) => recipientIds.add(id));
+  } else if (level === 'project') {
+    const { data: pa } = await supabaseAdmin.from('project_approvers').select('user_id').eq('project_id', campaign.project_id);
+    (pa || []).forEach((r) => recipientIds.add(r.user_id));
+  } else if (level === 'client' || level === 'final') {
+    const { data: projectRow } = await supabaseAdmin.from('projects').select('client_id').eq('id', campaign.project_id).single();
+    if (projectRow?.client_id) {
+      const { data: contacts } = await supabaseAdmin.from('contacts').select('user_id').eq('client_id', projectRow.client_id).eq('is_client_approver', true);
+      (contacts || []).filter((c) => c.user_id).forEach((c) => recipientIds.add(c.user_id!));
+    }
+  }
+  recipientIds.delete(user.id);
+  if (agencyId && recipientIds.size > 0) {
+    notifyApprovalDecided({
+      agencyId,
+      deliverableId,
+      deliverableTitle,
+      decision,
+      decidedByName,
+      comment,
+      recipientUserIds: [...recipientIds],
+    }).catch((err) => console.error('Novu approval-decided notify:', err));
   }
 
   return approval;

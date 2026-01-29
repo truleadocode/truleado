@@ -218,7 +218,7 @@
 
 ---
 
-## ✅ PHASE 4 — Notifications & Communication
+## ✅ PHASE 4 — Notifications & Communication (Implemented)
 
 ### Task 4.1 — Approval Notifications
 
@@ -233,9 +233,11 @@
   * Approval level
   * Action required
 
+**Implementation:** Novu integrated. Workflows `approval-requested`, `approval-approved`, `approval-rejected` triggered from deliverable mutations. In-app via Novu Inbox in header. Email uses agency SMTP when configured (see Phase 5). See `notification-service-implementation.md`.
+
 ---
 
-## ✅ PHASE 5 — Agency Email Infrastructure
+## ✅ PHASE 5 — Agency Email Infrastructure (Implemented)
 
 ### Task 5.1 — Agency Email Configuration
 
@@ -247,6 +249,8 @@
 
   * Use agency-defined email settings
 
+**Implementation:** Settings → Notifications; agency admin SMTP form. Saves to `agency_email_config` and syncs to Novu Custom SMTP integration per agency. Trigger overrides use `integrationIdentifier` so emails send via agency SMTP.
+
 ---
 
 ### Task 5.2 — Email Service Abstraction
@@ -255,6 +259,8 @@
 
   * Supports agency-level config
   * Can be extended later for inbound mail
+
+**Implementation:** Novu handles delivery; agency config pushed to Novu on save. `src/lib/novu/` (client, trigger, integrations, subscriber).
 
 ---
 

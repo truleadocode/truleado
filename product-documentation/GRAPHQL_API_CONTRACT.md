@@ -431,6 +431,31 @@ type Notification {
   isRead: Boolean!
   createdAt: DateTime!
 }
+
+# Agency email (SMTP) config for Novu – agency_admin can save; password never returned
+type AgencyEmailConfig {
+  id: ID!
+  agencyId: ID!
+  smtpHost: String!
+  smtpPort: Int!
+  smtpSecure: Boolean!
+  smtpUsername: String
+  fromEmail: String!
+  fromName: String
+  novuIntegrationIdentifier: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+input AgencyEmailConfigInput {
+  smtpHost: String!
+  smtpPort: Int!
+  smtpSecure: Boolean!
+  smtpUsername: String
+  smtpPassword: String
+  fromEmail: String!
+  fromName: String
+}
 ```
 
 ---
@@ -469,7 +494,8 @@ type Query {
   
   # Activity & Notifications
   activityLogs(agencyId: ID!, entityType: String, entityId: ID): [ActivityLog!]!
-  notifications(unreadOnly: Boolean): [Notification!]!
+  notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
+  agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
 }
 ```
 
@@ -761,9 +787,12 @@ type Mutation {
 ```graphql
 type Mutation {
   markNotificationRead(notificationId: ID!): Notification!
-  markAllNotificationsRead: Boolean!
+  markAllNotificationsRead(agencyId: ID!): Boolean!
+  saveAgencyEmailConfig(agencyId: ID!, input: AgencyEmailConfigInput!): AgencyEmailConfig!
 }
 ```
+
+- **saveAgencyEmailConfig**: Agency admin only. Saves SMTP to `agency_email_config` and creates/updates Novu Custom SMTP integration for that agency; password optional on update.
 
 ---
 

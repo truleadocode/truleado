@@ -16,6 +16,7 @@ import {
   getAgencyIdForProject,
   getAgencyIdForCampaign,
   getAgencyIdForClient,
+  requireClientApproverDeliverableAccess,
 } from '@/lib/rbac';
 import { notFoundError, forbiddenError } from '../errors';
 
@@ -309,12 +310,11 @@ export const queryResolvers = {
   },
 
   /**
-   * Get a deliverable by ID
+   * Get a deliverable by ID (agency users via campaign access, client users via client approver access)
    */
   deliverable: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
-    const user = requireAuth(ctx);
+    requireAuth(ctx);
     
-    // Get the campaign for this deliverable
     const { data: deliverable, error } = await supabaseAdmin
       .from('deliverables')
       .select('*, campaigns!inner(id)')
@@ -325,11 +325,55 @@ export const queryResolvers = {
       throw notFoundError('Deliverable', id);
     }
     
-    // Check campaign access
     const campaigns = deliverable.campaigns as { id: string };
-    await requireCampaignAccess(ctx, campaigns.id);
-    
+    const hasAgency = ctx.user?.agencies?.some((a) => a.isActive) ?? false;
+    if (hasAgency) {
+      await requireCampaignAccess(ctx, campaigns.id);
+      return deliverable;
+    }
+    await requireClientApproverDeliverableAccess(ctx, id);
     return deliverable;
+  },
+
+  /**
+   * Client portal: deliverables in client_review for the contact's client.
+   * Only callable when user has ctx.contact with is_client_approver.
+   */
+  deliverablesPendingClientApproval: async (
+    _: unknown,
+    __: unknown,
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    if (!ctx.contact) {
+      throw forbiddenError('Sign in via the client portal to see pending approvals');
+    }
+    const contact = ctx.contact as { clientId: string; isClientApprover: boolean };
+    if (!contact.isClientApprover) {
+      throw forbiddenError('Only client approvers can see pending approvals');
+    }
+    const { data: projects } = await supabaseAdmin
+      .from('projects')
+      .select('id')
+      .eq('client_id', contact.clientId)
+      .eq('is_archived', false);
+    const projectIds = (projects || []).map((p: { id: string }) => p.id);
+    if (projectIds.length === 0) return [];
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id')
+      .in('project_id', projectIds)
+      .neq('status', 'archived');
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+    if (campaignIds.length === 0) return [];
+    const { data, error } = await supabaseAdmin
+      .from('deliverables')
+      .select('*')
+      .in('campaign_id', campaignIds)
+      .eq('status', 'client_review')
+      .order('created_at', { ascending: false });
+    if (error) throw new Error('Failed to fetch pending approvals');
+    return data || [];
   },
 
   /**
@@ -430,5 +474,25 @@ export const queryResolvers = {
     }
     
     return data || [];
+  },
+
+  /**
+   * Get agency email (SMTP) config for notifications. Password never returned.
+   */
+  agencyEmailConfig: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data, error } = await supabaseAdmin
+      .from('agency_email_config')
+      .select('id, agency_id, smtp_host, smtp_port, smtp_secure, smtp_username, from_email, from_name, novu_integration_identifier, created_at, updated_at')
+      .eq('agency_id', agencyId)
+      .maybeSingle();
+
+    if (error) throw new Error('Failed to fetch email config');
+    return data;
   },
 };

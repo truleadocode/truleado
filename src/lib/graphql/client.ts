@@ -418,6 +418,50 @@ export const queries = {
     }
   `,
 
+  deliverablesPendingClientApproval: `
+    query GetDeliverablesPendingClientApproval {
+      deliverablesPendingClientApproval {
+        id
+        title
+        description
+        deliverableType
+        status
+        dueDate
+        createdAt
+        campaign {
+          id
+          name
+          project {
+            id
+            name
+            client {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  `,
+
+  agencyEmailConfig: `
+    query GetAgencyEmailConfig($agencyId: ID!) {
+      agencyEmailConfig(agencyId: $agencyId) {
+        id
+        agencyId
+        smtpHost
+        smtpPort
+        smtpSecure
+        smtpUsername
+        fromEmail
+        fromName
+        novuIntegrationIdentifier
+        createdAt
+        updatedAt
+      }
+    }
+  `,
+
   campaign: `
     query GetCampaign($id: ID!) {
       campaign(id: $id) {
@@ -811,6 +855,24 @@ export const mutations = {
   deleteDeliverableVersion: `
     mutation DeleteDeliverableVersion($deliverableVersionId: ID!) {
       deleteDeliverableVersion(deliverableVersionId: $deliverableVersionId)
+    }
+  `,
+
+  saveAgencyEmailConfig: `
+    mutation SaveAgencyEmailConfig($agencyId: ID!, $input: AgencyEmailConfigInput!) {
+      saveAgencyEmailConfig(agencyId: $agencyId, input: $input) {
+        id
+        agencyId
+        smtpHost
+        smtpPort
+        smtpSecure
+        smtpUsername
+        fromEmail
+        fromName
+        novuIntegrationIdentifier
+        createdAt
+        updatedAt
+      }
     }
   `,
 };

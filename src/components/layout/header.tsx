@@ -1,16 +1,25 @@
 "use client"
 
+import dynamic from 'next/dynamic'
 import { Bell, Search, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+
+const applicationIdentifier = process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER
+
+const NovuInbox = applicationIdentifier
+  ? dynamic(
+      () => import('@novu/react').then((m) => ({ default: m.Inbox })),
+      { ssr: false }
+    )
+  : null
 
 interface HeaderProps {
   title?: string
@@ -53,27 +62,27 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
         </div>
       </div>
 
-      {/* Notifications */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
-          <DropdownMenuLabel className="flex items-center justify-between">
-            <span>Notifications</span>
-            <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary">
-              Mark all as read
+      {/* Notifications: Novu Inbox when configured, else placeholder */}
+      {NovuInbox ? (
+        <div className="flex items-center">
+          <NovuInbox />
+        </div>
+      ) : (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="relative">
+              <Bell className="h-5 w-5" />
             </Button>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <div className="py-4 text-center text-sm text-muted-foreground">
-            No new notifications
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <div className="py-4 text-center text-sm text-muted-foreground">
+              No new notifications
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </header>
   )
 }

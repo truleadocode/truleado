@@ -394,6 +394,31 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # Agency email (SMTP) config for notifications (Novu)
+  type AgencyEmailConfig {
+    id: ID!
+    agencyId: ID!
+    smtpHost: String!
+    smtpPort: Int!
+    smtpSecure: Boolean!
+    smtpUsername: String
+    fromEmail: String!
+    fromName: String
+    novuIntegrationIdentifier: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input AgencyEmailConfigInput {
+    smtpHost: String!
+    smtpPort: Int!
+    smtpSecure: Boolean!
+    smtpUsername: String
+    smtpPassword: String
+    fromEmail: String!
+    fromName: String
+  }
+
   # =============================================================================
   # QUERY ROOT
   # =============================================================================
@@ -417,8 +442,11 @@ export const typeDefs = gql`
     # Campaign (permission-scoped)
     campaign(id: ID!): Campaign
     
-    # Deliverable (permission-scoped via campaign)
+    # Deliverable (permission-scoped via campaign or client approver)
     deliverable(id: ID!): Deliverable
+    
+    # Client portal: deliverables pending client approval for the contact's client
+    deliverablesPendingClientApproval: [Deliverable!]!
     
     # Creator (agency-scoped)
     creator(id: ID!): Creator
@@ -435,6 +463,8 @@ export const typeDefs = gql`
     
     # Notifications for current user
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
+    # Agency email (SMTP) config for notifications (agency members; password never returned)
+    agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
   }
 
   # =============================================================================
@@ -493,6 +523,8 @@ export const typeDefs = gql`
       userId: ID
     ): Contact!
     deleteContact(id: ID!): Boolean!
+    # Save agency email (SMTP) config; agency_admin only. Creates/updates Novu integration.
+    saveAgencyEmailConfig(agencyId: ID!, input: AgencyEmailConfigInput!): AgencyEmailConfig!
     
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
