@@ -6,6 +6,8 @@
 
 import { createUser } from './user';
 import { createAgency, joinAgencyByCode, createClient } from './agency';
+import { createContact, updateContact, deleteContact } from './contact';
+import { addProjectApprover, removeProjectApprover } from './project';
 import {
   createProject,
   createCampaign,
@@ -48,9 +50,14 @@ export const mutationResolvers = {
   createAgency,
   joinAgencyByCode,
   createClient,
+  createContact,
+  updateContact,
+  deleteContact,
   
   // Project & Campaign Lifecycle
   createProject,
+  addProjectApprover,
+  removeProjectApprover,
   createCampaign,
   updateCampaignDetails,
   setCampaignDates,

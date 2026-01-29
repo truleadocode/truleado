@@ -136,6 +136,74 @@ export const typeResolvers = {
         .order('created_at', { ascending: false });
       return data || [];
     },
+    contacts: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('client_id', parent.id)
+        .order('last_name')
+        .order('first_name');
+      return data || [];
+    },
+    clientApprovers: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('client_id', parent.id)
+        .eq('is_client_approver', true)
+        .order('last_name')
+        .order('first_name');
+      return data || [];
+    },
+    approverUsers: async (parent: WithId) => {
+      // Phase 3: Client approvers = contacts with is_client_approver (user_id set) + legacy client_users approvers
+      const { data: contactApprovers } = await supabaseAdmin
+        .from('contacts')
+        .select('user_id')
+        .eq('client_id', parent.id)
+        .eq('is_client_approver', true)
+        .not('user_id', 'is', null);
+      const legacy = await supabaseAdmin
+        .from('client_users')
+        .select('user_id')
+        .eq('client_id', parent.id)
+        .eq('role', 'approver')
+        .eq('is_active', true);
+      const userIds = new Set<string>();
+      (contactApprovers || []).forEach((c: { user_id: string }) => userIds.add(c.user_id));
+      (legacy.data || []).forEach((cu: { user_id: string }) => userIds.add(cu.user_id));
+      if (userIds.size === 0) return [];
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .in('id', Array.from(userIds));
+      return users || [];
+    },
+  },
+
+  Contact: {
+    firstName: (parent: { first_name: string }) => parent.first_name,
+    lastName: (parent: { last_name: string }) => parent.last_name,
+    isClientApprover: (parent: { is_client_approver: boolean }) => parent.is_client_approver,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    client: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('clients')
+        .select('*')
+        .eq('id', parent.client_id)
+        .single();
+      return data;
+    },
+    user: async (parent: { user_id: string | null }) => {
+      if (!parent.user_id) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.user_id)
+        .single();
+      return data;
+    },
   },
 
   Project: {
@@ -160,6 +228,47 @@ export const typeResolvers = {
         .neq('status', 'archived')
         .order('created_at', { ascending: false });
       return data || [];
+    },
+    approverUsers: async (parent: WithId) => {
+      const { data: approvers } = await supabaseAdmin
+        .from('project_approvers')
+        .select('user_id')
+        .eq('project_id', parent.id);
+      if (!approvers?.length) return [];
+      const userIds = approvers.map((a) => a.user_id);
+      const { data: users } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .in('id', userIds);
+      return users || [];
+    },
+    projectApprovers: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('project_approvers')
+        .select('*')
+        .eq('project_id', parent.id)
+        .order('created_at', { ascending: true });
+      return data || [];
+    },
+  },
+
+  ProjectApprover: {
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    project: async (parent: { project_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', parent.project_id)
+        .single();
+      return data;
+    },
+    user: async (parent: { user_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.user_id)
+        .single();
+      return data;
     },
   },
 

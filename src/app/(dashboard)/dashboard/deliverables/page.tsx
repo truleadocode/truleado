@@ -48,9 +48,10 @@ interface Client {
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-3 w-3" /> },
   SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-3 w-3" /> },
-  INTERNAL_REVIEW: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-3 w-3" /> },
-  CLIENT_REVIEW: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-3 w-3" /> },
-  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-3 w-3" /> },
+  INTERNAL_REVIEW: { label: 'Pending Campaign Approval', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-3 w-3" /> },
+  PENDING_PROJECT_APPROVAL: { label: 'Pending Project Approval', color: 'bg-amber-100 text-amber-700', icon: <Clock className="h-3 w-3" /> },
+  CLIENT_REVIEW: { label: 'Pending Client Approval', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-3 w-3" /> },
+  APPROVED: { label: 'Fully Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-3 w-3" /> },
   REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-3 w-3" /> },
 }
 
@@ -166,7 +167,7 @@ export default function DeliverablesPage() {
           >
             All ({deliverables.length})
           </Button>
-          {['PENDING', 'SUBMITTED', 'INTERNAL_REVIEW', 'CLIENT_REVIEW', 'APPROVED', 'REJECTED'].map((status) => {
+          {['PENDING', 'SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW', 'APPROVED', 'REJECTED'].map((status) => {
             const config = STATUS_CONFIG[status]
             return (
               <Button

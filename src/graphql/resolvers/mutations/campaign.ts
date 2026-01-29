@@ -98,7 +98,8 @@ export async function createProject(
 }
 
 /**
- * Create a campaign under a project
+ * Create a campaign under a project.
+ * Phase 2: Requires at least one campaign approver (approverUserIds).
  */
 export async function createCampaign(
   _: unknown,
@@ -107,15 +108,22 @@ export async function createCampaign(
     name,
     campaignType,
     description,
+    approverUserIds,
   }: {
     projectId: string;
     name: string;
     campaignType: 'INFLUENCER' | 'SOCIAL';
     description?: string;
+    approverUserIds: string[];
   },
   ctx: GraphQLContext
 ) {
   const user = requireAuth(ctx);
+  
+  const ids = Array.isArray(approverUserIds) ? approverUserIds.filter(Boolean) : [];
+  if (ids.length === 0) {
+    throw validationError('At least one campaign approver is required', 'approverUserIds');
+  }
   
   // Get the project and verify access
   const { data: project, error: projectError } = await supabaseAdmin
@@ -152,6 +160,21 @@ export async function createCampaign(
   
   if (error || !campaign) {
     throw new Error('Failed to create campaign');
+  }
+  
+  // Assign campaign approvers (Phase 2: at least one required)
+  for (const userId of ids) {
+    const { error: cuError } = await supabaseAdmin
+      .from('campaign_users')
+      .insert({
+        campaign_id: campaign.id,
+        user_id: userId,
+        role: 'approver',
+      });
+    if (cuError) {
+      await supabaseAdmin.from('campaigns').delete().eq('id', campaign.id);
+      throw new Error('Failed to assign campaign approvers');
+    }
   }
   
   // Log activity

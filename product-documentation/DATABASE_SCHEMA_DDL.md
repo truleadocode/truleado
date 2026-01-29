@@ -127,6 +127,31 @@ CREATE TABLE client_users (
 
 ---
 
+### 2.3 contacts (Phase 3)
+
+```sql
+CREATE TABLE contacts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  email TEXT,
+  mobile TEXT,
+  address TEXT,
+  department TEXT,
+  notes TEXT,
+  is_client_approver BOOLEAN NOT NULL DEFAULT false,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (client_id, email)
+);
+```
+
+> **Phase 3**: People at a client (CRM). `is_client_approver`: can approve deliverables at client stage. `user_id`: link to Truleado user when they have an account. Client-level approval uses contacts with `is_client_approver` (and optionally `user_id`). Migration: `00012_phase3_contacts.sql`.
+
+---
+
 ## 3. Projects & Campaigns
 
 ### 3.1 projects

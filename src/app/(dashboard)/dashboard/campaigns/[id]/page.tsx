@@ -33,6 +33,7 @@ import {
   Eye,
   TrendingUp,
   Bookmark,
+  UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,12 +56,15 @@ import {
 } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
+import { getCampaignStatusLabel, getDeliverableStatusLabel } from '@/lib/campaign-status'
 import { DatePicker } from '@/components/ui/date-picker'
 import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-editor'
 import { FileUpload, FileItem } from '@/components/ui/file-upload'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
+import { ApproverPicker } from '@/components/approver-picker'
 
 interface DeliverableVersion {
   id: string
@@ -100,6 +104,12 @@ interface Attachment {
   createdAt: string
 }
 
+interface CampaignUser {
+  id: string
+  role: string
+  user: { id: string; name: string | null; email: string }
+}
+
 interface Campaign {
   id: string
   name: string
@@ -126,6 +136,7 @@ interface Campaign {
   deliverables: Deliverable[]
   creators: CampaignCreator[]
   attachments: Attachment[]
+  users: CampaignUser[]
 }
 
 // Campaign state machine
@@ -136,10 +147,17 @@ const STATUS_TRANSITIONS: Record<string, { next: string; action: string; icon: R
   approved: { next: 'completed', action: 'Mark Complete', icon: <Flag className="h-4 w-4" />, color: 'bg-purple-600 hover:bg-purple-700' },
 }
 
+interface AgencyUserOption {
+  id: string
+  role: string
+  user: { id: string; name: string | null; email: string }
+}
+
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { currentAgency } = useAuth()
   const campaignId = params.id as string
   
   const [campaign, setCampaign] = useState<Campaign | null>(null)
@@ -152,6 +170,7 @@ export default function CampaignDetailPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [datesDialogOpen, setDatesDialogOpen] = useState(false)
   const [briefEditing, setBriefEditing] = useState(false)
+  const [manageApproversOpen, setManageApproversOpen] = useState(false)
   
   // Form states
   const [editName, setEditName] = useState('')
@@ -160,6 +179,10 @@ export default function CampaignDetailPage() {
   const [editEndDate, setEditEndDate] = useState<Date | undefined>()
   const [editBrief, setEditBrief] = useState('')
   const [saving, setSaving] = useState(false)
+  const [agencyUsers, setAgencyUsers] = useState<AgencyUserOption[]>([])
+  const [loadingAgencyUsers, setLoadingAgencyUsers] = useState(false)
+  const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
+  const [savingApprovers, setSavingApprovers] = useState(false)
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -189,6 +212,28 @@ export default function CampaignDetailPage() {
       setEditBrief(campaign.brief || '')
     }
   }, [campaign])
+
+  // Open manage approvers: load agency users and set current approver selection
+  useEffect(() => {
+    if (!manageApproversOpen || !campaign) return
+    setApproverPickerIds(
+      (campaign.users ?? [])
+        .filter((cu) => cu.role === 'approver')
+        .map((cu) => cu.user.id)
+    )
+  }, [manageApproversOpen, campaign])
+
+  useEffect(() => {
+    if (!manageApproversOpen || !currentAgency?.id) return
+    setLoadingAgencyUsers(true)
+    graphqlRequest<{ agency: { users: AgencyUserOption[] } }>(
+      queries.agencyUsers,
+      { agencyId: currentAgency.id }
+    )
+      .then((data) => setAgencyUsers(data.agency?.users ?? []))
+      .catch(() => setAgencyUsers([]))
+      .finally(() => setLoadingAgencyUsers(false))
+  }, [manageApproversOpen, currentAgency?.id])
 
   const handleStatusTransition = async () => {
     if (!campaign) return
@@ -298,6 +343,44 @@ export default function CampaignDetailPage() {
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const campaignApprovers = (campaign?.users ?? []).filter((cu) => cu.role === 'approver')
+
+  const handleSaveApprovers = async () => {
+    if (!campaign) return
+    if (approverPickerIds.length < 1) {
+      toast({ title: 'At least one approver required', variant: 'destructive' })
+      return
+    }
+    setSavingApprovers(true)
+    try {
+      const currentApproverUserIds = new Set(campaignApprovers.map((cu) => cu.user.id))
+      const selectedSet = new Set(approverPickerIds)
+      const toAdd = approverPickerIds.filter((id) => !currentApproverUserIds.has(id))
+      const toRemove = campaignApprovers.filter((cu) => !selectedSet.has(cu.user.id))
+      for (const userId of toAdd) {
+        await graphqlRequest(mutations.assignUserToCampaign, {
+          campaignId,
+          userId,
+          role: 'approver',
+        })
+      }
+      for (const cu of toRemove) {
+        await graphqlRequest(mutations.removeUserFromCampaign, { campaignUserId: cu.id })
+      }
+      toast({ title: 'Approvers updated', description: 'Campaign approvers saved successfully' })
+      setManageApproversOpen(false)
+      await fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to save approvers',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingApprovers(false)
     }
   }
 
@@ -500,6 +583,10 @@ export default function CampaignDetailPage() {
                     <Pencil className="mr-2 h-4 w-4" />
                     Edit Campaign
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setManageApproversOpen(true)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Manage approvers
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => setDatesDialogOpen(true)}>
                     <Calendar className="mr-2 h-4 w-4" />
                     Set Dates
@@ -546,7 +633,7 @@ export default function CampaignDetailPage() {
                         {isComplete ? '✓' : index + 1}
                       </div>
                       <span className={`text-xs mt-1 ${isCurrent ? 'font-medium' : 'text-muted-foreground'}`}>
-                        {status.replace('_', ' ')}
+                        {getCampaignStatusLabel(status)}
                       </span>
                     </div>
                     {index < arr.length - 1 && (
@@ -609,6 +696,49 @@ export default function CampaignDetailPage() {
                 <p className="text-sm text-muted-foreground mb-1">Description</p>
                 <p>{campaign.description}</p>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Campaign approvers */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Campaign approvers
+              </h2>
+              {!isArchived && (
+                <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Manage approvers
+                </Button>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground mb-3">
+              All selected approvers must approve deliverables at campaign level before project or client review.
+            </p>
+            {campaignApprovers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {campaignApprovers.map((cu) => (
+                  <li
+                    key={cu.id}
+                    className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">
+                        {getInitials(cu.user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm">{cu.user.name || cu.user.email}</span>
+                    {cu.user.email && cu.user.name && (
+                      <span className="text-xs text-muted-foreground">({cu.user.email})</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
@@ -750,7 +880,7 @@ export default function CampaignDetailPage() {
                             </div>
                           </div>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(deliverable.status)}`}>
-                            {deliverable.status.replace('_', ' ')}
+                            {getDeliverableStatusLabel(deliverable.status)}
                           </span>
                         </div>
                       </CardContent>
@@ -950,6 +1080,45 @@ export default function CampaignDetailPage() {
             </Button>
             <Button onClick={handleSaveDetails} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage approvers Dialog */}
+      <Dialog open={manageApproversOpen} onOpenChange={setManageApproversOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Manage campaign approvers</DialogTitle>
+            <DialogDescription>
+              Select who must approve deliverables at campaign level. At least one approver is required; all selected must approve.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <ApproverPicker
+              users={agencyUsers.map((au) => ({
+                id: au.user.id,
+                name: au.user.name,
+                email: au.user.email ?? '',
+              }))}
+              value={approverPickerIds}
+              onChange={setApproverPickerIds}
+              multiple
+              minCount={1}
+              loading={loadingAgencyUsers}
+              emptyPlaceholder="No agency users found."
+              hint="Search by name or email, then select one or more approvers."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManageApproversOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveApprovers}
+              disabled={savingApprovers || approverPickerIds.length < 1}
+            >
+              {savingApprovers ? 'Saving...' : 'Save approvers'}
             </Button>
           </DialogFooter>
         </DialogContent>

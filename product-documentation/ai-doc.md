@@ -2,6 +2,35 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
+---
+
+## 0. Session Context for New Agent (Start Here)
+
+**What was done in the last session:**
+
+1. **Jira alignment**  
+   TRULEADO project was updated per `product-documentation/JIRA_ALIGNMENT.md`: epics for Phases 0–5 and Bugs; 22 tickets marked Done; Phase 3 tickets (Contacts data model, Client approvers, Client Contacts UI, Global Contacts page) created in backlog; bug ticket for approval system created in backlog. Phase 3 tickets need to be moved to the active sprint manually (no Agile API in MCP).
+
+2. **Phase 3 — Client & Contacts (implemented)**  
+   - **DB**: Migration `00012_phase3_contacts.sql` — `contacts` table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS agency-scoped.  
+   - **GraphQL**: Type `Contact`; `Client.contacts`, `Client.clientApprovers`; `Client.approverUsers` now includes (1) users from contacts with `is_client_approver` and `user_id`, (2) legacy client_users with role approver. Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`. Mutations: `createContact`, `updateContact`, `deleteContact`. Resolvers: `src/graphql/resolvers/types.ts`, `queries.ts`, `mutations/contact.ts`.  
+   - **UI**: Client detail page has **Overview | Contacts** tabs; Contacts tab: list, add/edit/delete, toggle client approver. **Global Contacts** page at `/dashboard/contacts` (filters: client, department, approver; search). Sidebar: "Contacts" link (ContactRound icon).
+
+3. **Create Client bug (unresolved)**  
+   When the user submits the **New Client** form, they see:  
+   **"GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension."**  
+   User reports the error happens as soon as they click the button and there is **nothing in the Network tab** (no visible request or failed request in DevTools).  
+   **Exact error string** (for search): `GraphQL operations must contain a non-empty \`query\` or a \`persistedQuery\` extension.`  
+   This message is returned when the GraphQL API receives a body with no non-empty `query` (or `persistedQuery`). Either the request body is not reaching the server, or the client is not sending the body correctly.  
+   **What was already tried**: Custom POST body parsing in `src/app/api/graphql/route.ts` (read body with `request.text()`, normalize `query`/`mutation`); client-side validation in `src/lib/graphql/client.ts`; Create Client form was changed to **bypass** the shared client — it now uses an **inline mutation string** and **direct `fetch('/api/graphql', { body: JSON.stringify({ query, variables }) })`**. The bug persists.  
+   **Full handoff for this bug**: See **§9** below (what to try next, relevant files, alternative workaround).
+
+**If you are a new agent:**  
+- To continue **Phase 3** or other product work: skim §1–§5 and the docs listed in §8.  
+- To **fix the Create Client bug**: read **§9** first, then `src/app/api/graphql/route.ts` (POST handler) and `src/app/(dashboard)/dashboard/clients/new/page.tsx` (inline mutation + fetch).
+
+---
+
 ## 1. High-Level Architecture
 
 - **App**: Next.js (App Router), TypeScript, Tailwind, `shadcn/ui`.
@@ -53,6 +82,7 @@ All of these markdowns are now aligned with the current implementation:
 - `GRAPHQL_API_CONTRACT.md` – **now matches current `typeDefs.ts` for the implemented areas**:
   - `Campaign.brief`, `Campaign.attachments`.
   - `CampaignAttachment.fileUrl: String!` (storage path).
+  - **Phase 3**: `Contact` type; `Client.contacts`, `Client.clientApprovers`, `Client.approverUsers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`.
   - `Deliverable`, `DeliverableVersion` (including `caption: String`).
   - `Approval` structure with `approvalLevel: ApprovalLevel!` and `deliverableVersion`.
   - Deliverable mutations updated to:
@@ -90,6 +120,8 @@ These Supabase migrations exist and should be applied in order:
 7. `00009_deliverable_version_caption_audit.sql` – adds `deliverable_version_caption_audit` table for audited caption edits (who, when, old/new caption).
 8. `00008_revert_agency_code.sql` – (if applied) reverts earlier agency_code changes; see 00010 for current state.
 9. `00010_agency_code_for_join.sql` – adds `agency_code` to `agencies` (unique, generated on insert via trigger); used by `joinAgencyByCode`.
+10. `00011_phase2_approval_system.sql` – project_approvers table; deliverable status `pending_project_approval`; approval_level includes `project`; RLS for project_approvers.
+11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
 
 **Manual actions required in Supabase:**
 
@@ -121,6 +153,15 @@ These Supabase migrations exist and should be applied in order:
 - Assign Account Manager.
 - Archive clients (soft-archive via `isActive` / `is_archived` flags).
 - GraphQL + UI wired and working.
+- **Known bug (unresolved)**: Create Client form — on submit, user sees "GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension." See §9 below for full context and next steps.
+
+### 5.2.1 Phase 3 — Client & Contacts (Implemented)
+
+- **contacts** table (migration `00012_phase3_contacts.sql`): belongs to Client; fields: first_name, last_name, email, mobile, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped via client (agency admin or account manager).
+- **Client approvers**: `Client.approverUsers` now includes (1) users from contacts with `is_client_approver` and `user_id` set, (2) legacy client_users with role approver. `Client.contacts` and `Client.clientApprovers` (contacts where is_client_approver) added for UI.
+- **GraphQL**: Type `Contact`; queries `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`; mutations `createContact`, `updateContact`, `deleteContact`. Resolvers: `src/graphql/resolvers/queries.ts` (contact, contacts, contactsList), `src/graphql/resolvers/mutations/contact.ts`, type resolvers in `types.ts` (Contact, Client.contacts, Client.clientApprovers).
+- **Client page Contacts tab** (`/dashboard/clients/[id]`): tabs Overview | Contacts; Contacts tab: list contacts, Add Contact, Edit (dialog), Delete, toggle Client approver (check/circle icon). Add/Edit dialog: first name, last name, email, mobile, address, department, notes, "Client approver" checkbox.
+- **Global Contacts page** (`/dashboard/contacts`): CRM-style list; filters: client, department, Approvers only / Not approvers; search by name/email/department; rows link to client detail. Sidebar: "Contacts" link (ContactRound icon) between Clients and Projects.
 
 ### 5.3 Project Management
 
@@ -206,7 +247,17 @@ These Supabase migrations exist and should be applied in order:
 
 > **Note**: Influencer-specific flows (e.g. “Send deliverable to creators”, creator portal uploads) are **not yet implemented**. Only agency-side deliverable & approval flows exist today.
 
-## 6. Known Design Decisions & Fixes
+## 6. Known Design Decisions & Fixes (and Phase 3)
+
+- **Phase 3 contacts**: Client approvers for deliverable approval can come from (1) contacts with `is_client_approver` and optional `user_id` (Truleado user link), (2) legacy `client_users` with role approver. Only users (with user_id) can log in and approve; contacts without user_id are CRM-only until a "client portal" or "approve on behalf" flow exists.
+
+### Known bug: Approval system — eligibility & UI state (fix later with Client Contacts)
+
+- **Current behaviour (bug)**:
+  - All users can see and use Approve/Reject on a deliverable; approval is not restricted to eligible approvers (campaign approvers at campaign level, project approvers at project level, client approvers at client level).
+  - After a user approves at Campaign level (internal), the Approve/Reject buttons remain visible for everyone; they should be hidden once the current user has approved or when the stage is complete, and hidden for users who are not eligible at the current stage.
+  - After all Campaign approvers have approved, status should update to Pending Project Approval (if project has approvers) or Pending Client Approval; behaviour may need verification.
+- **Planned fix**: Address when implementing the **Client Contact module** (Phase 3) and do a **single pass** to fix the approval system end-to-end (eligibility checks in API + UI, button visibility, status transitions). See `product-documentation/new-features.md` § “Known bugs (to fix later)”.
 
 - **Storage paths vs URL scalar**:
   - `CampaignAttachment.fileUrl` and `DeliverableVersion.fileUrl` use `String` (storage path), not `URL`.
@@ -224,6 +275,44 @@ These Supabase migrations exist and should be applied in order:
 - **Per-file versioning**:
   - Original schema versioned per deliverable only; changed to per `(deliverable_id, file_name)`.
   - This allows multiple files under a single deliverable, each with its own version history.
+
+## 9. Active Bug: Create Client — GraphQL "non-empty query" Error (Handoff for New Agent)
+
+**Symptom**: When the user fills the New Client form and clicks "Create Client", they see: **"GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension."** The user reported the error happens "as soon as I click the button" and there is "nothing in Network tab" (no visible request or failed request in DevTools).
+
+**What this implies**: Either (1) the request is not sent or is cancelled before completion, or (2) the request is sent but the server receives an empty or invalid body (no `query` field). Apollo Server (and our custom POST handler) return that exact message when the parsed request body has no non-empty `query` (or `persistedQuery` extension).
+
+**What was already tried** (so a new agent does not repeat):
+
+1. **Server-side body parsing**: The GraphQL API route (`src/app/api/graphql/route.ts`) was changed so that **POST** no longer uses the `@as-integrations/next` handler for the body. It now:
+   - Reads the body with `await request.text()` then `JSON.parse(text)`.
+   - Normalizes `body.query ?? body.mutation` so either key is accepted.
+   - If `query` is missing or empty, returns 400 with the same message (and, when body is empty, a more specific message: "Request body was empty or invalid JSON...").
+   - Passes the parsed `body` (with normalized `query`) to `apolloServer.executeHTTPGraphQLRequest({ httpGraphQLRequest: { body, ... }, context })`.
+   So the server *should* receive a proper body if the client sends one.
+
+2. **Client-side validation**: In `src/lib/graphql/client.ts`, `graphqlRequest` now validates that the query string is non-empty before sending and throws a clear error if not.
+
+3. **Bypassing shared GraphQL client for Create Client**: The New Client page (`src/app/(dashboard)/dashboard/clients/new/page.tsx`) was changed to **not** use `graphqlRequest(mutations.createClient, variables)`. It now:
+   - Inlines the full mutation string in the component.
+   - Builds `bodyStr = JSON.stringify({ query, variables })` explicitly.
+   - Calls `fetch('/api/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: Bearer ... }, body: bodyStr })` directly.
+   So the Create Client form no longer depends on the shared `mutations` object or any bundling of that string.
+
+**Relevant files**:
+- `src/app/api/graphql/route.ts` – POST handler that parses body and calls Apollo.
+- `src/app/(dashboard)/dashboard/clients/new/page.tsx` – Create Client form; inline mutation and direct fetch.
+- `src/lib/graphql/client.ts` – shared `graphqlRequest` and `mutations`; other pages (e.g. agency users fetch) still use this.
+
+**Suggested next steps for a new agent**:
+1. **Confirm where the error is thrown**: Add a short `console.log` in the POST handler right after `const text = await request.text()` — log `text.length` and first 100 chars (or that body is empty). Deploy/run and click Create Client. If `text` is empty, the request body is not reaching the route (e.g. middleware, proxy, or client not sending body). If `text` is non-empty, log the parsed `body` and `body.query` to see if the client is sending the right shape.
+2. **Check for middleware or rewrites**: Search for any `middleware.ts` or `next.config.js` rewrites/headers that might read or alter the request body for `/api/graphql`.
+3. **Verify client request in DevTools**: Ask the user (or use a test) to open Network tab, filter by "graphql" or "Fetch/XHR", submit the form, and inspect the **request payload** for the POST to `/api/graphql`. If the payload shows `query: "mutation CreateClient ..."` and `variables: { ... }`, then the client is correct and the issue is server-side (body not read correctly). If the payload is missing or empty, the issue is client-side (e.g. fetch not sending body in this environment).
+4. **Alternative workaround**: Implement a dedicated REST-style route (e.g. `POST /api/clients`) that accepts JSON `{ name, accountManagerId }`, looks up `agencyId` from context/token, and calls the same `createClient` resolver logic server-side. The New Client form could then call this route instead of GraphQL. This bypasses GraphQL and request-body parsing for this one flow.
+
+**Context**: This bug appeared after the user ran Supabase migrations directly and restarted the app. It is not known to be caused by the migrations themselves; it may be an existing issue with how the Next.js App Router or the Apollo integration handles POST body for this route in the user's environment.
+
+---
 
 ## 7. Open TODOs / Next Steps
 
@@ -246,7 +335,7 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
 
 When a new AI (or engineer) picks this up:
 
-1. **Re-run migrations** (or verify applied) in order `00001` → `00006`.
+1. **Re-run migrations** (or verify applied) in order `00001` → `00012` (including `00011_phase2_approval_system.sql`, `00012_phase3_contacts.sql`).
 2. **Ensure buckets exist** in Supabase: `campaign-attachments`, `deliverables`, with appropriate RLS.
 3. **Skim these files first**:
    - `product-documentation/MASTER_PRD.md`
@@ -265,6 +354,12 @@ When a new AI (or engineer) picks this up:
      - `src/app/(dashboard)/dashboard/deliverables/new/page.tsx`
    - Campaign UI:
      - `src/app/(dashboard)/dashboard/campaigns/**`
+   - **Phase 3 (Contacts)**:
+     - `src/app/(dashboard)/dashboard/clients/[id]/page.tsx` (Contacts tab)
+     - `src/app/(dashboard)/dashboard/contacts/page.tsx` (Global Contacts)
+     - `src/graphql/resolvers/mutations/contact.ts`
+     - `src/graphql/schema/typeDefs.ts` (Contact type, contacts/clientApprovers on Client, contact/contacts/contactsList queries, createContact/updateContact/deleteContact mutations)
+5. **If resuming work on the Create Client bug**: Read **§9** above first; then inspect `src/app/api/graphql/route.ts` (POST) and `src/app/(dashboard)/dashboard/clients/new/page.tsx` (inline mutation + fetch).
 
 This should provide enough context for a new Pro+ Cursor session to continue seamlessly from where this one left off. 
 

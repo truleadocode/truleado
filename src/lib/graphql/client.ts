@@ -37,6 +37,14 @@ export async function graphqlRequest<T = unknown>(
     throw error;
   }
 
+  // Apollo Server requires a non-empty `query`; ensure we never send empty/undefined
+  const queryStr = typeof query === 'string' ? query.trim() : '';
+  if (!queryStr) {
+    const error = new Error('GraphQL request requires a non-empty query or mutation string') as GraphQLError;
+    error.code = 'BAD_REQUEST';
+    throw error;
+  }
+
   const response = await fetch('/api/graphql', {
     method: 'POST',
     headers: {
@@ -44,8 +52,8 @@ export async function graphqlRequest<T = unknown>(
       'Authorization': `Bearer ${token}`,
     },
     body: JSON.stringify({
-      query,
-      variables,
+      query: queryStr,
+      variables: variables ?? undefined,
     }),
   });
 
@@ -161,10 +169,36 @@ export const queries = {
             status
           }
         }
+        contacts {
+          id
+          firstName
+          lastName
+          email
+          mobile
+          department
+          isClientApprover
+          createdAt
+        }
       }
     }
   `,
   
+  contactsList: `
+    query GetContactsList($agencyId: ID!, $clientId: ID, $department: String, $isClientApprover: Boolean) {
+      contactsList(agencyId: $agencyId, clientId: $clientId, department: $department, isClientApprover: $isClientApprover) {
+        id
+        firstName
+        lastName
+        email
+        mobile
+        department
+        isClientApprover
+        client { id name }
+        createdAt
+      }
+    }
+  `,
+
   projects: `
     query GetProjects($clientId: ID!) {
       projects(clientId: $clientId) {
@@ -230,6 +264,11 @@ export const queries = {
             title
             status
           }
+        }
+        projectApprovers {
+          id
+          createdAt
+          user { id name email }
         }
       }
     }
@@ -303,12 +342,18 @@ export const queries = {
           name
           status
           campaignType
+          users {
+            role
+            user { id name email }
+          }
           project {
             id
             name
+            approverUsers { id name email }
             client {
               id
               name
+              approverUsers { id name email }
             }
           }
         }
@@ -344,6 +389,7 @@ export const queries = {
           approvalLevel
           comment
           decidedAt
+          deliverableVersion { id }
           decidedBy {
             id
             name
@@ -428,6 +474,11 @@ export const queries = {
           mimeType
           createdAt
         }
+        users {
+          id
+          role
+          user { id name email }
+        }
       }
     }
   `,
@@ -469,6 +520,42 @@ export const mutations = {
       }
     }
   `,
+
+  createContact: `
+    mutation CreateContact($clientId: ID!, $firstName: String!, $lastName: String!, $email: String, $mobile: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
+      createContact(clientId: $clientId, firstName: $firstName, lastName: $lastName, email: $email, mobile: $mobile, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+        id
+        firstName
+        lastName
+        email
+        mobile
+        department
+        isClientApprover
+        createdAt
+      }
+    }
+  `,
+
+  updateContact: `
+    mutation UpdateContact($id: ID!, $firstName: String, $lastName: String, $email: String, $mobile: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
+      updateContact(id: $id, firstName: $firstName, lastName: $lastName, email: $email, mobile: $mobile, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+        id
+        firstName
+        lastName
+        email
+        mobile
+        department
+        isClientApprover
+        updatedAt
+      }
+    }
+  `,
+
+  deleteContact: `
+    mutation DeleteContact($id: ID!) {
+      deleteContact(id: $id)
+    }
+  `,
   
   archiveClient: `
     mutation ArchiveClient($id: ID!) {
@@ -500,9 +587,25 @@ export const mutations = {
     }
   `,
   
+  addProjectApprover: `
+    mutation AddProjectApprover($projectId: ID!, $userId: ID!) {
+      addProjectApprover(projectId: $projectId, userId: $userId) {
+        id
+        createdAt
+        user { id name email }
+      }
+    }
+  `,
+  
+  removeProjectApprover: `
+    mutation RemoveProjectApprover($projectApproverId: ID!) {
+      removeProjectApprover(projectApproverId: $projectApproverId)
+    }
+  `,
+  
   createCampaign: `
-    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String) {
-      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description) {
+    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String, $approverUserIds: [ID!]!) {
+      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description, approverUserIds: $approverUserIds) {
         id
         name
         status
@@ -602,6 +705,22 @@ export const mutations = {
   removeCampaignAttachment: `
     mutation RemoveCampaignAttachment($attachmentId: ID!) {
       removeCampaignAttachment(attachmentId: $attachmentId)
+    }
+  `,
+
+  assignUserToCampaign: `
+    mutation AssignUserToCampaign($campaignId: ID!, $userId: ID!, $role: String!) {
+      assignUserToCampaign(campaignId: $campaignId, userId: $userId, role: $role) {
+        id
+        role
+        user { id name email }
+      }
+    }
+  `,
+
+  removeUserFromCampaign: `
+    mutation RemoveUserFromCampaign($campaignUserId: ID!) {
+      removeUserFromCampaign(campaignUserId: $campaignUserId)
     }
   `,
   

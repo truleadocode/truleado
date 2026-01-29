@@ -13,7 +13,7 @@ import {
   getAgencyIdForCampaign,
   Permission,
 } from '@/lib/rbac';
-import { validationError, notFoundError, invalidStateError } from '../../errors';
+import { validationError, notFoundError, invalidStateError, forbiddenError } from '../../errors';
 import { logActivity } from '@/lib/audit';
 
 // Deliverable state transitions
@@ -230,9 +230,10 @@ export async function submitDeliverableForReview(
   
   const beforeState = { ...deliverable };
   
+  // Phase 2: Move directly to internal_review (Pending Campaign Approval)
   const { data: updated, error } = await supabaseAdmin
     .from('deliverables')
-    .update({ status: 'submitted' })
+    .update({ status: 'internal_review' })
     .eq('id', deliverableId)
     .select()
     .single();
@@ -260,7 +261,8 @@ export async function submitDeliverableForReview(
 }
 
 /**
- * Create an approval record (approve or reject)
+ * Create an approval record (approve or reject).
+ * Phase 2: Campaign = ALL must approve; Project = ANY ONE; Client = ANY ONE.
  */
 async function createApproval(
   deliverableId: string,
@@ -271,28 +273,48 @@ async function createApproval(
   ctx: GraphQLContext
 ) {
   const user = requireAuth(ctx);
-  
-  // Get deliverable
+  const level = approvalLevel.toLowerCase();
+
+  // Get deliverable with campaign and project
   const { data: deliverable, error: fetchError } = await supabaseAdmin
     .from('deliverables')
-    .select('*, campaigns!inner(id)')
+    .select('*, campaigns!inner(id, project_id)')
     .eq('id', deliverableId)
     .single();
-  
+
   if (fetchError || !deliverable) {
     throw notFoundError('Deliverable', deliverableId);
   }
-  
-  const campaigns = deliverable.campaigns as { id: string };
-  
-  // Determine required permission based on approval level
-  const permission =
-    approvalLevel === 'client'
-      ? Permission.APPROVE_CLIENT
-      : Permission.APPROVE_INTERNAL;
-  
-  await requireCampaignAccess(ctx, campaigns.id, permission);
-  
+
+  const campaign = deliverable.campaigns as { id: string; project_id: string };
+
+  // Verify approver eligibility by level
+  if (level === 'internal') {
+    await requireCampaignAccess(ctx, campaign.id, Permission.APPROVE_INTERNAL);
+    const { data: cu } = await supabaseAdmin
+      .from('campaign_users')
+      .select('id')
+      .eq('campaign_id', campaign.id)
+      .eq('user_id', user.id)
+      .eq('role', 'approver')
+      .maybeSingle();
+    if (!cu) {
+      throw forbiddenError('Only campaign approvers can approve at campaign level');
+    }
+  } else if (level === 'project') {
+    const { data: pa } = await supabaseAdmin
+      .from('project_approvers')
+      .select('id')
+      .eq('project_id', campaign.project_id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (!pa) {
+      throw forbiddenError('Only project approvers can approve at project level');
+    }
+  } else if (level === 'client' || level === 'final') {
+    await requireCampaignAccess(ctx, campaign.id, Permission.APPROVE_CLIENT);
+  }
+
   // Verify version belongs to this deliverable
   const { data: version, error: versionError } = await supabaseAdmin
     .from('deliverable_versions')
@@ -300,50 +322,67 @@ async function createApproval(
     .eq('id', versionId)
     .eq('deliverable_id', deliverableId)
     .single();
-  
+
   if (versionError || !version) {
     throw notFoundError('DeliverableVersion', versionId);
   }
-  
-  // Create immutable approval record
+
   const { data: approval, error } = await supabaseAdmin
     .from('approvals')
     .insert({
       deliverable_id: deliverableId,
       deliverable_version_id: versionId,
-      approval_level: approvalLevel.toLowerCase(),
+      approval_level: level === 'final' ? 'client' : level,
       decision,
       comment,
       decided_by: user.id,
     })
     .select()
     .single();
-  
+
   if (error || !approval) {
     throw new Error('Failed to create approval record');
   }
-  
-  // Update deliverable status based on approval
-  let newStatus: string;
+
+  let newStatus: string = deliverable.status;
   if (decision === 'rejected') {
     newStatus = 'rejected';
-  } else if (approvalLevel === 'internal') {
+  } else if (level === 'internal') {
+    const { data: campaignApprovers } = await supabaseAdmin
+      .from('campaign_users')
+      .select('user_id')
+      .eq('campaign_id', campaign.id)
+      .eq('role', 'approver');
+    const { data: internalApprovals } = await supabaseAdmin
+      .from('approvals')
+      .select('decided_by')
+      .eq('deliverable_version_id', versionId)
+      .eq('approval_level', 'internal')
+      .eq('decision', 'approved');
+    const approverIds = new Set((campaignApprovers || []).map((r) => r.user_id));
+    const approvedIds = new Set((internalApprovals || []).map((a) => a.decided_by));
+    const allCampaignApproved = approverIds.size > 0 && [...approverIds].every((id) => approvedIds.has(id));
+    if (allCampaignApproved) {
+      const { data: projectApprovers } = await supabaseAdmin
+        .from('project_approvers')
+        .select('id')
+        .eq('project_id', campaign.project_id);
+      newStatus = projectApprovers?.length ? 'pending_project_approval' : 'client_review';
+    }
+  } else if (level === 'project') {
     newStatus = 'client_review';
-  } else if (approvalLevel === 'client' || approvalLevel === 'final') {
+  } else if (level === 'client' || level === 'final') {
     newStatus = 'approved';
-  } else {
-    newStatus = deliverable.status;
   }
-  
+
   if (newStatus !== deliverable.status) {
     await supabaseAdmin
       .from('deliverables')
       .update({ status: newStatus })
       .eq('id', deliverableId);
   }
-  
-  // Log activity
-  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+
+  const agencyId = await getAgencyIdForCampaign(campaign.id);
   if (agencyId) {
     await logActivity({
       agencyId,
@@ -356,12 +395,12 @@ async function createApproval(
       metadata: {
         deliverableId,
         versionId,
-        approvalLevel,
+        approvalLevel: level,
         newStatus,
       },
     });
   }
-  
+
   return approval;
 }
 

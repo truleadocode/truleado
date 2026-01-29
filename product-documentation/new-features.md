@@ -1,18 +1,7 @@
-Perfect — here’s a **clean, execution-ready Markdown task list**, ordered **exactly in the sequence it must be built**.
-This is suitable for **Cursor agent execution, Jira import, or internal tech planning**.
+# 🧩 Next to DO
 
----
-
-# 🧩 Product Implementation Tasks (Ordered & Mandatory)
-
-> **Golden rule:** No user should be able to use the product without being part of an Agency.
-> **Approvals are Deliverable-centric, not Campaign/Project-centric.**
-
----
 
 ## ✅ PHASE 0 — Agency & User Onboarding (BLOCKER FOR EVERYTHING)
-
-**Implementation status:** Implemented. See product-documentation README changelog and TECHNICAL_LLD §4 (Auth & Onboarding). Routes: `/choose-agency`, `/create-agency`, `/join-agency`. GraphQL: `createUser`, `joinAgencyByCode`; Agency `agencyCode`. Login waits for user+agencies then redirects to `/dashboard` or `/choose-agency`.
 
 ### Task 0.1 — Signup Flow: Agency Choice
 
@@ -75,8 +64,6 @@ This is suitable for **Cursor agent execution, Jira import, or internal tech pla
 ---
 
 ## ✅ PHASE 1 — Core Domain Structure
-
-**Implementation status (Task 1.1):** Implemented. Only Deliverable can reach "Fully Approved" (status `APPROVED`). Campaigns and Projects are containers and approval sources. STATE_MACHINES.md updated with approval-unit principle; campaign status `APPROVED` labeled "Review complete" in UI; deliverable status `APPROVED` labeled "Fully Approved" in UI. Shared helpers: `src/lib/campaign-status.ts` (`getCampaignStatusLabel`, `getDeliverableStatusLabel`).
 
 ### Task 1.1 — Deliverable as Approval Unit
 
@@ -159,9 +146,31 @@ This is suitable for **Cursor agent execution, Jira import, or internal tech pla
 
 ---
 
-## ✅ PHASE 3 — Client & Contacts (CRM Foundation)
+## 🐛 Known bugs (to fix later)
 
-**Implementation status:** Implemented. Migration `00012_phase3_contacts.sql`; GraphQL type `Contact`, `Client.contacts`, `Client.clientApprovers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`; Client page **Contacts** tab (list, add/edit/delete, toggle client approver); Global Contacts page at `/dashboard/contacts` (filters: client, department, approver; search); sidebar link "Contacts". See README changelog and `ai-doc.md` §5.2.1.
+### Create Client — GraphQL "non-empty query" error (handoff for new agent)
+
+- **Symptom**: On submit of the New Client form, user sees: **"GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension."** User reports error happens as soon as they click the button; nothing visible in Network tab.
+- **Context**: Either the request body is not reaching the API or the client is not sending the body. Inline mutation + direct `fetch` was tried; bug persists.
+- **Full handoff**: See **`product-documentation/ai-doc.md` §0 (Session Context)** and **§9 (Active Bug)** for exact error, what was tried, relevant files, and suggested next steps for a new agent.
+
+### Approval system — eligibility & UI state (fix with Client Contacts + approval overhaul)
+
+* **Who can approve**: Currently all users can see and use Approve/Reject on a deliverable. This should be restricted so that:
+  * Only **Campaign approvers** (assigned on the campaign) can approve at Campaign level.
+  * Only **Project approvers** (assigned on the project) can approve at Project level.
+  * Only **Client approvers** (to be defined via Client Contacts / `is_client_approver`) can approve at Client level.
+* **Buttons after approval**: After a user approves internally (Campaign level), the Approve/Reject buttons still stay visible for everyone. They should:
+  * Be **hidden** for users who have already approved at the current stage (or when the stage is complete).
+  * Be **hidden** for users who are not eligible to approve at the current stage.
+* **Status after internal approval**: After all Campaign approvers have approved, the deliverable status should update correctly to:
+  * **Pending Project Approval** if the project has project approvers.
+  * **Pending Client Approval** for agency users (client approval stage) if the project has no project approvers.
+* **When to fix**: Address this when implementing the **Client Contact module** (Phase 3) and do a **single pass** to fix the approval system end-to-end (eligibility checks, UI visibility, status transitions).
+
+---
+
+## ✅ PHASE 3 — Client & Contacts (CRM Foundation)
 
 ### Task 3.1 — Contacts Data Model
 
@@ -263,22 +272,3 @@ This is suitable for **Cursor agent execution, Jira import, or internal tech pla
   * Schema & services must not block future rollout
 
 ---
-
-## 🧠 Final Notes for Engineering
-
-* User must **always belong to an Agency**
-* Deliverable is the **only approval target**
-* Client approval is **mandatory**
-* Campaign approvals = ALL required
-* Project approvals = ANY one required
-* Client approvals = ANY one required
-
----
-
-If you want next, I can:
-
-* Convert this **1:1 into Jira Epics & Stories**
-* Produce **DB schema diagrams**
-* Or generate a **Cursor execution checklist per phase**
-
-This is a very solid, scalable foundation 👌

@@ -15,6 +15,7 @@ import {
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { getCampaignStatusLabel } from '@/lib/campaign-status'
 
 interface Campaign {
   id: string
@@ -166,7 +167,7 @@ export default function CampaignsPage() {
               size="sm"
               onClick={() => setStatusFilter(status)}
             >
-              {status.replace('_', ' ')} ({statusCounts[status] || 0})
+              {getCampaignStatusLabel(status)} ({statusCounts[status] || 0})
             </Button>
           ))}
         </div>
@@ -299,7 +300,7 @@ export default function CampaignsPage() {
 
                     <div className="mt-4 flex items-center justify-between">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}>
-                        {campaign.status.replace('_', ' ')}
+                        {getCampaignStatusLabel(campaign.status)}
                       </span>
                       <span className="text-xs text-muted-foreground">
                         {campaign.campaignType === 'influencer' ? 'Influencer' : 'Social'}

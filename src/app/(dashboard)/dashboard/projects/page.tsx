@@ -15,6 +15,7 @@ import {
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { getCampaignStatusLabel } from '@/lib/campaign-status'
 
 interface Campaign {
   id: string
@@ -266,7 +267,7 @@ export default function ProjectsPage() {
                               key={campaign.id}
                               className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}
                             >
-                              {campaign.status}
+                              {getCampaignStatusLabel(campaign.status)}
                             </span>
                           ))}
                           {project.campaigns.length > 3 && (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -14,6 +14,8 @@ import {
   MoreHorizontal,
   AlertCircle,
   FileCheck,
+  UserPlus,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,9 +26,20 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { ApproverPicker } from '@/components/approver-picker'
+import { useAuth } from '@/contexts/auth-context'
+import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
+import { getCampaignStatusLabel, getDeliverableStatusLabel } from '@/lib/campaign-status'
 
 interface Deliverable {
   id: string
@@ -41,6 +54,12 @@ interface Campaign {
   startDate: string | null
   endDate: string | null
   deliverables: Deliverable[]
+}
+
+interface ProjectApproverRow {
+  id: string
+  createdAt: string
+  user: { id: string; name: string | null; email: string }
 }
 
 interface Project {
@@ -61,34 +80,101 @@ interface Project {
     } | null
   }
   campaigns: Campaign[]
+  projectApprovers: ProjectApproverRow[]
+}
+
+interface AgencyUserOption {
+  id: string
+  role: string
+  user: { id: string; name: string | null; email: string | null }
 }
 
 export default function ProjectDetailPage() {
   const params = useParams()
   const router = useRouter()
   const projectId = params.id as string
+  const { currentAgency } = useAuth()
   
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [manageApproversOpen, setManageApproversOpen] = useState(false)
+  const [agencyUsers, setAgencyUsers] = useState<AgencyUserOption[]>([])
+  const [loadingAgencyUsers, setLoadingAgencyUsers] = useState(false)
+  const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
+  const [savingApprovers, setSavingApprovers] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
+  const fetchProject = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ project: Project }>(
+        queries.project,
+        { id: projectId }
+      )
+      setProject(data.project)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load project')
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
 
   useEffect(() => {
-    async function fetchProject() {
-      try {
-        const data = await graphqlRequest<{ project: Project }>(
-          queries.project,
-          { id: projectId }
-        )
-        setProject(data.project)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load project')
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchProject()
-  }, [projectId])
+  }, [fetchProject])
+
+  useEffect(() => {
+    if (!manageApproversOpen || !project) return
+    setApproverPickerIds(project.projectApprovers?.map((pa) => pa.user.id) ?? [])
+  }, [manageApproversOpen, project])
+
+  useEffect(() => {
+    if (!manageApproversOpen || !currentAgency?.id) return
+    setLoadingAgencyUsers(true)
+    graphqlRequest<{ agency: { users: AgencyUserOption[] } }>(
+      queries.agencyUsers,
+      { agencyId: currentAgency.id }
+    )
+      .then((data) => setAgencyUsers(data.agency?.users ?? []))
+      .catch(() => setAgencyUsers([]))
+      .finally(() => setLoadingAgencyUsers(false))
+  }, [manageApproversOpen, currentAgency?.id])
+
+  const handleSaveApprovers = async () => {
+    if (!project) return
+    setSavingApprovers(true)
+    try {
+      const currentIds = new Set(project.projectApprovers?.map((pa) => pa.user.id) ?? [])
+      const selectedSet = new Set(approverPickerIds)
+      const toAdd = approverPickerIds.filter((id) => !currentIds.has(id))
+      const toRemove = (project.projectApprovers ?? []).filter((pa) => !selectedSet.has(pa.user.id))
+      for (const userId of toAdd) {
+        await graphqlRequest(mutations.addProjectApprover, { projectId, userId })
+      }
+      for (const pa of toRemove) {
+        await graphqlRequest(mutations.removeProjectApprover, { projectApproverId: pa.id })
+      }
+      setManageApproversOpen(false)
+      await fetchProject()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSavingApprovers(false)
+    }
+  }
+
+  const handleRemoveApprover = async (projectApproverId: string) => {
+    setRemovingId(projectApproverId)
+    try {
+      await graphqlRequest(mutations.removeProjectApprover, { projectApproverId })
+      await fetchProject()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Not set'
@@ -191,7 +277,10 @@ export default function ProjectDetailPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Edit Project</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setManageApproversOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Manage approvers
+              </DropdownMenuItem>
               <DropdownMenuItem>Set Dates</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem className="text-destructive">
@@ -252,8 +341,90 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Campaigns Section */}
+        {/* Project approvers */}
         <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Project approvers</h2>
+            <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Manage approvers
+            </Button>
+          </div>
+          <Card className="mb-6">
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Optional approval stage: any one project approver can approve deliverables after campaign approval. Select one or more agency users.
+              </p>
+              {!project.projectApprovers?.length ? (
+                <p className="text-sm text-muted-foreground">No project approvers yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {project.projectApprovers.map((pa) => (
+                    <li
+                      key={pa.id}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            {(pa.user.name || pa.user.email || '?').slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm">{pa.user.name || pa.user.email || pa.user.id}</span>
+                        {pa.user.email && (
+                          <span className="text-xs text-muted-foreground">({pa.user.email})</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        disabled={removingId === pa.id}
+                        onClick={() => handleRemoveApprover(pa.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={manageApproversOpen} onOpenChange={setManageApproversOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Manage project approvers</DialogTitle>
+                <DialogDescription>
+                  Select agency users who can approve deliverables at project level. Any one approver is sufficient.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-2">
+                <ApproverPicker
+                  users={agencyUsers.map((au) => ({
+                    id: au.user.id,
+                    name: au.user.name,
+                    email: au.user.email ?? '',
+                  }))}
+                  value={approverPickerIds}
+                  onChange={setApproverPickerIds}
+                  multiple
+                  loading={loadingAgencyUsers}
+                  emptyPlaceholder="No agency users found."
+                  hint="Search by name or email, then select one or more approvers."
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setManageApproversOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveApprovers} disabled={savingApprovers}>
+                  {savingApprovers ? 'Saving...' : 'Save approvers'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Campaigns</h2>
             <Button asChild>
@@ -311,7 +482,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}>
-                        {campaign.status.replace('_', ' ')}
+                        {getCampaignStatusLabel(campaign.status)}
                       </span>
                     </div>
                   </CardHeader>
@@ -331,7 +502,7 @@ export default function ProjectDetailPage() {
                               <span className="text-sm">{deliverable.title}</span>
                             </div>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(deliverable.status)}`}>
-                              {deliverable.status.replace('_', ' ')}
+                              {getDeliverableStatusLabel(deliverable.status)}
                             </span>
                           </div>
                         ))}

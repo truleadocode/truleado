@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
   Users,
+  ContactRound,
   Briefcase,
   FolderKanban,
   Megaphone,
@@ -36,6 +37,7 @@ import { useAuth } from '@/contexts/auth-context'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Clients', href: '/dashboard/clients', icon: Users },
+  { name: 'Contacts', href: '/dashboard/contacts', icon: ContactRound },
   { name: 'Projects', href: '/dashboard/projects', icon: Briefcase },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Megaphone },
   { name: 'Deliverables', href: '/dashboard/deliverables', icon: FolderKanban },

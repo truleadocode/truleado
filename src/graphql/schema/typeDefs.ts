@@ -50,6 +50,7 @@ export const typeDefs = gql`
     PENDING
     SUBMITTED
     INTERNAL_REVIEW
+    PENDING_PROJECT_APPROVAL
     CLIENT_REVIEW
     APPROVED
     REJECTED
@@ -62,6 +63,7 @@ export const typeDefs = gql`
 
   enum ApprovalLevel {
     INTERNAL
+    PROJECT
     CLIENT
     FINAL
   }
@@ -142,7 +144,27 @@ export const typeDefs = gql`
     accountManager: User!
     isActive: Boolean!
     projects: [Project!]!
+    contacts: [Contact!]!
+    clientApprovers: [Contact!]!
+    approverUsers: [User!]!
     createdAt: DateTime!
+  }
+
+  # 4.3.1 Contact (Phase 3: CRM - person at a client)
+  type Contact {
+    id: ID!
+    client: Client!
+    firstName: String!
+    lastName: String!
+    email: String
+    mobile: String
+    address: String
+    department: String
+    notes: String
+    isClientApprover: Boolean!
+    user: User
+    createdAt: DateTime!
+    updatedAt: DateTime!
   }
 
   # 4.4 Project
@@ -155,6 +177,15 @@ export const typeDefs = gql`
     endDate: DateTime
     isArchived: Boolean!
     campaigns: [Campaign!]!
+    approverUsers: [User!]!
+    projectApprovers: [ProjectApprover!]!
+    createdAt: DateTime!
+  }
+
+  type ProjectApprover {
+    id: ID!
+    project: Project!
+    user: User!
     createdAt: DateTime!
   }
 
@@ -376,6 +407,9 @@ export const typeDefs = gql`
     # Client (agency-scoped)
     client(id: ID!): Client
     
+    # Contact (agency-scoped via client)
+    contact(id: ID!): Contact
+    
     # Project (agency-scoped via client)
     project(id: ID!): Project
     
@@ -391,6 +425,8 @@ export const typeDefs = gql`
     # List queries (agency-scoped)
     agencies: [Agency!]!
     clients(agencyId: ID!): [Client!]!
+    contacts(clientId: ID!): [Contact!]!
+    contactsList(agencyId: ID!, clientId: ID, department: String, isClientApprover: Boolean): [Contact!]!
     projects(clientId: ID!): [Project!]!
     campaigns(projectId: ID!): [Campaign!]!
     deliverables(campaignId: ID!): [Deliverable!]!
@@ -427,6 +463,33 @@ export const typeDefs = gql`
     # Create a client under an agency
     createClient(agencyId: ID!, name: String!, accountManagerId: ID!): Client!
     
+    # Create/update/delete contacts (Phase 3)
+    createContact(
+      clientId: ID!
+      firstName: String!
+      lastName: String!
+      email: String
+      mobile: String
+      address: String
+      department: String
+      notes: String
+      isClientApprover: Boolean
+      userId: ID
+    ): Contact!
+    updateContact(
+      id: ID!
+      firstName: String
+      lastName: String
+      email: String
+      mobile: String
+      address: String
+      department: String
+      notes: String
+      isClientApprover: Boolean
+      userId: ID
+    ): Contact!
+    deleteContact(id: ID!): Boolean!
+    
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
     # ---------------------------------------------
@@ -434,12 +497,17 @@ export const typeDefs = gql`
     # Create a project under a client
     createProject(clientId: ID!, name: String!, description: String): Project!
     
-    # Create a campaign under a project
+    # Add/remove project approvers (optional approval stage; ANY ONE approval sufficient)
+    addProjectApprover(projectId: ID!, userId: ID!): ProjectApprover!
+    removeProjectApprover(projectApproverId: ID!): Boolean!
+    
+    # Create a campaign under a project (requires at least one campaign approver)
     createCampaign(
       projectId: ID!
       name: String!
       campaignType: CampaignType!
       description: String
+      approverUserIds: [ID!]!
     ): Campaign!
     
     # Campaign updates (specific, not generic)

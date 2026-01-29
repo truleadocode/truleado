@@ -135,6 +135,80 @@ export const queryResolvers = {
   },
 
   /**
+   * Get a contact by ID (agency-scoped via client)
+   */
+  contact: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
+    const { data: contact, error: contactError } = await supabaseAdmin
+      .from('contacts')
+      .select('*, clients!inner(agency_id)')
+      .eq('id', id)
+      .single();
+    if (contactError || !contact) {
+      throw notFoundError('Contact', id);
+    }
+    const agencyId = (contact.clients as { agency_id: string })?.agency_id;
+    if (agencyId) requireAgencyMembership(ctx, agencyId);
+    const { data: row } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('id', id)
+      .single();
+    return row;
+  },
+
+  /**
+   * Get all contacts for a client
+   */
+  contacts: async (
+    _: unknown,
+    { clientId }: { clientId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireClientAccess(ctx, clientId);
+    const { data, error } = await supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('last_name')
+      .order('first_name');
+    if (error) throw new Error('Failed to fetch contacts');
+    return data || [];
+  },
+
+  /**
+   * Global contacts list (Phase 3.4) - filter by client, department, isClientApprover
+   */
+  contactsList: async (
+    _: unknown,
+    args: {
+      agencyId: string;
+      clientId?: string;
+      department?: string;
+      isClientApprover?: boolean;
+    },
+    ctx: GraphQLContext
+  ) => {
+    requireAgencyMembership(ctx, args.agencyId);
+    const { data: clients } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('agency_id', args.agencyId)
+      .eq('is_active', true);
+    const clientIds = (clients || []).map((c: { id: string }) => c.id);
+    if (clientIds.length === 0) return [];
+    let q = supabaseAdmin
+      .from('contacts')
+      .select('*')
+      .in('client_id', clientIds);
+    if (args.clientId) q = q.eq('client_id', args.clientId);
+    if (args.department != null && args.department !== '') q = q.eq('department', args.department);
+    if (args.isClientApprover != null) q = q.eq('is_client_approver', args.isClientApprover);
+    const { data, error } = await q.order('last_name').order('first_name');
+    if (error) throw new Error('Failed to fetch contacts list');
+    return data || [];
+  },
+
+  /**
    * Get a project by ID
    */
   project: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {

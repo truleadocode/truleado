@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
+import { ApproverPicker } from '@/components/approver-picker'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 
@@ -38,6 +39,13 @@ interface Client {
   name: string
 }
 
+interface AgencyUserOption {
+  id: string
+  role: string
+  isActive: boolean
+  user: { id: string; name: string | null; email: string | null }
+}
+
 export default function NewCampaignPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -47,6 +55,10 @@ export default function NewCampaignPage() {
   const [error, setError] = useState<string | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [loadingProjects, setLoadingProjects] = useState(true)
+  const [agencyUsers, setAgencyUsers] = useState<AgencyUserOption[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [selectedApproverIds, setSelectedApproverIds] = useState<string[]>([])
+  const [approverError, setApproverError] = useState<string | null>(null)
 
   const {
     register,
@@ -103,8 +115,33 @@ export default function NewCampaignPage() {
     fetchProjects()
   }, [currentAgency?.id, preselectedProjectId, setValue])
 
+  // Fetch agency users for campaign approver selection (Phase 2: at least one required)
+  useEffect(() => {
+    async function fetchAgencyUsers() {
+      if (!currentAgency?.id) return
+      setLoadingUsers(true)
+      try {
+        const data = await graphqlRequest<{ agency: { users: AgencyUserOption[] } }>(
+          queries.agencyUsers,
+          { agencyId: currentAgency.id }
+        )
+        setAgencyUsers(data.agency?.users ?? [])
+      } catch (err) {
+        console.error('Failed to fetch agency users:', err)
+      } finally {
+        setLoadingUsers(false)
+      }
+    }
+    fetchAgencyUsers()
+  }, [currentAgency?.id])
+
   const onSubmit = async (data: CreateCampaignFormData) => {
     setError(null)
+    setApproverError(null)
+    if (selectedApproverIds.length === 0) {
+      setApproverError('Select at least one campaign approver')
+      return
+    }
     setIsSubmitting(true)
     
     try {
@@ -115,6 +152,7 @@ export default function NewCampaignPage() {
           name: data.name,
           campaignType: data.campaignType,
           description: data.description || null,
+          approverUserIds: selectedApproverIds,
         }
       )
       
@@ -223,6 +261,30 @@ export default function NewCampaignPage() {
                   className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   {...register('description')}
                 />
+              </div>
+
+              <div className="space-y-2">
+                <ApproverPicker
+                  label="Campaign approvers *"
+                  users={agencyUsers.map((au) => ({
+                    id: au.user.id,
+                    name: au.user.name,
+                    email: au.user.email ?? '',
+                  }))}
+                  value={selectedApproverIds}
+                  onChange={(ids) => {
+                    setApproverError(null)
+                    setSelectedApproverIds(ids)
+                  }}
+                  multiple
+                  minCount={1}
+                  loading={loadingUsers}
+                  emptyPlaceholder="No agency users found."
+                  hint="Select at least one approver. All must approve deliverables at campaign level before project/client review."
+                />
+                {approverError && (
+                  <p className="text-sm text-destructive">{approverError}</p>
+                )}
               </div>
 
               <div className="bg-muted/50 rounded-lg p-4">

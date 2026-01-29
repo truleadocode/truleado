@@ -150,9 +150,38 @@ type Client {
   accountManager: User
   isActive: Boolean!
   projects: [Project!]!
+  contacts: [Contact!]!
+  clientApprovers: [Contact!]!   # contacts where is_client_approver is true
+  approverUsers: [User!]!       # union: users from contacts (is_client_approver + user_id) + legacy client_users approvers
   createdAt: DateTime!
 }
 ```
+
+> **approverUsers**: Client-level approval uses this list. It includes (1) users linked from contacts with `is_client_approver` and `user_id` set, (2) legacy `client_users` with role `approver`.
+
+---
+
+### 4.3.1 Contact (Phase 3)
+
+```graphql
+type Contact {
+  id: ID!
+  client: Client!
+  firstName: String!
+  lastName: String!
+  email: String
+  mobile: String
+  address: String
+  department: String
+  notes: String
+  isClientApprover: Boolean!
+  userId: ID
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+```
+
+> **Phase 3**: CRM contacts per client. `isClientApprover` marks contacts who can approve at client level. `userId` links to a Truleado user when they have an account.
 
 ---
 
@@ -425,6 +454,16 @@ type Query {
   deliverables(campaignId: ID!): [Deliverable!]!
   creators(agencyId: ID!): [Creator!]!
   
+  # Contacts (Phase 3)
+  contact(id: ID!): Contact
+  contacts(clientId: ID!): [Contact!]!
+  contactsList(
+    agencyId: ID!
+    clientId: ID
+    department: String
+    isClientApprover: Boolean
+  ): [Contact!]!
+  
   # Activity & Notifications
   activityLogs(agencyId: ID!, entityType: String, entityId: ID): [ActivityLog!]!
   notifications(unreadOnly: Boolean): [Notification!]!
@@ -471,6 +510,34 @@ type Mutation {
   ): Client!
   
   archiveClient(id: ID!): Client!
+  
+  # Contacts (Phase 3)
+  createContact(
+    clientId: ID!
+    firstName: String!
+    lastName: String!
+    email: String
+    mobile: String
+    address: String
+    department: String
+    notes: String
+    isClientApprover: Boolean
+  ): Contact!
+  
+  updateContact(
+    id: ID!
+    firstName: String
+    lastName: String
+    email: String
+    mobile: String
+    address: String
+    department: String
+    notes: String
+    isClientApprover: Boolean
+    userId: ID
+  ): Contact!
+  
+  deleteContact(id: ID!): Boolean!
 }
 ```
 

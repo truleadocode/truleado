@@ -85,11 +85,23 @@ interface Approval {
   approvalLevel: string
   comment: string | null
   decidedAt: string
+  deliverableVersion?: { id: string }
   decidedBy: {
     id: string
     name: string | null
     email: string
   }
+}
+
+interface CampaignUser {
+  role: string
+  user: { id: string; name: string | null; email: string }
+}
+
+interface ApproverUser {
+  id: string
+  name: string | null
+  email: string
 }
 
 interface Deliverable {
@@ -105,12 +117,15 @@ interface Deliverable {
     name: string
     status: string
     campaignType: string
+    users: CampaignUser[]
     project: {
       id: string
       name: string
+      approverUsers: ApproverUser[]
       client: {
         id: string
         name: string
+        approverUsers: ApproverUser[]
       }
     }
   }
@@ -156,9 +171,10 @@ function CaptionWithHashtags({ text, className }: { text: string; className?: st
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-4 w-4" /> },
   SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-4 w-4" /> },
-  INTERNAL_REVIEW: { label: 'Internal Review', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-4 w-4" /> },
-  CLIENT_REVIEW: { label: 'Client Review', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-4 w-4" /> },
-  APPROVED: { label: 'Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-4 w-4" /> },
+  INTERNAL_REVIEW: { label: 'Pending Campaign Approval', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-4 w-4" /> },
+  PENDING_PROJECT_APPROVAL: { label: 'Pending Project Approval', color: 'bg-amber-100 text-amber-700', icon: <Clock className="h-4 w-4" /> },
+  CLIENT_REVIEW: { label: 'Pending Client Approval', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-4 w-4" /> },
+  APPROVED: { label: 'Fully Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-4 w-4" /> },
   REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-4 w-4" /> },
 }
 
@@ -298,7 +314,12 @@ export default function DeliverableDetailPage() {
     if (!deliverable || deliverable.versions.length === 0) return
     
     const latestVersion = deliverable.versions[0]
-    const approvalLevel = deliverable.status === 'INTERNAL_REVIEW' ? 'internal' : 'client'
+    const approvalLevel =
+      deliverable.status === 'INTERNAL_REVIEW' || deliverable.status === 'SUBMITTED'
+        ? 'INTERNAL'
+        : deliverable.status === 'PENDING_PROJECT_APPROVAL'
+          ? 'PROJECT'
+          : 'CLIENT'
     
     setSubmitting(true)
     try {
@@ -407,7 +428,7 @@ export default function DeliverableDetailPage() {
   const canUpload = deliverable && ['PENDING', 'REJECTED'].includes(deliverable.status)
   const canSubmit = deliverable && deliverable.status === 'PENDING' && deliverable.versions.length > 0
   const canResubmit = deliverable && deliverable.status === 'REJECTED' && deliverable.versions.length > 0
-  const canApprove = deliverable && ['INTERNAL_REVIEW', 'CLIENT_REVIEW'].includes(deliverable.status)
+  const canApprove = deliverable && ['SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(deliverable.status)
   const isApproved = deliverable?.status === 'APPROVED'
 
   // Must run before any early return so hook count is stable
@@ -427,6 +448,95 @@ export default function DeliverableDetailPage() {
     if (!previewVersionId || !deliverable?.versions) return null
     return deliverable.versions.find((v) => v.id === previewVersionId) ?? null
   }, [previewVersionId, deliverable?.versions])
+
+  // Version under review (most recent by createdAt) for pending-approver computation
+  const latestVersionId = useMemo(() => {
+    const versions = deliverable?.versions ?? []
+    if (versions.length === 0) return null
+    const sorted = [...versions].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+    return sorted[0]?.id ?? null
+  }, [deliverable?.versions])
+
+  const campaignApprovers = useMemo(() => {
+    const users = deliverable?.campaign?.users ?? []
+    return users
+      .filter((cu) => cu.role === 'approver')
+      .map((cu) => cu.user)
+      .filter((u): u is ApproverUser => !!u)
+  }, [deliverable?.campaign?.users])
+
+  const projectApprovers = useMemo(
+    () => deliverable?.campaign?.project?.approverUsers ?? [],
+    [deliverable?.campaign?.project?.approverUsers]
+  )
+
+  const clientApprovers = useMemo(
+    () => deliverable?.campaign?.project?.client?.approverUsers ?? [],
+    [deliverable?.campaign?.project?.client?.approverUsers]
+  )
+
+  const approvalsForLatestVersion = useMemo(() => {
+    if (!latestVersionId || !deliverable?.approvals) return []
+    return deliverable.approvals.filter(
+      (a) => a.deliverableVersion?.id === latestVersionId
+    )
+  }, [latestVersionId, deliverable?.approvals])
+
+  const pendingCampaignApprovers = useMemo(() => {
+    if ((deliverable?.status !== 'INTERNAL_REVIEW' && deliverable?.status !== 'SUBMITTED') || !latestVersionId) return []
+    const approvedIds = new Set(
+      approvalsForLatestVersion
+        .filter((a) => a.approvalLevel === 'INTERNAL' && a.decision === 'APPROVED')
+        .map((a) => a.decidedBy.id)
+    )
+    return campaignApprovers.filter((u) => !approvedIds.has(u.id))
+  }, [
+    deliverable?.status,
+    latestVersionId,
+    approvalsForLatestVersion,
+    campaignApprovers,
+  ])
+
+  const pendingProjectApprovers = useMemo(() => {
+    if (deliverable?.status !== 'PENDING_PROJECT_APPROVAL' || !latestVersionId) return []
+    const approvedIds = new Set(
+      approvalsForLatestVersion
+        .filter((a) => a.approvalLevel === 'PROJECT' && a.decision === 'APPROVED')
+        .map((a) => a.decidedBy.id)
+    )
+    return projectApprovers.filter((u) => !approvedIds.has(u.id))
+  }, [
+    deliverable?.status,
+    latestVersionId,
+    approvalsForLatestVersion,
+    projectApprovers,
+  ])
+
+  const pendingClientApprovers = useMemo(() => {
+    if (deliverable?.status !== 'CLIENT_REVIEW' || !latestVersionId) return []
+    const approvedIds = new Set(
+      approvalsForLatestVersion
+        .filter(
+          (a) =>
+            (a.approvalLevel === 'CLIENT' || a.approvalLevel === 'FINAL') &&
+            a.decision === 'APPROVED'
+        )
+        .map((a) => a.decidedBy.id)
+    )
+    return clientApprovers.filter((u) => !approvedIds.has(u.id))
+  }, [
+    deliverable?.status,
+    latestVersionId,
+    approvalsForLatestVersion,
+    clientApprovers,
+  ])
+
+  const currentStageLabel = useMemo(() => {
+    const config = deliverable ? STATUS_CONFIG[deliverable.status] : null
+    return config?.label ?? 'Unknown'
+  }, [deliverable?.status])
 
   useEffect(() => {
     if (fileKeys.length === 0) {
@@ -565,6 +675,26 @@ export default function DeliverableDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Who approves at this stage — all approvals happen on this page */}
+        {canApprove && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="p-4">
+              <p className="text-sm font-medium mb-1">Approvals happen here</p>
+              <p className="text-sm text-muted-foreground">
+                {(deliverable.status === 'SUBMITTED' || deliverable.status === 'INTERNAL_REVIEW') && (
+                  <>Campaign approvers (assigned on the campaign) approve from this page. Use Approve or Reject above. All campaign approvers must approve before it moves to the next stage.</>
+                )}
+                {deliverable.status === 'PENDING_PROJECT_APPROVAL' && (
+                  <>Project approvers (assigned on the project) approve from this page. Use Approve or Reject above. Any one project approver can approve to move to client review.</>
+                )}
+                {deliverable.status === 'CLIENT_REVIEW' && (
+                  <>Client approvers approve from this page. Use Approve or Reject above. Any one client approver can approve to mark the deliverable fully approved.</>
+                )}
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Status Badge & Info */}
         <Card>
@@ -971,7 +1101,79 @@ export default function DeliverableDetailPage() {
               )}
             </div>
 
-            {/* Approval History */}
+            {/* Current approval stage & pending approvers */}
+            {!isApproved && (
+              <div>
+                <h2 className="text-lg font-semibold mb-4">Approval Stage</h2>
+                <Card>
+                  <CardContent className="p-4 space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Current stage</p>
+                      <p className="font-medium mt-1">{currentStageLabel}</p>
+                    </div>
+                    {(pendingCampaignApprovers.length > 0 ||
+                      pendingProjectApprovers.length > 0 ||
+                      pendingClientApprovers.length > 0) && (
+                      <div>
+                        <p className="text-sm text-muted-foreground mb-2">Pending approvers</p>
+                        <ul className="space-y-1.5">
+                          {pendingCampaignApprovers.map((u) => (
+                            <li key={u.id} className="flex items-center gap-2 text-sm">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  {getInitials(u.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{u.name || u.email}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                Campaign
+                              </Badge>
+                            </li>
+                          ))}
+                          {pendingProjectApprovers.map((u) => (
+                            <li key={u.id} className="flex items-center gap-2 text-sm">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  {getInitials(u.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{u.name || u.email}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                Project
+                              </Badge>
+                            </li>
+                          ))}
+                          {pendingClientApprovers.map((u) => (
+                            <li key={u.id} className="flex items-center gap-2 text-sm">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  {getInitials(u.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{u.name || u.email}</span>
+                              <Badge variant="secondary" className="text-xs">
+                                Client
+                              </Badge>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {deliverable.status !== 'PENDING' &&
+                      deliverable.status !== 'REJECTED' &&
+                      pendingCampaignApprovers.length === 0 &&
+                      pendingProjectApprovers.length === 0 &&
+                      pendingClientApprovers.length === 0 && (
+                        <p className="text-sm text-muted-foreground">
+                          All approvers for this stage have responded; next stage will begin when workflow advances.
+                        </p>
+                      )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {/* Approval History (timeline) */}
             <div>
               <h2 className="text-lg font-semibold mb-4">Approval History</h2>
               
@@ -987,42 +1189,47 @@ export default function DeliverableDetailPage() {
                 </Card>
               ) : (
                 <div className="space-y-3">
-                  {deliverable.approvals.map((approval) => (
-                    <Card key={approval.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-3">
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                            approval.decision === 'approved' 
-                              ? 'bg-green-100 text-green-600' 
-                              : 'bg-red-100 text-red-600'
-                          }`}>
-                            {approval.decision === 'approved' 
-                              ? <CheckCircle className="h-4 w-4" />
-                              : <XCircle className="h-4 w-4" />
-                            }
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <p className="font-medium capitalize">
-                                {approval.decision} - {approval.approvalLevel.toLowerCase()} Review
-                              </p>
-                              <span className="text-xs text-muted-foreground">
-                                {formatDateTime(approval.decidedAt)}
-                              </span>
+                  {[...deliverable.approvals]
+                    .sort(
+                      (a, b) =>
+                        new Date(b.decidedAt).getTime() - new Date(a.decidedAt).getTime()
+                    )
+                    .map((approval) => (
+                      <Card key={approval.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-start gap-3">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                              approval.decision === 'approved' 
+                                ? 'bg-green-100 text-green-600' 
+                                : 'bg-red-100 text-red-600'
+                            }`}>
+                              {approval.decision === 'approved' 
+                                ? <CheckCircle className="h-4 w-4" />
+                                : <XCircle className="h-4 w-4" />
+                              }
                             </div>
-                            {approval.comment && (
-                              <p className="text-sm text-muted-foreground mt-1">
-                                "{approval.comment}"
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-medium capitalize">
+                                  {approval.decision} — {approval.approvalLevel.toLowerCase()} review
+                                </p>
+                                <span className="text-xs text-muted-foreground shrink-0">
+                                  {formatDateTime(approval.decidedAt)}
+                                </span>
+                              </div>
+                              {approval.comment && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  "{approval.comment}"
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-2">
+                                by {approval.decidedBy.name || approval.decidedBy.email}
                               </p>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-2">
-                              by {approval.decidedBy.name || approval.decidedBy.email}
-                            </p>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                        </CardContent>
+                      </Card>
+                    ))}
                 </div>
               )}
             </div>
@@ -1034,7 +1241,7 @@ export default function DeliverableDetailPage() {
           <Card className="bg-muted/50">
             <CardContent className="p-4">
               <h3 className="font-medium mb-2">Approval Workflow</h3>
-              <div className="flex items-center gap-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span className={deliverable.status === 'PENDING' ? 'font-medium' : 'text-muted-foreground'}>
                   1. Upload
                 </span>
@@ -1044,15 +1251,19 @@ export default function DeliverableDetailPage() {
                 </span>
                 <span className="text-muted-foreground">→</span>
                 <span className={deliverable.status === 'INTERNAL_REVIEW' ? 'font-medium' : 'text-muted-foreground'}>
-                  3. Internal Review
+                  3. Campaign approval
+                </span>
+                <span className="text-muted-foreground">→</span>
+                <span className={deliverable.status === 'PENDING_PROJECT_APPROVAL' ? 'font-medium' : 'text-muted-foreground'}>
+                  4. Project approval
                 </span>
                 <span className="text-muted-foreground">→</span>
                 <span className={deliverable.status === 'CLIENT_REVIEW' ? 'font-medium' : 'text-muted-foreground'}>
-                  4. Client Review
+                  5. Client approval
                 </span>
                 <span className="text-muted-foreground">→</span>
                 <span className={deliverable.status === 'APPROVED' ? 'font-medium text-green-600' : 'text-muted-foreground'}>
-                  5. Approved
+                  6. Fully approved
                 </span>
               </div>
             </CardContent>

@@ -13,7 +13,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
+import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { getIdToken } from '@/lib/firebase/client'
 
 const createClientSchema = z.object({
   name: z.string().min(2, 'Client name must be at least 2 characters'),
@@ -77,21 +78,56 @@ export default function NewClientPage() {
 
   const onSubmit = async (data: CreateClientFormData) => {
     if (!currentAgency?.id) return
-    
+
     setError(null)
     setIsSubmitting(true)
-    
+
     try {
-      const result = await graphqlRequest<{ createClient: { id: string } }>(
-        mutations.createClient,
-        {
-          agencyId: currentAgency.id,
-          name: data.name,
-          accountManagerId: data.accountManagerId,
+      const token = await getIdToken()
+      if (!token) {
+        setError('Not authenticated')
+        setIsSubmitting(false)
+        return
+      }
+
+      // Inline mutation and explicit body so the request is never empty (avoids bundling/import issues)
+      const query = `mutation CreateClient($agencyId: ID!, $name: String!, $accountManagerId: ID!) {
+        createClient(agencyId: $agencyId, name: $name, accountManagerId: $accountManagerId) {
+          id
+          name
+          isActive
+          createdAt
         }
-      )
-      
-      router.push(`/dashboard/clients/${result.createClient.id}`)
+      }`
+      const variables = {
+        agencyId: currentAgency.id,
+        name: data.name,
+        accountManagerId: data.accountManagerId,
+      }
+      const bodyStr = JSON.stringify({ query, variables })
+
+      const res = await fetch('/api/graphql', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: bodyStr,
+      })
+
+      const json = await res.json()
+      if (json.errors?.length) {
+        setError(json.errors[0].message ?? 'GraphQL error')
+        setIsSubmitting(false)
+        return
+      }
+      if (!json.data?.createClient?.id) {
+        setError('No data returned from GraphQL')
+        setIsSubmitting(false)
+        return
+      }
+
+      router.push(`/dashboard/clients/${json.data.createClient.id}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create client')
     } finally {

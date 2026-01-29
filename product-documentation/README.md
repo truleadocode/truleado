@@ -4,6 +4,8 @@
 
 This folder contains the canonical documents that define Truleado. Any implementation must align with these specifications.
 
+**For agent handoff and the Create Client bug context:** see **[ai-doc.md](./ai-doc.md)** (§0 Session Context and §9 Active Bug).
+
 ---
 
 ## Documents
@@ -15,6 +17,7 @@ This folder contains the canonical documents that define Truleado. Any implement
 | [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Jan 2026 |
 | [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; Create Client bug handoff | Jan 2026 |
 
 ---
 
@@ -56,7 +59,8 @@ Campaign Permission
 - [x] RBAC framework
 - [x] Agency dashboard
 - [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
-- [x] Client management
+- [x] Client management (**known bug**: Create Client form returns "GraphQL operations must contain a non-empty query" — see ai-doc.md §9)
+- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers can come from contacts with `is_client_approver`
 - [x] Project management
 - [x] Campaign engine with state machine
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges)
@@ -108,6 +112,19 @@ When adding new features:
   - **Access guard**: `ProtectedRoute` redirects to `/choose-agency` when `agencies.length === 0`; root and dashboard rely on this.
   - **Login UX**: After sign-in, client waits for auth context to load user and agencies, then redirects once to `/dashboard` or `/choose-agency` (no intermediate dashboard loading).
   - **Auth context**: `fetchUserData` timeout (15s), `setLoading(false)` in `finally`; context uses `auth_identities` lookup with `.limit(1)` for resilience.
+- **Phase 1 — Deliverable as Approval Unit (Task 1.1)**:
+  - Only **Deliverable** can reach "Fully Approved" (status `APPROVED`). Campaigns and Projects are **containers** and **approval sources**.
+  - STATE_MACHINES.md: approval-unit principle; campaign `APPROVED` = "Campaign-level review complete"; deliverable `APPROVED` = "Fully Approved".
+  - UI: deliverable status APPROVED shown as "Fully Approved"; campaign status APPROVED shown as "Review complete". Shared helpers in `src/lib/campaign-status.ts` (`getCampaignStatusLabel`, `getDeliverableStatusLabel`).
+- **Phase 2 — Approval System**: Project approvers, deliverable statuses (e.g. `pending_project_approval`, `client_review`), migration `00011_phase2_approval_system.sql`; campaign/project approvers, ApproverPicker, Create Campaign with approvers.
+- **Phase 3 — Client & Contacts**:
+  - Migration `00012_phase3_contacts.sql`: `contacts` table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access.
+  - GraphQL: `Contact` type; `Client.contacts`, `Client.clientApprovers`; `approverUsers` now includes users from contacts (is_client_approver + user_id) and legacy client_users.
+  - Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`.
+  - Mutations: `createContact`, `updateContact`, `deleteContact`.
+  - UI: Client detail page has **Contacts** tab (list, add/edit/delete, toggle client approver); **Global Contacts** page at `/dashboard/contacts` with filters (client, department, approver); sidebar link "Contacts".
+- **Known bug (unresolved)**: Create Client form: on submit, user sees "GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension." Request body appears empty or missing `query` on the server. See `ai-doc.md` §0 (Session Context) and §9 for full context and next steps for a new agent.
+- **Docs**: Updated `ai-doc.md` with §0 "Session Context for New Agent" (Jira alignment, Phase 3 implementation summary, Create Client bug with exact error and what was tried). README now links to ai-doc for agent handoff and Create Client bug.
 
 ---
 

@@ -5,7 +5,15 @@
 
 ---
 
+## Approval unit (Phase 1)
+
+**Only the Deliverable can reach "Fully Approved" status.** Campaigns and Projects are **containers** and **approval sources**; they do not have a "Fully Approved" state. Campaign status `APPROVED` means "campaign-level review complete" (the campaign as an approval source has been satisfied), not that the campaign itself is the approval target. The approval target is always the **Deliverable**; when a deliverable reaches `APPROVED`, it is **Fully Approved**.
+
+---
+
 ## 1. Campaign State Machine
+
+Campaigns are **containers** and **approval sources**. Campaign status reflects workflow stage, not final approval of content; only deliverables can be Fully Approved.
 
 ### States
 
@@ -13,8 +21,8 @@
 |-------|-------------|
 | `DRAFT` | Campaign created but not started |
 | `ACTIVE` | Campaign is running, content being created |
-| `IN_REVIEW` | Content submitted, awaiting approvals |
-| `APPROVED` | All content approved |
+| `IN_REVIEW` | Content submitted, awaiting campaign-level approvals |
+| `APPROVED` | Campaign-level review complete (all deliverables have passed campaign-level approval; approval unit remains the deliverable) |
 | `COMPLETED` | Campaign execution finished |
 | `ARCHIVED` | Read-only historical record |
 
@@ -71,6 +79,8 @@
 
 ## 2. Deliverable State Machine
 
+**Deliverable is the only entity that can reach "Fully Approved"** (status `APPROVED`). Campaigns and Projects act only as containers and approval sources.
+
 ### States
 
 | State | Description |
@@ -79,7 +89,7 @@
 | `SUBMITTED` | Content uploaded, awaiting review |
 | `INTERNAL_REVIEW` | Under internal agency review |
 | `CLIENT_REVIEW` | Under client review |
-| `APPROVED` | Final approval granted |
+| `APPROVED` | **Fully Approved** – final approval granted (only deliverable can reach this) |
 | `REJECTED` | Content rejected, needs revision |
 
 ### Valid Transitions
