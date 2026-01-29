@@ -220,6 +220,16 @@ export const typeDefs = gql`
     caption: String
     uploadedBy: User
     createdAt: DateTime!
+    captionAudits: [DeliverableVersionCaptionAudit!]!
+  }
+
+  type DeliverableVersionCaptionAudit {
+    id: ID!
+    deliverableVersionId: ID!
+    oldCaption: String
+    newCaption: String
+    changedAt: DateTime!
+    changedBy: User!
   }
 
   # 4.7 Approvals (Immutable)
@@ -495,6 +505,12 @@ export const typeDefs = gql`
       approvalLevel: ApprovalLevel!
       comment: String!
     ): Approval!
+    
+    # Update caption for a deliverable version (audited)
+    updateDeliverableVersionCaption(
+      deliverableVersionId: ID!
+      caption: String
+    ): DeliverableVersion!
     
     # ---------------------------------------------
     # Creator Mutations

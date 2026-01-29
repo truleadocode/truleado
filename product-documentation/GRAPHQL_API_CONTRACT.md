@@ -253,6 +253,16 @@ type DeliverableVersion {
   caption: String
   uploadedBy: User
   createdAt: DateTime!
+  captionAudits: [DeliverableVersionCaptionAudit!]!
+}
+
+type DeliverableVersionCaptionAudit {
+  id: ID!
+  deliverableVersionId: ID!
+  oldCaption: String
+  newCaption: String
+  changedAt: DateTime!
+  changedBy: User!
 }
 ```
 
@@ -540,8 +550,15 @@ type Mutation {
     approvalLevel: ApprovalLevel!
     comment: String!
   ): Approval!
+  
+  updateDeliverableVersionCaption(
+    deliverableVersionId: ID!
+    caption: String
+  ): DeliverableVersion!
 }
 ```
+
+> **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
 
 ---
 

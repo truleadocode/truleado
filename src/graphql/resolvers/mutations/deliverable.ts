@@ -424,3 +424,93 @@ export async function rejectDeliverable(
     ctx
   );
 }
+
+/**
+ * Update caption for a deliverable version (audited).
+ * Allowed for creator and agency users with UPLOAD_VERSION on the campaign.
+ */
+export async function updateDeliverableVersionCaption(
+  _: unknown,
+  {
+    deliverableVersionId,
+    caption,
+  }: {
+    deliverableVersionId: string;
+    caption: string | null;
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+
+  const { data: version, error: versionError } = await supabaseAdmin
+    .from('deliverable_versions')
+    .select('id, deliverable_id, caption')
+    .eq('id', deliverableVersionId)
+    .single();
+
+  if (versionError || !version) {
+    throw notFoundError('DeliverableVersion', deliverableVersionId);
+  }
+
+  const { data: deliverable, error: delError } = await supabaseAdmin
+    .from('deliverables')
+    .select('id, campaigns!inner(id)')
+    .eq('id', version.deliverable_id)
+    .single();
+
+  if (delError || !deliverable) {
+    throw notFoundError('Deliverable', version.deliverable_id);
+  }
+
+  const campaigns = deliverable.campaigns as { id: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
+
+  const newCaption = caption == null || caption.trim() === '' ? null : caption.trim();
+  const oldCaption = version.caption ?? null;
+
+  if (oldCaption === newCaption) {
+    const { data: current } = await supabaseAdmin
+      .from('deliverable_versions')
+      .select('*')
+      .eq('id', deliverableVersionId)
+      .single();
+    return current;
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from('deliverable_versions')
+    .update({ caption: newCaption })
+    .eq('id', deliverableVersionId);
+
+  if (updateError) {
+    throw new Error('Failed to update caption');
+  }
+
+  await supabaseAdmin.from('deliverable_version_caption_audit').insert({
+    deliverable_version_id: deliverableVersionId,
+    old_caption: oldCaption,
+    new_caption: newCaption,
+    changed_by: user.id,
+  });
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'deliverable_version',
+      entityId: deliverableVersionId,
+      action: 'caption_updated',
+      actorId: user.id,
+      actorType: 'user',
+      metadata: { oldCaption, newCaption },
+    });
+  }
+
+  const { data: updated } = await supabaseAdmin
+    .from('deliverable_versions')
+    .select('*')
+    .eq('id', deliverableVersionId)
+    .single();
+
+  return updated;
+}

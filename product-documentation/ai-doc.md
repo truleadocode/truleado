@@ -60,10 +60,13 @@ All of these markdowns are now aligned with the current implementation:
     - `uploadDeliverableVersion(deliverableId, fileUrl: String!, fileName, fileSize, mimeType, caption)`.
     - `approveDeliverable(deliverableId, versionId, approvalLevel: ApprovalLevel!, comment)`.
     - `rejectDeliverable(deliverableId, versionId, approvalLevel: ApprovalLevel!, comment: String!)`.
+    - `updateDeliverableVersionCaption(deliverableVersionId: ID!, caption: String)`: updates caption and appends to `deliverable_version_caption_audit` (audited; allowed for users with `UPLOAD_VERSION` on campaign).
+  - `DeliverableVersion` includes `captionAudits: [DeliverableVersionCaptionAudit!]!`; type `DeliverableVersionCaptionAudit` has `id`, `deliverableVersionId`, `oldCaption`, `newCaption`, `changedAt`, `changedBy`.
 - `DATABASE_SCHEMA_DDL.md` – **extended with post-migration shape**:
   - `campaigns.brief TEXT`.
   - `campaign_attachments` table (aligned with `00003_campaign_brief_attachments.sql`).
   - `deliverable_versions.caption TEXT` and unique constraint on `(deliverable_id, file_name, version_number)` (from `00005` + `00006`).
+  - `deliverable_version_caption_audit` table (migration `00009`): append-only audit for caption edits (`deliverable_version_id`, `old_caption`, `new_caption`, `changed_at`, `changed_by`).
   - `approvals` table uses `approval_level` and `decision` with NOT NULL constraints where implemented.
 - `STATE_MACHINES.md` – already matches implemented Campaign and Deliverable workflows (no change needed for recent work).
 
@@ -84,6 +87,7 @@ These Supabase migrations exist and should be applied in order:
 6. `00006_deliverable_version_per_file.sql` – changes uniqueness:
    - Drops old `(deliverable_id, version_number)` unique constraint.
    - Adds `(deliverable_id, file_name, version_number)` unique constraint.
+7. `00009_deliverable_version_caption_audit.sql` – adds `deliverable_version_caption_audit` table for audited caption edits (who, when, old/new caption).
 
 **Manual actions required in Supabase:**
 
@@ -136,6 +140,10 @@ These Supabase migrations exist and should be applied in order:
     - Uses `FileUpload` component and `/api/upload` route.
     - Metadata stored in `campaign_attachments` and surfaced via GraphQL.
     - Downloads use `/api/download` with signed URLs.
+  - **Campaign Performance** (placeholder):
+    - Section at bottom of campaign detail page.
+    - Placeholder metrics (no live data yet): Overall deliverables, Likes, Comments, Reshares, Saves, Engagement, Clicks, Conversions, Impressions, Reach, Engagement rate, Video views.
+    - Each metric shown in a small card with icon and label; value placeholder (“—”) until analytics are connected.
 
 ### 5.5 Deliverables & Approvals (Current Focus)
 
@@ -164,11 +172,19 @@ These Supabase migrations exist and should be applied in order:
         - Uploads to `deliverables` bucket.
         - Calls `uploadDeliverableVersion` with `caption`.
     - Versions are **grouped by file name**:
-      - Each file card shows latest version and metadata.
-      - Each version row shows version number, size, timestamp, caption, and uploader.
+      - Each file card has a **version dropdown** (default: latest); a single details block shows the selected version (size, date, caption, uploader, “Last edited by” when caption was edited, expandable Caption history).
+      - **Edit caption** and Download per version; caption edits call `updateDeliverableVersionCaption` and are audited in `deliverable_version_caption_audit`.
+      - **Hashtags** (`#word`) in captions are rendered as badge-style highlights (Badge component) across the page and in caption history.
     - Per-file **“New version”** button:
       - Opens file picker and reuses caption modal.
       - Forces versioning for the same logical `file_name`.
+  - **Preview panel** (right column, above Approval History):
+    - **File selector**: Buttons for each file; selecting a file loads its latest version in the preview by default.
+    - **Version selector**: Version buttons (v1, v2, … latest) for the selected file.
+    - **Preview content**: Image/video → automatic preview (signed URL); other types → “This type of file cannot be previewed” + Download.
+    - **Pop-out**: Opens current image/video preview in a new browser window.
+    - **Maximize**: Opens current preview in a large modal (dialog).
+    - Caption shown below preview and editable (same edit-caption flow).
   - **Approval workflow**:
     - `submitDeliverableForReview` from Pending/Rejected when at least one version exists.
     - `approveDeliverable` / `rejectDeliverable` with:

@@ -226,6 +226,30 @@ CREATE TABLE deliverable_versions (
 
 ---
 
+### 5.2.1 deliverable_version_caption_audit
+
+> Append-only audit log for caption edits on deliverable versions. Records who changed the caption and when (for creator and agency users).
+
+```sql
+CREATE TABLE deliverable_version_caption_audit (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deliverable_version_id UUID NOT NULL REFERENCES deliverable_versions(id) ON DELETE CASCADE,
+  old_caption TEXT,
+  new_caption TEXT,
+  changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  changed_by UUID NOT NULL REFERENCES users(id)
+);
+
+CREATE INDEX idx_deliverable_version_caption_audit_version_id
+  ON deliverable_version_caption_audit(deliverable_version_id);
+CREATE INDEX idx_deliverable_version_caption_audit_changed_at
+  ON deliverable_version_caption_audit(changed_at);
+```
+
+> **Rule**: No UPDATE or DELETE. Insert only when caption is updated via `updateDeliverableVersionCaption`.
+
+---
+
 ### 5.3 approvals
 
 ```sql

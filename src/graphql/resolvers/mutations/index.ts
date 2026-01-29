@@ -27,6 +27,7 @@ import {
   submitDeliverableForReview,
   approveDeliverable,
   rejectDeliverable,
+  updateDeliverableVersionCaption,
 } from './deliverable';
 import {
   addCreator,
@@ -68,6 +69,7 @@ export const mutationResolvers = {
   submitDeliverableForReview,
   approveDeliverable,
   rejectDeliverable,
+  updateDeliverableVersionCaption,
   
   // Creators
   addCreator,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef, ChangeEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, ChangeEvent, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -17,8 +17,21 @@ import {
   User,
   Megaphone,
   Send,
+  Image as ImageIcon,
+  Maximize2,
+  ExternalLink,
+  X,
+  ChevronDown,
+  Pencil,
+  History,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import {
@@ -32,9 +45,22 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
 import { FileUpload } from '@/components/ui/file-upload'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
+
+interface CaptionAudit {
+  id: string
+  oldCaption: string | null
+  newCaption: string | null
+  changedAt: string
+  changedBy: {
+    id: string
+    name: string | null
+    email: string
+  }
+}
 
 interface DeliverableVersion {
   id: string
@@ -50,6 +76,7 @@ interface DeliverableVersion {
     name: string | null
     email: string
   } | null
+  captionAudits?: CaptionAudit[]
 }
 
 interface Approval {
@@ -91,6 +118,41 @@ interface Deliverable {
   approvals: Approval[]
 }
 
+function isImageOrVideo(mimeType: string | null): boolean {
+  if (!mimeType) return false
+  return mimeType.startsWith('image/') || mimeType.startsWith('video/')
+}
+
+function getSortedFileKeys(versionsByFile: Record<string, DeliverableVersion[]>): string[] {
+  return Object.keys(versionsByFile).sort((a, b) => a.localeCompare(b))
+}
+
+function getSortedVersionsForFile(
+  versionsByFile: Record<string, DeliverableVersion[]>,
+  fileKey: string
+): DeliverableVersion[] {
+  const versions = versionsByFile[fileKey] ?? []
+  return [...versions].sort((a, b) => b.versionNumber - a.versionNumber)
+}
+
+/** Renders caption text with hashtags (#word) as Badge components */
+function CaptionWithHashtags({ text, className }: { text: string; className?: string }) {
+  const parts = text.split(/(#\w+)/g)
+  return (
+    <span className={className}>
+      {parts.map((part, i) =>
+        /^#\w+$/.test(part) ? (
+          <Badge key={i} variant="hashtag" className="mx-0.5 align-middle">
+            {part}
+          </Badge>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </span>
+  )
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-4 w-4" /> },
   SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-4 w-4" /> },
@@ -121,6 +183,15 @@ export default function DeliverableDetailPage() {
   const [uploading, setUploading] = useState(false)
   const [targetFileName, setTargetFileName] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null)
+  const [previewFileKey, setPreviewFileKey] = useState<string | null>(null)
+  const [previewVersionId, setPreviewVersionId] = useState<string | null>(null)
+  const [previewMaximized, setPreviewMaximized] = useState(false)
+  const [selectedVersionByFile, setSelectedVersionByFile] = useState<Record<string, string>>({})
+  const [captionEditOpen, setCaptionEditOpen] = useState(false)
+  const [captionEditVersion, setCaptionEditVersion] = useState<DeliverableVersion | null>(null)
+  const [captionEditText, setCaptionEditText] = useState('')
+  const [captionEditSaving, setCaptionEditSaving] = useState(false)
 
   const fetchDeliverable = useCallback(async () => {
     try {
@@ -273,6 +344,35 @@ export default function DeliverableDetailPage() {
     }
   }
 
+  const handleOpenEditCaption = (version: DeliverableVersion) => {
+    setCaptionEditVersion(version)
+    setCaptionEditText(version.caption ?? '')
+    setCaptionEditOpen(true)
+  }
+
+  const handleSaveCaption = async () => {
+    if (!captionEditVersion) return
+    setCaptionEditSaving(true)
+    try {
+      await graphqlRequest(mutations.updateDeliverableVersionCaption, {
+        deliverableVersionId: captionEditVersion.id,
+        caption: captionEditText.trim() || null,
+      })
+      toast({ title: 'Caption updated' })
+      setCaptionEditOpen(false)
+      setCaptionEditVersion(null)
+      await fetchDeliverable()
+    } catch (err) {
+      toast({
+        title: 'Failed to update caption',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      setCaptionEditSaving(false)
+    }
+  }
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Not set'
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -310,6 +410,74 @@ export default function DeliverableDetailPage() {
   const canApprove = deliverable && ['INTERNAL_REVIEW', 'CLIENT_REVIEW'].includes(deliverable.status)
   const isApproved = deliverable?.status === 'APPROVED'
 
+  // Must run before any early return so hook count is stable
+  const versionsByFile = useMemo(() => {
+    const versions = deliverable?.versions ?? []
+    return versions.reduce<Record<string, DeliverableVersion[]>>((acc, version) => {
+      const key = version.fileName || 'Untitled file'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(version)
+      return acc
+    }, {})
+  }, [deliverable?.versions])
+
+  const fileKeys = useMemo(() => getSortedFileKeys(versionsByFile), [versionsByFile])
+
+  const selectedPreviewVersion = useMemo(() => {
+    if (!previewVersionId || !deliverable?.versions) return null
+    return deliverable.versions.find((v) => v.id === previewVersionId) ?? null
+  }, [previewVersionId, deliverable?.versions])
+
+  useEffect(() => {
+    if (fileKeys.length === 0) {
+      setPreviewFileKey(null)
+      setPreviewVersionId(null)
+      return
+    }
+    const versionStillValid =
+      previewVersionId &&
+      Object.values(versionsByFile).some((versions) =>
+        versions.some((v) => v.id === previewVersionId)
+      )
+    if (versionStillValid) return
+    const firstKey = fileKeys[0]
+    const versions = getSortedVersionsForFile(versionsByFile, firstKey)
+    setPreviewFileKey(firstKey)
+    setPreviewVersionId(versions[0]?.id ?? null)
+  }, [fileKeys, versionsByFile, previewVersionId])
+
+  const selectFileForPreview = useCallback(
+    (fileKey: string) => {
+      const versions = getSortedVersionsForFile(versionsByFile, fileKey)
+      const latest = versions[0]
+      setPreviewFileKey(fileKey)
+      setPreviewVersionId(latest?.id ?? null)
+    },
+    [versionsByFile]
+  )
+
+  const selectVersionForPreview = useCallback((versionId: string) => {
+    setPreviewVersionId(versionId)
+  }, [])
+
+  useEffect(() => {
+    if (!selectedPreviewVersion?.fileUrl) {
+      setPreviewSignedUrl(null)
+      return
+    }
+    let cancelled = false
+    getSignedDownloadUrl('deliverables', selectedPreviewVersion.fileUrl)
+      .then((url) => {
+        if (!cancelled) setPreviewSignedUrl(url)
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewSignedUrl(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedPreviewVersion?.id, selectedPreviewVersion?.fileUrl])
+
   if (loading) {
     return (
       <>
@@ -345,17 +513,6 @@ export default function DeliverableDetailPage() {
   }
 
   const statusConfig = STATUS_CONFIG[deliverable.status] || STATUS_CONFIG.PENDING
-
-  // Group versions by fileName so each file shows its own version history
-  const versionsByFile: Record<string, DeliverableVersion[]> = deliverable.versions.reduce(
-    (acc, version) => {
-      const key = version.fileName || 'Untitled file'
-      if (!acc[key]) acc[key] = []
-      acc[key].push(version)
-      return acc
-    },
-    {} as Record<string, DeliverableVersion[]>
-  )
 
   return (
     <>
@@ -482,10 +639,11 @@ export default function DeliverableDetailPage() {
             ) : (
               <div className="space-y-4">
                 {Object.entries(versionsByFile).map(([fileName, versions]) => {
-                  const sorted = [...versions].sort(
-                    (a, b) => b.versionNumber - a.versionNumber
-                  )
+                  const sorted = getSortedVersionsForFile(versionsByFile, fileName)
                   const latest = sorted[0]
+                  const selectedVersionId = selectedVersionByFile[fileName] ?? latest?.id
+                  const selectedVersion =
+                    sorted.find((v) => v.id === selectedVersionId) ?? latest
                   return (
                     <Card key={fileName} className="border">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -497,9 +655,35 @@ export default function DeliverableDetailPage() {
                             <CardTitle className="text-sm font-medium">
                               {fileName}
                             </CardTitle>
-                            <p className="text-xs text-muted-foreground">
-                              Latest v{latest.versionNumber} • {formatDateTime(latest.createdAt)}
-                            </p>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-1 h-8 gap-1 text-xs font-normal"
+                                >
+                                  v{selectedVersion?.versionNumber ?? '—'}
+                                  {selectedVersion?.id === latest?.id && ' (latest)'}
+                                  <ChevronDown className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {sorted.map((v) => (
+                                  <DropdownMenuItem
+                                    key={v.id}
+                                    onClick={() =>
+                                      setSelectedVersionByFile((prev) => ({
+                                        ...prev,
+                                        [fileName]: v.id,
+                                      }))
+                                    }
+                                  >
+                                    v{v.versionNumber}
+                                    {v.id === latest?.id && ' (latest)'}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -515,53 +699,93 @@ export default function DeliverableDetailPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDownload(latest.fileUrl)}
+                            onClick={() =>
+                              selectedVersion && handleDownload(selectedVersion.fileUrl)
+                            }
                           >
                             <Download className="h-4 w-4" />
                           </Button>
                         </div>
                       </CardHeader>
-                      <CardContent className="pt-2 space-y-2">
-                        {sorted.map((version, index) => (
-                          <div
-                            key={version.id}
-                            className={`flex items-center justify-between rounded-md border px-3 py-2 ${
-                              index === 0 ? 'border-primary/50 bg-primary/5' : 'border-muted'
-                            }`}
-                          >
-                            <div>
-                              <p className="text-sm font-medium">
-                                v{version.versionNumber}
-                                {index === 0 && (
-                                  <span className="ml-2 text-[10px] uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded">
-                                    Latest
-                                  </span>
+                      <CardContent className="pt-2">
+                        {selectedVersion ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between rounded-md border border-muted px-3 py-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs text-muted-foreground">
+                                  {formatFileSize(selectedVersion.fileSize)} •{' '}
+                                  {formatDateTime(selectedVersion.createdAt)}
+                                </p>
+                                {selectedVersion.caption !== undefined && selectedVersion.caption !== null && selectedVersion.caption !== '' ? (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Caption: <CaptionWithHashtags text={selectedVersion.caption} className="text-inherit" />
+                                  </p>
+                                ) : (
+                                  <p className="mt-1 text-xs text-muted-foreground italic">
+                                    No caption
+                                  </p>
                                 )}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {formatFileSize(version.fileSize)} • {formatDateTime(version.createdAt)}
-                              </p>
-                              {version.caption && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Caption: {version.caption}
-                                </p>
-                              )}
-                              {version.uploadedBy && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Uploaded by {version.uploadedBy.name || version.uploadedBy.email}
-                                </p>
-                              )}
+                                {(selectedVersion.captionAudits?.length ?? 0) > 0 && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Last edited by{' '}
+                                    {selectedVersion.captionAudits![0].changedBy.name ||
+                                      selectedVersion.captionAudits![0].changedBy.email}{' '}
+                                    on {formatDateTime(selectedVersion.captionAudits![0].changedAt)}
+                                  </p>
+                                )}
+                                {selectedVersion.uploadedBy && (
+                                  <p className="mt-1 text-xs text-muted-foreground">
+                                    Uploaded by{' '}
+                                    {selectedVersion.uploadedBy.name ||
+                                      selectedVersion.uploadedBy.email}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleOpenEditCaption(selectedVersion)}
+                                  title="Edit caption"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={() => handleDownload(selectedVersion.fileUrl)}
+                                >
+                                  <Download className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => handleDownload(version.fileUrl)}
-                            >
-                              <Download className="h-3 w-3" />
-                            </Button>
+                            {(selectedVersion.captionAudits?.length ?? 0) > 0 && (
+                              <details className="text-xs text-muted-foreground rounded-md border border-muted px-3 py-2">
+                                <summary className="cursor-pointer flex items-center gap-1">
+                                  <History className="h-3 w-3" />
+                                  Caption history ({selectedVersion.captionAudits!.length})
+                                </summary>
+                                <ul className="mt-2 space-y-1.5 list-none pl-0">
+                                  {selectedVersion.captionAudits!.map((audit) => (
+                                    <li key={audit.id} className="border-l-2 border-muted pl-2">
+                                      <span className="text-muted-foreground">
+                                        {audit.newCaption != null && audit.newCaption !== '' ? (
+                                          <CaptionWithHashtags text={audit.newCaption} className="text-inherit" />
+                                        ) : (
+                                          '(cleared)'
+                                        )}{' '}
+                                        — {audit.changedBy.name || audit.changedBy.email},{' '}
+                                        {formatDateTime(audit.changedAt)}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
                           </div>
-                        ))}
+                        ) : null}
                       </CardContent>
                     </Card>
                   )
@@ -570,60 +794,238 @@ export default function DeliverableDetailPage() {
             )}
           </div>
 
-          {/* Approval History */}
-          <div>
-            <h2 className="text-lg font-semibold mb-4">Approval History</h2>
-            
-            {deliverable.approvals.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-8">
-                  <MessageSquare className="h-10 w-10 text-muted-foreground mb-3" />
-                  <h3 className="font-medium">No approvals yet</h3>
-                  <p className="text-sm text-muted-foreground text-center mt-1">
-                    Approval history will appear here
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {deliverable.approvals.map((approval) => (
-                  <Card key={approval.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-3">
-                        <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
-                          approval.decision === 'approved' 
-                            ? 'bg-green-100 text-green-600' 
-                            : 'bg-red-100 text-red-600'
-                        }`}>
-                          {approval.decision === 'approved' 
-                            ? <CheckCircle className="h-4 w-4" />
-                            : <XCircle className="h-4 w-4" />
-                          }
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <p className="font-medium capitalize">
-                              {approval.decision} - {approval.approvalLevel.toLowerCase()} Review
-                            </p>
-                            <span className="text-xs text-muted-foreground">
-                              {formatDateTime(approval.decidedAt)}
-                            </span>
-                          </div>
-                          {approval.comment && (
-                            <p className="text-sm text-muted-foreground mt-1">
-                              "{approval.comment}"
-                            </p>
-                          )}
-                          <p className="text-xs text-muted-foreground mt-2">
-                            by {approval.decidedBy.name || approval.decidedBy.email}
-                          </p>
+          {/* Right column: Preview (top) + Approval History (bottom) */}
+          <div className="space-y-6">
+            {/* Preview with file/version selection */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Preview</h2>
+              {fileKeys.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-8">
+                    <ImageIcon className="h-10 w-10 text-muted-foreground mb-3" />
+                    <h3 className="font-medium">No file to preview</h3>
+                    <p className="text-sm text-muted-foreground text-center mt-1">
+                      Upload a file to see a preview here
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <>
+                  {/* File selector */}
+                  <div className="mb-3">
+                    <p className="text-xs text-muted-foreground mb-2">File</p>
+                    <div className="flex flex-wrap gap-2">
+                      {fileKeys.map((fileKey) => (
+                        <Button
+                          key={fileKey}
+                          variant={previewFileKey === fileKey ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => selectFileForPreview(fileKey)}
+                          className="text-left truncate max-w-[180px]"
+                        >
+                          <FileCheck className="h-3 w-3 mr-1 shrink-0" />
+                          {fileKey}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Version selector (when a file is selected) */}
+                  {previewFileKey && (() => {
+                    const versions = getSortedVersionsForFile(versionsByFile, previewFileKey)
+                    return versions.length > 0 ? (
+                      <div className="mb-3">
+                        <p className="text-xs text-muted-foreground mb-2">Version</p>
+                        <div className="flex flex-wrap gap-2">
+                          {versions.map((v) => (
+                            <Button
+                              key={v.id}
+                              variant={previewVersionId === v.id ? 'default' : 'outline'}
+                              size="sm"
+                              onClick={() => selectVersionForPreview(v.id)}
+                            >
+                              v{v.versionNumber}
+                              {v.versionNumber === versions[0]?.versionNumber ? ' (latest)' : ''}
+                            </Button>
+                          ))}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
+                    ) : null
+                  })()}
+                  {/* Preview content */}
+                  {!selectedPreviewVersion ? (
+                    <Card className="border-dashed">
+                      <CardContent className="flex flex-col items-center justify-center py-8">
+                        <ImageIcon className="h-10 w-10 text-muted-foreground mb-3" />
+                        <p className="text-sm text-muted-foreground">Select a file and version</p>
+                      </CardContent>
+                    </Card>
+                  ) : isImageOrVideo(selectedPreviewVersion.mimeType) && previewSignedUrl ? (
+                    <Card>
+                      <CardContent className="p-0 overflow-hidden rounded-lg">
+                        <div className="flex items-center justify-end gap-2 p-2 border-b bg-muted/30">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const w = window.open('', '_blank')
+                              const escape = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                              const captionWithHashtagSpans = selectedPreviewVersion.caption
+                                ? escape(selectedPreviewVersion.caption).replace(
+                                    /(#\w+)/g,
+                                    '<span style="display:inline-block;background:#e0e7ff;color:#4338ca;padding:2px 6px;border-radius:4px;font-size:12px;font-weight:500;margin:0 2px">$1</span>'
+                                  )
+                                : ''
+                              const captionHtml = selectedPreviewVersion.caption
+                                ? `<p style="margin:0.5rem 1rem;color:#888;font-size:14px;text-align:center">${captionWithHashtagSpans}</p>`
+                                : ''
+                              if (w && selectedPreviewVersion.mimeType?.startsWith('image/')) {
+                                w.document.write(
+                                  `<html><body style="margin:0;display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:100vh;background:#111">${captionHtml}<img src="${previewSignedUrl}" style="max-width:100%;max-height:100vh;object-fit:contain" alt="Preview" /></body></html>`
+                                )
+                                w.document.close()
+                              } else if (w && selectedPreviewVersion.mimeType?.startsWith('video/')) {
+                                w.document.write(
+                                  `<html><body style="margin:0;display:flex;flex-direction:column;align-items:center;min-height:100vh;background:#111">${captionHtml}<video src="${previewSignedUrl}" controls style="width:100%;max-height:100vh" /></body></html>`
+                                )
+                                w.document.close()
+                              }
+                            }}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" />
+                            Pop out
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setPreviewMaximized(true)}>
+                            <Maximize2 className="h-4 w-4 mr-1" />
+                            Maximize
+                          </Button>
+                        </div>
+                        {selectedPreviewVersion.mimeType?.startsWith('image/') ? (
+                          <img
+                            src={previewSignedUrl}
+                            alt={selectedPreviewVersion.fileName || 'Preview'}
+                            className="w-full h-auto max-h-[400px] object-contain bg-muted"
+                          />
+                        ) : selectedPreviewVersion.mimeType?.startsWith('video/') ? (
+                          <video
+                            src={previewSignedUrl}
+                            controls
+                            className="w-full max-h-[400px] bg-muted"
+                          >
+                            Your browser does not support the video tag.
+                          </video>
+                        ) : null}
+                        <div className="p-3 border-t bg-muted/30 flex items-center justify-between gap-2">
+                          {selectedPreviewVersion.caption ? (
+                            <p className="text-sm text-muted-foreground flex-1 min-w-0">
+                              <CaptionWithHashtags text={selectedPreviewVersion.caption} className="text-inherit" />
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic flex-1">No caption</p>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0 h-8"
+                            onClick={() => handleOpenEditCaption(selectedPreviewVersion)}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit caption
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <Card className="border-dashed">
+                      <CardContent className="flex flex-col items-center justify-center py-8">
+                        <FileCheck className="h-10 w-10 text-muted-foreground mb-3" />
+                        <h3 className="font-medium">This type of file cannot be previewed</h3>
+                        <p className="text-sm text-muted-foreground text-center mt-1 mb-2">
+                          {selectedPreviewVersion.fileName || 'File'} is not an image or video.
+                        </p>
+                        {selectedPreviewVersion.caption && (
+                          <p className="text-sm text-muted-foreground text-center mb-2">
+                            Caption: <CaptionWithHashtags text={selectedPreviewVersion.caption} className="text-inherit" />
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleOpenEditCaption(selectedPreviewVersion)}
+                          >
+                            <Pencil className="h-3 w-3 mr-1" />
+                            Edit caption
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleDownload(selectedPreviewVersion.fileUrl)}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Approval History */}
+            <div>
+              <h2 className="text-lg font-semibold mb-4">Approval History</h2>
+              
+              {deliverable.approvals.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-8">
+                    <MessageSquare className="h-10 w-10 text-muted-foreground mb-3" />
+                    <h3 className="font-medium">No approvals yet</h3>
+                    <p className="text-sm text-muted-foreground text-center mt-1">
+                      Approval history will appear here
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-3">
+                  {deliverable.approvals.map((approval) => (
+                    <Card key={approval.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center ${
+                            approval.decision === 'approved' 
+                              ? 'bg-green-100 text-green-600' 
+                              : 'bg-red-100 text-red-600'
+                          }`}>
+                            {approval.decision === 'approved' 
+                              ? <CheckCircle className="h-4 w-4" />
+                              : <XCircle className="h-4 w-4" />
+                            }
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <p className="font-medium capitalize">
+                                {approval.decision} - {approval.approvalLevel.toLowerCase()} Review
+                              </p>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDateTime(approval.decidedAt)}
+                              </span>
+                            </div>
+                            {approval.comment && (
+                              <p className="text-sm text-muted-foreground mt-1">
+                                "{approval.comment}"
+                              </p>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-2">
+                              by {approval.decidedBy.name || approval.decidedBy.email}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -657,6 +1059,53 @@ export default function DeliverableDetailPage() {
           </Card>
         )}
       </div>
+
+      {/* Maximize Preview Dialog */}
+      <Dialog open={previewMaximized} onOpenChange={setPreviewMaximized}>
+        <DialogContent className="max-w-[95vw] w-full max-h-[95vh] flex flex-col p-2">
+          <div className="flex items-center justify-between px-2 pb-2 border-b">
+            <div>
+              <DialogTitle className="text-base">
+                {selectedPreviewVersion?.fileName || 'Preview'}
+              </DialogTitle>
+              {selectedPreviewVersion?.caption && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  <CaptionWithHashtags text={selectedPreviewVersion.caption} className="text-inherit" />
+                </p>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPreviewMaximized(false)}
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-auto min-h-0 flex flex-col items-center justify-center bg-muted/50 rounded-lg p-4">
+            {selectedPreviewVersion && previewSignedUrl && isImageOrVideo(selectedPreviewVersion.mimeType) ? (
+              selectedPreviewVersion.mimeType?.startsWith('image/') ? (
+                <img
+                  src={previewSignedUrl}
+                  alt={selectedPreviewVersion.fileName || 'Preview'}
+                  className="max-w-full max-h-[80vh] object-contain"
+                />
+              ) : selectedPreviewVersion.mimeType?.startsWith('video/') ? (
+                <video
+                  src={previewSignedUrl}
+                  controls
+                  className="max-w-full max-h-[80vh]"
+                >
+                  Your browser does not support the video tag.
+                </video>
+              ) : null
+            ) : (
+              <p className="text-muted-foreground">No preview available</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Approval Dialog */}
       <Dialog open={approvalDialogOpen} onOpenChange={setApprovalDialogOpen}>
@@ -694,6 +1143,55 @@ export default function DeliverableDetailPage() {
               className={approvalAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}
             >
               {submitting ? 'Processing...' : approvalAction === 'approve' ? 'Approve' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Caption Dialog */}
+      <Dialog
+        open={captionEditOpen}
+        onOpenChange={(open) => {
+          setCaptionEditOpen(open)
+          if (!open) setCaptionEditVersion(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit caption</DialogTitle>
+            <DialogDescription>
+              Changes are audited. Your name and the time of the change will be recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            {captionEditVersion && (
+              <p className="text-sm text-muted-foreground">
+                Version: {captionEditVersion.fileName ?? 'File'} (v{captionEditVersion.versionNumber})
+              </p>
+            )}
+            <Label htmlFor="edit-caption">Caption</Label>
+            <textarea
+              id="edit-caption"
+              rows={4}
+              value={captionEditText}
+              onChange={(e) => setCaptionEditText(e.target.value)}
+              placeholder="Caption or copy for this version..."
+              className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCaptionEditOpen(false)
+                setCaptionEditVersion(null)
+              }}
+              disabled={captionEditSaving}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveCaption} disabled={captionEditSaving}>
+              {captionEditSaving ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </DialogContent>

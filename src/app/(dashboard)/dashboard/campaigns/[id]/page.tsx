@@ -24,6 +24,15 @@ import {
   Upload,
   X,
   Pencil,
+  BarChart3,
+  Heart,
+  MessageCircle,
+  Share2,
+  MousePointerClick,
+  Target,
+  Eye,
+  TrendingUp,
+  Bookmark,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -727,24 +736,26 @@ export default function CampaignDetailPage() {
             ) : (
               <div className="space-y-3">
                 {campaign.deliverables.map((deliverable) => (
-                  <Card key={deliverable.id}>
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <FileCheck className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{deliverable.title}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {deliverable.deliverableType?.replace('_', ' ')} • {deliverable.versions.length} version{deliverable.versions.length !== 1 ? 's' : ''}
-                            </p>
+                  <Link key={deliverable.id} href={`/dashboard/deliverables/${deliverable.id}`}>
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <FileCheck className="h-5 w-5 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium">{deliverable.title}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {deliverable.deliverableType?.replace('_', ' ')} • {deliverable.versions.length} version{deliverable.versions.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
                           </div>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(deliverable.status)}`}>
+                            {deliverable.status.replace('_', ' ')}
+                          </span>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(deliverable.status)}`}>
-                          {deliverable.status.replace('_', ' ')}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             )}
@@ -801,6 +812,105 @@ export default function CampaignDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Campaign Performance (placeholder) */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <BarChart3 className="h-5 w-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold">Campaign Performance</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-6">
+              Aggregated social media metrics for this campaign. Data will appear when analytics are connected.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <FileCheck className="h-4 w-4" />
+                  Overall deliverables
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Heart className="h-4 w-4" />
+                  Likes
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <MessageCircle className="h-4 w-4" />
+                  Comments
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Share2 className="h-4 w-4" />
+                  Reshares
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Bookmark className="h-4 w-4" />
+                  Saves
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <TrendingUp className="h-4 w-4" />
+                  Engagement
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <MousePointerClick className="h-4 w-4" />
+                  Clicks
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Target className="h-4 w-4" />
+                  Conversions
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Eye className="h-4 w-4" />
+                  Impressions
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Users className="h-4 w-4" />
+                  Reach
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <BarChart3 className="h-4 w-4" />
+                  Engagement rate
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
+                  <Play className="h-4 w-4" />
+                  Video views
+                </div>
+                <p className="text-2xl font-semibold tabular-nums">—</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Edit Campaign Dialog */}

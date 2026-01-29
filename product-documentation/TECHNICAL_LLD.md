@@ -253,10 +253,21 @@ Attached at:
     - `file_url` (Supabase storage path)
     - `caption` (optional copy/caption from uploader)
   - Uniqueness is enforced on `(deliverable_id, file_name, version_number)`.
-- The **latest version per file** is shown as “Latest” in the UI, but **all versions remain visible and downloadable**.
+- The **latest version per file** is shown as “Latest” in the UI, but **versions are selectable via a dropdown (default: latest). Caption editing is available for creator and agency users (audited in deliverable_version_caption_audit). Hashtags in captions are rendered as badge-style highlights**.
 - Approved deliverables are locked for new uploads.
 
-### 10.1 File Storage & Access
+### 10.1 Deliverable Detail UX (Preview & Versions)
+
+- **Preview panel** (right column, above Approval History):
+  - **File selector**: Buttons for each file in the deliverable; selecting a file loads its latest version in the preview by default.
+  - **Version selector**: When a file is selected, version buttons (v1, v2, … latest) allow switching the preview to that version.
+  - **Preview content**: Image/video files show an automatic preview (signed URL); other types show "This type of file cannot be previewed" and a Download button.
+  - **Pop-out**: Opens the current image/video preview in a new browser window.
+  - **Maximize**: Opens the current preview in a large modal (dialog).
+  - Caption is shown below the preview and is editable (same caption edit flow as versions list).
+- **Versions list** (left column): One card per file; version dropdown (default: latest) and a single details block for the selected version (size, date, caption, uploader, "Last edited by" when caption was edited, and expandable Caption history). Edit-caption and Download actions available per version.
+
+### 10.2 File Storage & Access
 
 - Files are stored in **private Supabase Storage buckets**:
   - `campaign-attachments` – campaign-level documents, briefs, reference files.
@@ -271,6 +282,15 @@ Attached at:
     - Uses service role to create a **short-lived signed URL**.
     - Frontend opens the signed URL in a new tab.
 - The GraphQL layer stores only storage **paths** (as `String`), never public URLs.
+
+---
+
+## 10.3 Campaign Detail – Campaign Performance (Placeholder)
+
+- On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign Performance** section is rendered at the bottom.
+- Purpose: placeholder for future campaign-level social media analytics.
+- Placeholder metrics (no live data yet): Overall deliverables, Likes, Comments, Reshares, Saves, Engagement, Clicks, Conversions, Impressions, Reach, Engagement rate, Video views.
+- Each metric is shown in a small card with icon and label; value is placeholder ("—") until analytics are connected.
 
 ---
 

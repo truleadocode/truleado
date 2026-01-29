@@ -183,6 +183,18 @@ export const queries = {
           id
           name
           status
+          deliverables {
+            id
+            title
+            description
+            deliverableType
+            status
+            dueDate
+            createdAt
+            versions {
+              id
+            }
+          }
         }
       }
     }
@@ -313,6 +325,17 @@ export const queries = {
             id
             name
             email
+          }
+          captionAudits {
+            id
+            oldCaption
+            newCaption
+            changedAt
+            changedBy {
+              id
+              name
+              email
+            }
           }
         }
         approvals {
@@ -609,6 +632,26 @@ export const mutations = {
         id
         decision
         approvalLevel
+      }
+    }
+  `,
+
+  updateDeliverableVersionCaption: `
+    mutation UpdateDeliverableVersionCaption($deliverableVersionId: ID!, $caption: String) {
+      updateDeliverableVersionCaption(deliverableVersionId: $deliverableVersionId, caption: $caption) {
+        id
+        caption
+        captionAudits {
+          id
+          oldCaption
+          newCaption
+          changedAt
+          changedBy {
+            id
+            name
+            email
+          }
+        }
       }
     }
   `,

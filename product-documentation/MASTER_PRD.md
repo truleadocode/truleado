@@ -212,6 +212,8 @@ Draft → Active → Content In Review → Approved → Completed → Archived
 - For each file:
   - The system tracks a **version history** (v1, v2, v3…).
   - Uploaders can provide **optional copy/caption** with each version, visible to reviewers.
+  - **Caption editing** is available to creator and agency users; all changes are **audited** (who, when, old/new caption).
+  - Hashtags in captions are **highlighted** as badges in the UI.
   - Rejections and re-uploads create new versions, preserving history.
 - Final approved deliverables are immutable (no new versions allowed after approval).
 

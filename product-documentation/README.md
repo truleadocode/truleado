@@ -97,6 +97,9 @@ When adding new features:
 ### January 2026
 - Initial documentation created from canonical source documents
 - Established MVP scope and implementation priorities
+- **Deliverables**: Caption editing with full audit trail (`deliverable_version_caption_audit`); `updateDeliverableVersionCaption` mutation; caption display with hashtag badges; deliverable detail UX: file/version selection for preview, pop-out and maximize, version dropdown (default latest).
+- **Campaign**: Campaign Performance section (placeholder metrics) at bottom of campaign detail page.
+- **Schema**: Migration `00009_deliverable_version_caption_audit.sql`; GraphQL types `DeliverableVersionCaptionAudit`, `captionAudits` on `DeliverableVersion`.
 
 ---
 

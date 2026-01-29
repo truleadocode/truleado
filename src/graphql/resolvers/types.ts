@@ -20,6 +20,7 @@ interface UserRow {
   created_by?: string;
   decided_by?: string;
   submitted_by?: string;
+  changed_by?: string;
   client_id?: string;
   project_id?: string;
   campaign_id?: string;
@@ -325,6 +326,30 @@ export const typeResolvers = {
         .from('users')
         .select('*')
         .eq('id', parent.submitted_by)
+        .single();
+      return data;
+    },
+    captionAudits: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('deliverable_version_caption_audit')
+        .select('*')
+        .eq('deliverable_version_id', parent.id)
+        .order('changed_at', { ascending: false });
+      return data ?? [];
+    },
+  },
+
+  DeliverableVersionCaptionAudit: {
+    deliverableVersionId: (parent: { deliverable_version_id: string }) => parent.deliverable_version_id,
+    oldCaption: (parent: { old_caption: string | null }) => parent.old_caption,
+    newCaption: (parent: { new_caption: string | null }) => parent.new_caption,
+    changedAt: (parent: { changed_at: string }) => parent.changed_at,
+    changedBy: async (parent: UserRow) => {
+      if (!parent.changed_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.changed_by)
         .single();
       return data;
     },
