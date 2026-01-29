@@ -69,6 +69,7 @@ export const typeResolvers = {
 
   Agency: {
     // Field mappings for snake_case to camelCase
+    agencyCode: (parent: { agency_code: string | null }) => parent.agency_code,
     tokenBalance: (parent: { token_balance: number }) => parent.token_balance ?? 0,
     billingEmail: (parent: { billing_email: string | null }) => parent.billing_email,
     createdAt: (parent: { created_at: string }) => parent.created_at,

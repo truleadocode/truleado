@@ -117,6 +117,7 @@ export const typeDefs = gql`
   type Agency {
     id: ID!
     name: String!
+    agencyCode: String
     billingEmail: String
     status: String!
     tokenBalance: Int!
@@ -403,13 +404,25 @@ export const typeDefs = gql`
   # MUTATION ROOT
   # =============================================================================
 
+  # Create user input (signup flow - called after Firebase signup)
+  input CreateUserInput {
+    email: String!
+    name: String
+  }
+
   type Mutation {
     # ---------------------------------------------
-    # Agency & Client Mutations
+    # Identity & Agency Mutations
     # ---------------------------------------------
+    
+    # Create user in DB and link to Firebase UID (signup flow)
+    createUser(input: CreateUserInput!): User!
     
     # Create a new agency (signup flow)
     createAgency(name: String!, billingEmail: String): Agency!
+    
+    # Join an existing agency by code (onboarding)
+    joinAgencyByCode(agencyCode: String!): Agency!
     
     # Create a client under an agency
     createClient(agencyId: ID!, name: String!, accountManagerId: ID!): Client!

@@ -97,22 +97,34 @@ External Services
 
 ### 4.2 Auth Flow
 
-```
-User Login (Firebase)
-  ↓
-Firebase issues JWT
-  ↓
-JWT sent with API request
-  ↓
-Backend verifies JWT
-  ↓
-Maps Firebase UID → Internal User
-```
+**Signup**
 
-### 4.3 Multi-Agency Safety
-- User may belong to **multiple agencies**
-- Active agency context selected at login
-- Every API call must include `agency_id`
+1. User signs up with Firebase (email/password).
+2. Client calls `createUser(input: { email, name })` with Bearer token.
+3. Backend creates `users` row and `auth_identities` row (provider `firebase_email`, `provider_uid` = Firebase UID).
+4. User is then directed to sign-in (or auto-signed-in); see Post-login below.
+
+**Login & API**
+
+1. User signs in with Firebase → Firebase issues JWT.
+2. JWT sent with every API request (`Authorization: Bearer <token>`).
+3. Backend verifies JWT, then looks up `auth_identities` by `provider_uid` → gets `user_id` → loads user and agency memberships into context.
+4. All resolvers use `ctx.user`; `me` query returns user and agencies.
+
+### 4.3 Post-Login & Onboarding
+
+- **Login page**: After successful sign-in, the client does **not** redirect immediately. It waits until auth context has finished loading (`loading === false`, `user` set). Then it redirects once:
+  - If `agencies.length > 0` → `/dashboard`
+  - If `agencies.length === 0` → `/choose-agency`
+- **Choose-agency** (`/choose-agency`): User must pick **Create a new Agency** or **Join an existing Agency** (routes: `/create-agency`, `/join-agency`).
+- **Create agency**: Form collects agency name; calls `createAgency`; backend generates unique `agency_code`, assigns user as Agency Admin; redirect to `/dashboard`.
+- **Join agency**: Form collects agency code; calls `joinAgencyByCode`; redirect to `/dashboard`.
+- **Access guard**: All dashboard routes are wrapped in `ProtectedRoute`; if `user` has no agencies, redirect to `/choose-agency`.
+
+### 4.4 Multi-Agency Safety
+- User may belong to **multiple agencies** (currently product enforces one agency per user for onboarding).
+- Active agency context selected at login (or via header `X-Agency-ID`).
+- Every API call must include `agency_id` where applicable.
 
 ---
 

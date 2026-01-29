@@ -1,10 +1,13 @@
 "use client"
 
-import { Building2, Users, CreditCard, Bell, Shield, Palette } from 'lucide-react'
+import { useState } from 'react'
+import { Building2, Users, CreditCard, Bell, Shield, Palette, Copy, Check } from 'lucide-react'
 import Link from 'next/link'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
+import { useToast } from '@/hooks/use-toast'
 
 const settingsSections = [
   {
@@ -47,6 +50,23 @@ const settingsSections = [
 
 export default function SettingsPage() {
   const { currentAgency } = useAuth()
+  const { toast } = useToast()
+  const [copied, setCopied] = useState(false)
+
+  const isAgencyAdmin = currentAgency?.role?.toLowerCase() === 'agency_admin'
+  const agencyCode = currentAgency?.agencyCode
+
+  const handleCopyCode = async () => {
+    if (!agencyCode) return
+    try {
+      await navigator.clipboard.writeText(agencyCode)
+      setCopied(true)
+      toast({ title: 'Agency code copied to clipboard' })
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast({ title: 'Failed to copy', variant: 'destructive' })
+    }
+  }
 
   return (
     <>
@@ -55,7 +75,29 @@ export default function SettingsPage() {
         subtitle={currentAgency?.name ? `Settings for ${currentAgency.name}` : 'Manage your preferences'} 
       />
       
-      <div className="p-6">
+      <div className="p-6 space-y-6">
+        {isAgencyAdmin && agencyCode && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Share Agency Code
+              </CardTitle>
+              <CardDescription>
+                Share this code with team members so they can join your agency. They&apos;ll enter it on the &quot;Join an existing Agency&quot; screen.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex items-center gap-3">
+              <code className="flex-1 rounded-md border bg-muted px-3 py-2 text-lg font-mono font-semibold">
+                {agencyCode}
+              </code>
+              <Button variant="outline" size="sm" onClick={handleCopyCode}>
+                {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                {copied ? ' Copied' : ' Copy'}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {settingsSections.map((section) => (
             <Link key={section.title} href={section.href}>

@@ -22,6 +22,7 @@
 CREATE TABLE agencies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  agency_code TEXT UNIQUE,
   billing_email TEXT,
   token_balance INTEGER DEFAULT 0,
   status TEXT CHECK (status IN ('active','suspended')) DEFAULT 'active',
@@ -29,6 +30,8 @@ CREATE TABLE agencies (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+> **agency_code**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on insert via trigger; used by `joinAgencyByCode`. See migration `00010_agency_code_for_join.sql`.
 
 ---
 

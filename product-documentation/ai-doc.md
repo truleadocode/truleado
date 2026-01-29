@@ -88,6 +88,8 @@ These Supabase migrations exist and should be applied in order:
    - Drops old `(deliverable_id, version_number)` unique constraint.
    - Adds `(deliverable_id, file_name, version_number)` unique constraint.
 7. `00009_deliverable_version_caption_audit.sql` – adds `deliverable_version_caption_audit` table for audited caption edits (who, when, old/new caption).
+8. `00008_revert_agency_code.sql` – (if applied) reverts earlier agency_code changes; see 00010 for current state.
+9. `00010_agency_code_for_join.sql` – adds `agency_code` to `agencies` (unique, generated on insert via trigger); used by `joinAgencyByCode`.
 
 **Manual actions required in Supabase:**
 
@@ -101,6 +103,14 @@ These Supabase migrations exist and should be applied in order:
 ### 5.1 Authentication & Shell
 
 - Firebase-based authentication.
+- **Signup**: After Firebase signup, client calls `createUser(input: { email, name })` to create `users` row and `auth_identities` link (provider `firebase_email`). Idempotent if identity exists.
+- **Login UX**: After sign-in, client waits for auth context to load user and agencies, then redirects once to `/dashboard` (if has agency) or `/choose-agency` (if no agency). No intermediate dashboard loading.
+- **Onboarding** (when user has no agency):
+  - Routes: `/choose-agency`, `/create-agency`, `/join-agency` (route group `(onboarding)`; links use paths without `/onboarding/` prefix).
+  - Create agency: form → `createAgency` → backend generates unique `agency_code`, assigns user as Agency Admin → redirect `/dashboard`.
+  - Join agency: form → `joinAgencyByCode(agencyCode)` → redirect `/dashboard`. Agency Admin can share code via Settings.
+- **Access guard**: `ProtectedRoute` wraps dashboard; if `agencies.length === 0` redirects to `/choose-agency`.
+- **Auth context**: `fetchUserData` has 15s timeout; `setLoading(false)` in `finally`; `auth_identities` lookup uses `.limit(1)` for resilience.
 - Dashboard shell with:
   - Top header.
   - Navigation to Clients, Projects, Campaigns, Deliverables.

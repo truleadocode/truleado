@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,7 +22,7 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const router = useRouter()
-  const { signIn, loading, error, clearError } = useAuth()
+  const { signIn, loading, user, agencies, error, clearError } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -34,16 +34,21 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema),
   })
 
+  // Redirect once we know user and agency status (no intermediate /dashboard loading)
+  useEffect(() => {
+    if (loading || !user) return
+    router.replace(agencies.length > 0 ? '/dashboard' : '/choose-agency')
+  }, [loading, user, agencies.length, router])
+
   const onSubmit = async (data: LoginFormData) => {
     clearError()
     setIsSubmitting(true)
     try {
       await signIn(data.email, data.password)
-      router.push('/dashboard')
+      // Don't navigate here — useEffect above will redirect once auth + agencies are loaded
     } catch {
-      // Error is handled by auth context
-    } finally {
       setIsSubmitting(false)
+      // Error is handled by auth context
     }
   }
 
@@ -77,6 +82,15 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {isSubmitting && (loading || user) ? (
+            <div className="flex flex-col items-center justify-center py-12 gap-4">
+              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+              <p className="text-sm font-medium">Signing you in...</p>
+              <p className="text-xs text-muted-foreground">
+                {loading ? 'Loading your account...' : 'Taking you to your workspace...'}
+              </p>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
               <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
@@ -144,11 +158,12 @@ export default function LoginPage() {
               type="submit"
               className="w-full"
               size="lg"
-              loading={isSubmitting || loading}
+              loading={isSubmitting}
             >
               Sign in
             </Button>
           </form>
+          )}
 
           <div className="mt-6">
             <div className="relative">

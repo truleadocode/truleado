@@ -55,11 +55,12 @@ Campaign Permission
 - [x] Firebase authentication  
 - [x] RBAC framework
 - [x] Agency dashboard
+- [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
 - [x] Client management
 - [x] Project management
 - [x] Campaign engine with state machine
+- [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges)
 - [ ] Creator roster
-- [ ] Deliverables & approvals
 - [ ] Audit logs
 - [ ] Basic notifications
 
@@ -100,6 +101,13 @@ When adding new features:
 - **Deliverables**: Caption editing with full audit trail (`deliverable_version_caption_audit`); `updateDeliverableVersionCaption` mutation; caption display with hashtag badges; deliverable detail UX: file/version selection for preview, pop-out and maximize, version dropdown (default latest).
 - **Campaign**: Campaign Performance section (placeholder metrics) at bottom of campaign detail page.
 - **Schema**: Migration `00009_deliverable_version_caption_audit.sql`; GraphQL types `DeliverableVersionCaptionAudit`, `captionAudits` on `DeliverableVersion`.
+- **Auth & onboarding (Phase 0)**:
+  - **createUser**: GraphQL mutation `createUser(input: CreateUserInput!)`; creates `users` row and `auth_identities` link (provider `firebase_email`) after Firebase signup; idempotent if identity exists.
+  - **Onboarding routes**: `/choose-agency`, `/create-agency`, `/join-agency` (route group `(onboarding)`; links use paths without `/onboarding/` prefix).
+  - **joinAgencyByCode**: Mutation and resolver; agency `agency_code` added (migration `00010_agency_code_for_join.sql`); Agency Admin can share code via Settings.
+  - **Access guard**: `ProtectedRoute` redirects to `/choose-agency` when `agencies.length === 0`; root and dashboard rely on this.
+  - **Login UX**: After sign-in, client waits for auth context to load user and agencies, then redirects once to `/dashboard` or `/choose-agency` (no intermediate dashboard loading).
+  - **Auth context**: `fetchUserData` timeout (15s), `setLoading(false)` in `finally`; context uses `auth_identities` lookup with `.limit(1)` for resilience.
 
 ---
 

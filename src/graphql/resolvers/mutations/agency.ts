@@ -77,6 +77,73 @@ export async function createAgency(
 }
 
 /**
+ * Join an existing agency by code (onboarding).
+ * User must be authenticated and must not already belong to an agency (for now: one agency per user).
+ */
+export async function joinAgencyByCode(
+  _: unknown,
+  { agencyCode }: { agencyCode: string },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+
+  if (user.agencies.length > 0) {
+    throw validationError('You already belong to an agency. One agency per user for now.', 'agencyCode');
+  }
+
+  const code = agencyCode?.trim()?.toUpperCase();
+  if (!code || code.length < 4) {
+    throw validationError('Please enter a valid agency code', 'agencyCode');
+  }
+
+  const { data: agency, error: agencyError } = await supabaseAdmin
+    .from('agencies')
+    .select('id, name, status')
+    .eq('agency_code', code)
+    .single();
+
+  if (agencyError || !agency) {
+    throw validationError('Agency code not found. Please check and try again.', 'agencyCode');
+  }
+
+  if (agency.status !== 'active') {
+    throw validationError('This agency is not accepting new members.', 'agencyCode');
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from('agency_users')
+    .select('id')
+    .eq('user_id', user.id)
+    .eq('agency_id', agency.id)
+    .maybeSingle();
+
+  if (existing) {
+    return agency;
+  }
+
+  const { error: membershipError } = await supabaseAdmin
+    .from('agency_users')
+    .insert({
+      agency_id: agency.id,
+      user_id: user.id,
+      role: 'operator',
+      is_active: true,
+    });
+
+  if (membershipError) {
+    throw new Error('Failed to join agency');
+  }
+
+  const { data: fullAgency } = await supabaseAdmin
+    .from('agencies')
+    .select('*')
+    .eq('id', agency.id)
+    .single();
+
+  return fullAgency ?? agency;
+}
+
+/**
  * Create a client under an agency
  */
 export async function createClient(

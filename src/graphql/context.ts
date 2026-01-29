@@ -81,13 +81,14 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
     // Verify Firebase token
     const decodedToken = await verifyIdToken(idToken);
     
-    // Look up user in our database by Firebase UID
-    const { data: authIdentity, error: authError } = await supabaseAdmin
+    // Look up user in our database by Firebase UID (limit 1 in case of duplicates)
+    const { data: authIdentities, error: authError } = await supabaseAdmin
       .from('auth_identities')
       .select('user_id')
       .eq('provider_uid', decodedToken.uid)
-      .single();
-    
+      .limit(1);
+
+    const authIdentity = authIdentities?.[0];
     if (authError || !authIdentity) {
       // User has a valid Firebase account but not registered in our system
       // This can happen if they haven't completed onboarding

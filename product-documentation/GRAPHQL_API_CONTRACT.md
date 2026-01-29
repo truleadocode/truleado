@@ -127,6 +127,7 @@ type AgencyMembership {
 type Agency {
   id: ID!
   name: String!
+  agencyCode: String
   billingEmail: String
   tokenBalance: Int!
   clients: [Client!]!
@@ -134,6 +135,8 @@ type Agency {
   createdAt: DateTime!
 }
 ```
+
+> **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.
 
 ---
 
@@ -432,11 +435,34 @@ All queries enforce agency isolation.
 
 ---
 
-## 6. Mutations – Agency & Client
+## 6. Mutations – Identity & Agency
+
+### 6.1 Identity (Signup)
+
+After Firebase signup, the client must create the user in the app DB and link the Firebase UID.
+
+```graphql
+input CreateUserInput {
+  email: String!
+  name: String
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User!
+}
+```
+
+- **Auth**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup).
+- **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user.
+- **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
+
+### 6.2 Agency & Client
 
 ```graphql
 type Mutation {
   createAgency(name: String!, billingEmail: String): Agency!
+  
+  joinAgencyByCode(agencyCode: String!): Agency!
   
   createClient(
     agencyId: ID!
@@ -447,6 +473,8 @@ type Mutation {
   archiveClient(id: ID!): Client!
 }
 ```
+
+- **joinAgencyByCode**: User must be authenticated and must not already belong to an agency (one agency per user for now). Looks up agency by `agencyCode`, inserts `agency_users` (role `operator`), returns the agency.
 
 ---
 

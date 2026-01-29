@@ -4,7 +4,8 @@
  * Combines all mutation resolvers.
  */
 
-import { createAgency, createClient } from './agency';
+import { createUser } from './user';
+import { createAgency, joinAgencyByCode, createClient } from './agency';
 import {
   createProject,
   createCampaign,
@@ -41,8 +42,11 @@ import { createPayment, markPaymentPaid } from './payment';
 import { markNotificationRead, markAllNotificationsRead } from './notification';
 
 export const mutationResolvers = {
+  // Identity (signup)
+  createUser,
   // Agency & Client
   createAgency,
+  joinAgencyByCode,
   createClient,
   
   // Project & Campaign Lifecycle

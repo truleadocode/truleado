@@ -17,6 +17,7 @@ interface User {
 interface Agency {
   id: string
   name: string
+  agencyCode?: string | null
   role: string
 }
 
@@ -34,6 +35,7 @@ interface AuthContextType {
   getToken: () => Promise<string | null>
   setCurrentAgency: (agency: Agency) => void
   clearError: () => void
+  refetchUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -50,10 +52,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const FETCH_ME_TIMEOUT_MS = 15_000
+
   const fetchUserData = useCallback(async (firebaseUser: FirebaseUser) => {
+    setError(null)
     try {
       const token = await firebaseUser.getIdToken()
-      
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), FETCH_ME_TIMEOUT_MS)
+
       const response = await fetch('/api/graphql', {
         method: 'POST',
         headers: {
@@ -71,6 +78,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                   agency {
                     id
                     name
+                    agencyCode
                   }
                   role
                 }
@@ -78,8 +86,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
           `,
         }),
+        signal: controller.signal,
       })
 
+      clearTimeout(timeoutId)
       const result = await response.json()
 
       if (result.errors) {
@@ -95,9 +105,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: userData.name,
         })
 
-        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string }; role: string }) => ({
+        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string; agencyCode?: string | null }; role: string }) => ({
           id: membership.agency.id,
           name: membership.agency.name,
+          agencyCode: membership.agency.agencyCode,
           role: membership.role,
         })) || []
 
@@ -113,27 +124,40 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     } catch (err) {
       console.error('Error fetching user data:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load user data')
+      const message =
+        err instanceof Error && err.name === 'AbortError'
+          ? 'Request timed out. Check your connection and try again.'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to load user data'
+      setError(message)
     }
   }, [])
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setFirebaseUser(firebaseUser)
-      
-      if (firebaseUser) {
-        await fetchUserData(firebaseUser)
-      } else {
-        setUser(null)
-        setAgencies([])
-        setCurrentAgencyState(null)
+      try {
+        if (firebaseUser) {
+          await fetchUserData(firebaseUser)
+        } else {
+          setUser(null)
+          setAgencies([])
+          setCurrentAgencyState(null)
+        }
+      } finally {
+        setLoading(false)
       }
-      
-      setLoading(false)
     })
 
     return () => unsubscribe()
   }, [fetchUserData])
+
+  const refetchUser = useCallback(async () => {
+    if (firebaseUser) {
+      await fetchUserData(firebaseUser)
+    }
+  }, [firebaseUser, fetchUserData])
 
   const handleSignIn = async (email: string, password: string) => {
     setError(null)
@@ -252,6 +276,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         getToken,
         setCurrentAgency,
         clearError,
+        refetchUser,
       }}
     >
       {children}

@@ -60,7 +60,7 @@ export default function SignupPage() {
     setIsSubmitting(true)
     try {
       await signUp(data.email, data.password, data.name)
-      router.push('/dashboard')
+      router.push('/choose-agency')
     } catch {
       // Error is handled by auth context
     } finally {

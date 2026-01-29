@@ -32,13 +32,16 @@ const features = [
 
 export default function HomePage() {
   const router = useRouter()
-  const { user, loading } = useAuth()
+  const { user, agencies, loading } = useAuth()
 
   useEffect(() => {
-    if (!loading && user) {
+    if (loading || !user) return
+    if (agencies.length === 0) {
+      router.push('/choose-agency')
+    } else {
       router.push('/dashboard')
     }
-  }, [user, loading, router])
+  }, [user, agencies.length, loading, router])
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30">

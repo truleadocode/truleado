@@ -437,6 +437,28 @@ export const queries = {
  * Pre-built mutations
  */
 export const mutations = {
+  createAgency: `
+    mutation CreateAgency($name: String!, $billingEmail: String) {
+      createAgency(name: $name, billingEmail: $billingEmail) {
+        id
+        name
+        agencyCode
+        createdAt
+      }
+    }
+  `,
+
+  joinAgencyByCode: `
+    mutation JoinAgencyByCode($agencyCode: String!) {
+      joinAgencyByCode(agencyCode: $agencyCode) {
+        id
+        name
+        agencyCode
+        createdAt
+      }
+    }
+  `,
+
   createClient: `
     mutation CreateClient($agencyId: ID!, $name: String!, $accountManagerId: ID!) {
       createClient(agencyId: $agencyId, name: $name, accountManagerId: $accountManagerId) {
