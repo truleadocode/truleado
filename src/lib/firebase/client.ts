@@ -14,8 +14,12 @@ import {
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
   User,
   UserCredential,
+  ActionCodeSettings,
 } from 'firebase/auth';
 
 // Firebase configuration from environment variables
@@ -100,4 +104,40 @@ export function onAuthStateChange(
  */
 export function getCurrentUser(): User | null {
   return auth.currentUser;
+}
+
+/** localStorage key for email when using client magic link (must match on /client/verify) */
+export const CLIENT_MAGIC_LINK_EMAIL_KEY = 'truleado_client_magic_link_email';
+
+/**
+ * Send magic sign-in link to email (client portal).
+ * Caller must store email in localStorage (CLIENT_MAGIC_LINK_EMAIL_KEY) before navigating away.
+ * Requires "Email link" sign-in method enabled in Firebase Console (Authentication > Sign-in method).
+ */
+export async function sendClientSignInLink(email: string): Promise<void> {
+  const baseUrl =
+    typeof window !== 'undefined' ? window.location.origin : '';
+  const actionCodeSettings: ActionCodeSettings = {
+    url: `${baseUrl}/client/verify`,
+    handleCodeInApp: true,
+  };
+  await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+}
+
+/**
+ * Check if current URL is the email link callback (client portal).
+ */
+export function isClientSignInLink(url: string): boolean {
+  return isSignInWithEmailLink(auth, url);
+}
+
+/**
+ * Complete sign-in from magic link (client portal).
+ * Pass the full URL (e.g. window.location.href) and the email stored when sending the link.
+ */
+export async function signInWithClientLink(
+  email: string,
+  emailLink: string
+): Promise<UserCredential> {
+  return signInWithEmailLink(auth, email, emailLink);
 }

@@ -64,7 +64,7 @@ CREATE TABLE auth_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider TEXT NOT NULL,
-  -- e.g. firebase_email, firebase_google, firebase_facebook, firebase_apple
+  -- e.g. firebase_email, firebase_google, firebase_facebook, firebase_apple, firebase_email_link
   provider_uid TEXT NOT NULL,
   email TEXT,
   email_verified BOOLEAN DEFAULT false,
@@ -73,7 +73,10 @@ CREATE TABLE auth_identities (
 );
 ```
 
+> **firebase_email_link**: Used for **client portal** magic-link sign-in. Users created via `ensureClientUser` (after completing sign-in at `/client/verify`) are stored with this provider. Same Firebase UID as Email Link auth; distinct from `firebase_email` (agency email/password).
+
 ---
+
 
 ### 1.4 agency_users
 

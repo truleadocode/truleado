@@ -148,13 +148,12 @@
 
 ## 🐛 Known bugs (to fix later)
 
-### Create Client — GraphQL "non-empty query" error (handoff for new agent)
+### Create Contact — "non-empty query" (fixed)
 
-- **Symptom**: On submit of the New Client form, user sees: **"GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension."** User reports error happens as soon as they click the button; nothing visible in Network tab.
-- **Context**: Either the request body is not reaching the API or the client is not sending the body. Inline mutation + direct `fetch` was tried; bug persists.
-- **Full handoff**: See **`product-documentation/ai-doc.md` §0 (Session Context)** and **§9 (Active Bug)** for exact error, what was tried, relevant files, and suggested next steps for a new agent.
+- **Was**: Client detail Contacts tab used `queries.createContact` / `updateContact` / `deleteContact` (those are mutations) → "GraphQL operations must contain a non-empty `query`" on contact CRUD.
+- **Fix**: Use `mutations.createContact`, `mutations.updateContact`, `mutations.deleteContact` in `src/app/(dashboard)/dashboard/clients/[id]/page.tsx`. Resolved.
 
-### Approval system — eligibility & UI state (fix with Client Contacts + approval overhaul)
+### Approval system — eligibility & UI state (fix with approval overhaul)
 
 * **Who can approve**: Currently all users can see and use Approve/Reject on a deliverable. This should be restricted so that:
   * Only **Campaign approvers** (assigned on the campaign) can approve at Campaign level.
@@ -166,7 +165,7 @@
 * **Status after internal approval**: After all Campaign approvers have approved, the deliverable status should update correctly to:
   * **Pending Project Approval** if the project has project approvers.
   * **Pending Client Approval** for agency users (client approval stage) if the project has no project approvers.
-* **When to fix**: Address this when implementing the **Client Contact module** (Phase 3) and do a **single pass** to fix the approval system end-to-end (eligibility checks, UI visibility, status transitions).
+* **When to fix**: Do a **single pass** to fix the approval system end-to-end (eligibility checks, UI visibility, status transitions). Phase 3 Contacts and client portal (magic-link) are already implemented.
 
 ---
 

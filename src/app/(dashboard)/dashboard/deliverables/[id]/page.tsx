@@ -24,6 +24,7 @@ import {
   ChevronDown,
   Pencil,
   History,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -208,6 +209,7 @@ export default function DeliverableDetailPage() {
   const [captionEditVersion, setCaptionEditVersion] = useState<DeliverableVersion | null>(null)
   const [captionEditText, setCaptionEditText] = useState('')
   const [captionEditSaving, setCaptionEditSaving] = useState(false)
+  const [deletingVersionId, setDeletingVersionId] = useState<string | null>(null)
 
   const fetchDeliverable = useCallback(async () => {
     try {
@@ -369,6 +371,35 @@ export default function DeliverableDetailPage() {
     setCaptionEditVersion(version)
     setCaptionEditText(version.caption ?? '')
     setCaptionEditOpen(true)
+  }
+
+  const handleDeleteVersion = async (version: DeliverableVersion, fileName: string) => {
+    if (!confirm(`Delete v${version.versionNumber} of "${fileName}"? This cannot be undone.`)) return
+    setDeletingVersionId(version.id)
+    try {
+      await graphqlRequest(mutations.deleteDeliverableVersion, {
+        deliverableVersionId: version.id,
+      })
+      toast({ title: 'File version deleted' })
+      if (previewVersionId === version.id) {
+        setPreviewVersionId(null)
+        setPreviewFileKey(null)
+      }
+      setSelectedVersionByFile((prev) => {
+        const next = { ...prev }
+        if (prev[fileName] === version.id) delete next[fileName]
+        return next
+      })
+      await fetchDeliverable()
+    } catch (err) {
+      toast({
+        title: 'Failed to delete',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingVersionId(null)
+    }
   }
 
   const handleSaveCaption = async () => {
@@ -889,6 +920,18 @@ export default function DeliverableDetailPage() {
                                 >
                                   <Download className="h-3 w-3" />
                                 </Button>
+                                {canUpload && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteVersion(selectedVersion, fileName)}
+                                    disabled={!!deletingVersionId}
+                                    title="Delete this version"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
                               </div>
                             </div>
                             {(selectedVersion.captionAudits?.length ?? 0) > 0 && (

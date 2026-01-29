@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 
 /**
@@ -13,9 +13,8 @@ export default function OnboardingLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user, agencies, loading } = useAuth()
+  const { user, agencies, contact, loading } = useAuth()
   const router = useRouter()
-  const pathname = usePathname()
 
   useEffect(() => {
     if (loading) return
@@ -23,10 +22,9 @@ export default function OnboardingLayout({
       router.push('/login')
       return
     }
-    if (agencies.length > 0) {
-      router.push('/dashboard')
-    }
-  }, [user, agencies.length, loading, router])
+    if (agencies.length > 0) router.push('/dashboard')
+    else if (contact) router.push('/client')
+  }, [user, agencies.length, contact, loading, router])
 
   if (loading || !user) {
     return (
@@ -57,9 +55,7 @@ export default function OnboardingLayout({
     )
   }
 
-  if (agencies.length > 0) {
-    return null
-  }
+  if (agencies.length > 0 || contact) return null
 
   return (
     <div className="min-h-screen flex">

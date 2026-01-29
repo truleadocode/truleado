@@ -22,7 +22,7 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const router = useRouter()
-  const { signIn, loading, user, agencies, error, clearError } = useAuth()
+  const { signIn, loading, user, agencies, contact, error, clearError } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -37,8 +37,10 @@ export default function LoginPage() {
   // Redirect once we know user and agency status (no intermediate /dashboard loading)
   useEffect(() => {
     if (loading || !user) return
-    router.replace(agencies.length > 0 ? '/dashboard' : '/choose-agency')
-  }, [loading, user, agencies.length, router])
+    if (agencies.length > 0) router.replace('/dashboard')
+    else if (contact) router.replace('/client')
+    else router.replace('/choose-agency')
+  }, [loading, user, agencies.length, contact, router])
 
   const onSubmit = async (data: LoginFormData) => {
     clearError()

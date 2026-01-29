@@ -108,6 +108,7 @@ type User {
   avatarUrl: String
   isActive: Boolean!
   agencies: [AgencyMembership!]!
+  contact: Contact      # Set when user is linked from a contact (e.g. client portal magic-link)
   createdAt: DateTime!
 }
 
@@ -118,6 +119,8 @@ type AgencyMembership {
   isActive: Boolean!
 }
 ```
+
+> **User.contact**: Optional. Present when the user was created via the **client portal** magic-link flow (`ensureClientUser`) and linked to a `contacts` row. Used for redirect logic (contact-only users → `/client`) and client portal UX.
 
 ---
 
@@ -488,12 +491,12 @@ input CreateUserInput {
 
 type Mutation {
   createUser(input: CreateUserInput!): User!
+  ensureClientUser: User!
 }
 ```
 
-- **Auth**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup).
-- **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user.
-- **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
+- **createUser**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup). **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user. **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
+- **ensureClientUser**: **Client portal** magic-link flow. Requires a valid Firebase token from **email-link sign-in** (not email/password). **Idempotent**: If an `auth_identities` row exists for this Firebase UID with provider `firebase_email_link`, returns the existing user. Otherwise: finds a `contacts` row with matching email and `is_client_approver = true`, creates `users` and `auth_identities` (provider `firebase_email_link`), updates the contact’s `user_id`, returns the user. Used after the user completes sign-in via the magic link on `/client/verify`.
 
 ### 6.2 Agency & Client
 
@@ -650,10 +653,13 @@ type Mutation {
     deliverableVersionId: ID!
     caption: String
   ): DeliverableVersion!
+
+  deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
 }
 ```
 
-> **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **deleteDeliverableVersion**: Permanently deletes a deliverable version and its file in the `deliverables` storage bucket. **Allowed only when**: (1) the deliverable status is `PENDING` or `REJECTED`, (2) the user has `UPLOAD_VERSION` on the campaign, and (3) the version has no associated approvals. Throws if the version has been used in any approval. UI: delete button on the deliverable detail page (when status permits).
 
 ---
 

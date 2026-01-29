@@ -14,6 +14,10 @@ interface User {
   name: string | null
 }
 
+interface LinkedContact {
+  id: string
+}
+
 interface Agency {
   id: string
   name: string
@@ -25,6 +29,7 @@ interface AuthContextType {
   user: User | null
   agencies: Agency[]
   currentAgency: Agency | null
+  contact: LinkedContact | null
   firebaseUser: FirebaseUser | null
   loading: boolean
   error: string | null
@@ -49,6 +54,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [agencies, setAgencies] = useState<Agency[]>([])
   const [currentAgency, setCurrentAgencyState] = useState<Agency | null>(null)
+  const [contact, setContact] = useState<LinkedContact | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -82,6 +88,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
                   }
                   role
                 }
+                contact { id }
               }
             }
           `,
@@ -113,6 +120,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         })) || []
 
         setAgencies(userAgencies)
+        setContact(userData.contact ?? null)
 
         // Set current agency from localStorage or first agency
         const savedAgencyId = typeof window !== 'undefined' 
@@ -144,6 +152,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           setUser(null)
           setAgencies([])
           setCurrentAgencyState(null)
+          setContact(null)
         }
       } finally {
         setLoading(false)
@@ -225,6 +234,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(null)
       setAgencies([])
       setCurrentAgencyState(null)
+      setContact(null)
       if (typeof window !== 'undefined') {
         localStorage.removeItem('currentAgencyId')
       }
@@ -266,6 +276,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         user,
         agencies,
         currentAgency,
+        contact,
         firebaseUser,
         loading,
         error,

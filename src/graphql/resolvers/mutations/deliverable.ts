@@ -553,3 +553,95 @@ export async function updateDeliverableVersionCaption(
 
   return updated;
 }
+
+/**
+ * Delete a deliverable version (and its storage file).
+ * Allowed only when deliverable is PENDING or REJECTED, user has UPLOAD_VERSION,
+ * and the version has no approvals.
+ */
+export async function deleteDeliverableVersion(
+  _: unknown,
+  { deliverableVersionId }: { deliverableVersionId: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: version, error: versionError } = await supabaseAdmin
+    .from('deliverable_versions')
+    .select('id, deliverable_id, file_url')
+    .eq('id', deliverableVersionId)
+    .single();
+
+  if (versionError || !version) {
+    throw notFoundError('DeliverableVersion', deliverableVersionId);
+  }
+
+  const { data: deliverable, error: delError } = await supabaseAdmin
+    .from('deliverables')
+    .select('id, status, campaigns!inner(id)')
+    .eq('id', version.deliverable_id)
+    .single();
+
+  if (delError || !deliverable) {
+    throw notFoundError('Deliverable', version.deliverable_id);
+  }
+
+  const campaign = deliverable.campaigns as { id: string };
+  await requireCampaignAccess(ctx, campaign.id, Permission.UPLOAD_VERSION);
+
+  const status = (deliverable.status as string).toLowerCase();
+  if (status !== 'pending' && status !== 'rejected') {
+    throw invalidStateError(
+      'Cannot delete file versions when deliverable is submitted or in review',
+      status
+    );
+  }
+
+  const { data: approvalRows } = await supabaseAdmin
+    .from('approvals')
+    .select('id')
+    .eq('deliverable_version_id', deliverableVersionId)
+    .limit(1);
+
+  if (approvalRows && approvalRows.length > 0) {
+    throw invalidStateError(
+      'Cannot delete a version that has been used in an approval',
+      'approved'
+    );
+  }
+
+  if (version.file_url) {
+    const { error: storageError } = await supabaseAdmin.storage
+      .from('deliverables')
+      .remove([version.file_url]);
+
+    if (storageError) {
+      console.error('Storage delete error:', storageError);
+      throw new Error('Failed to delete file from storage');
+    }
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('deliverable_versions')
+    .delete()
+    .eq('id', deliverableVersionId);
+
+  if (deleteError) {
+    throw new Error('Failed to delete deliverable version');
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaign.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'deliverable_version',
+      entityId: deliverableVersionId,
+      action: 'deleted',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      metadata: { deliverableId: version.deliverable_id, fileUrl: version.file_url },
+    });
+  }
+
+  return true;
+}

@@ -521,6 +521,17 @@ export const mutations = {
     }
   `,
 
+  ensureClientUser: `
+    mutation EnsureClientUser {
+      ensureClientUser {
+        id
+        email
+        name
+        contact { id }
+      }
+    }
+  `,
+
   createContact: `
     mutation CreateContact($clientId: ID!, $firstName: String!, $lastName: String!, $email: String, $mobile: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
       createContact(clientId: $clientId, firstName: $firstName, lastName: $lastName, email: $email, mobile: $mobile, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
@@ -794,6 +805,12 @@ export const mutations = {
           }
         }
       }
+    }
+  `,
+
+  deleteDeliverableVersion: `
+    mutation DeleteDeliverableVersion($deliverableVersionId: ID!) {
+      deleteDeliverableVersion(deliverableVersionId: $deliverableVersionId)
     }
   `,
 };

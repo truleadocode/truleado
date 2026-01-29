@@ -70,6 +70,7 @@ External Services
   - Email / Password
   - Google OAuth
   - LinkedIn OAuth (for agencies)
+  - **Email link (passwordless)** for **client portal** (magic-link sign-in at `/client/login`)
 - **Session Handling**: Firebase JWT
 
 ### Database
@@ -113,18 +114,40 @@ External Services
 
 ### 4.3 Post-Login & Onboarding
 
-- **Login page**: After successful sign-in, the client does **not** redirect immediately. It waits until auth context has finished loading (`loading === false`, `user` set). Then it redirects once:
+- **Login page** (`/login`): After successful sign-in, the client does **not** redirect immediately. It waits until auth context has finished loading (`loading === false`, `user` set). Then it redirects once:
   - If `agencies.length > 0` → `/dashboard`
-  - If `agencies.length === 0` → `/choose-agency`
+  - If `agencies.length === 0` and `contact` exists → `/client` (client portal)
+  - If `agencies.length === 0` and no `contact` → `/choose-agency`
 - **Choose-agency** (`/choose-agency`): User must pick **Create a new Agency** or **Join an existing Agency** (routes: `/create-agency`, `/join-agency`).
 - **Create agency**: Form collects agency name; calls `createAgency`; backend generates unique `agency_code`, assigns user as Agency Admin; redirect to `/dashboard`.
 - **Join agency**: Form collects agency code; calls `joinAgencyByCode`; redirect to `/dashboard`.
-- **Access guard**: All dashboard routes are wrapped in `ProtectedRoute`; if `user` has no agencies, redirect to `/choose-agency`.
+- **Access guard**: All dashboard routes are wrapped in `ProtectedRoute`; if `user` has no agencies, redirect to `/choose-agency` (or `/client` when `contact` exists; see §4.5).
 
 ### 4.4 Multi-Agency Safety
 - User may belong to **multiple agencies** (currently product enforces one agency per user for onboarding).
 - Active agency context selected at login (or via header `X-Agency-ID`).
 - Every API call must include `agency_id` where applicable.
+
+### 4.5 Client Portal & Magic-Link Auth
+
+**Purpose**: Client approvers (contacts with `is_client_approver`) access a **separate client portal** at `/client` — read-only deliverables, approve/reject, simple UI. They are **not** expected to be agency users; they sign in via **magic link** (Firebase Email Link) only.
+
+**Flow**:
+
+1. **Request link** (`/client/login`): User enters email. Frontend calls `POST /api/client-auth/request-magic-link` (validates email belongs to a contact with `is_client_approver`). Then `sendSignInLinkToEmail` (Firebase) sends the sign-in link to that email. Email is stored in `localStorage` for the verify step.
+2. **Verify** (`/client/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureClientUser` (GraphQL). Backend creates `users` + `auth_identities` (provider `firebase_email_link`) and links the contact via `contacts.user_id`; idempotent if already done. Redirect to `/client`.
+3. **Client dashboard** (`/client`): Placeholder today; will show deliverables for approval, campaigns/projects for their company.
+
+**Auth context**: `GetMe` fetches `me { ... contact { id } }`. `User.contact` is set when the user was created via `ensureClientUser`. Redirect logic uses `contact`: if `user` has no agencies but has `contact`, redirect to `/client` (login, root, onboarding, `ProtectedRoute`).
+
+**API routes**:
+
+- `POST /api/client-auth/request-magic-link`: Body `{ email }`. Ensures a `contacts` row exists with that email (case-insensitive) and `is_client_approver = true`; returns `200 { ok: true }` or `404`. No email sent by this route; Firebase sends the actual magic-link email.
+- `POST /api/client-auth/dev-magic-link`: **Dev-only** (`NODE_ENV === 'development'`). Body `{ email, origin }`. Same contact check. Uses Firebase Admin `generateSignInWithEmailLink` to return `{ link }` so the app can display the link for copying when SMTP is not configured. Used by `/client/login` on localhost.
+
+**Firebase**: Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method → Email/Password. Add `localhost` to **Authorized domains** (Authentication → Settings) for local testing.
+
+**“Email already in use”**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows “Use agency sign-in” with a link to `/login`; user signs in with password instead.
 
 ---
 

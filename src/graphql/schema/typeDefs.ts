@@ -106,6 +106,7 @@ export const typeDefs = gql`
     avatarUrl: String
     isActive: Boolean!
     agencies: [AgencyMembership!]!
+    contact: Contact
     createdAt: DateTime!
   }
 
@@ -454,6 +455,9 @@ export const typeDefs = gql`
     # Create user in DB and link to Firebase UID (signup flow)
     createUser(input: CreateUserInput!): User!
     
+    # Client portal: create user from magic-link auth and link to contact. Idempotent.
+    ensureClientUser: User!
+    
     # Create a new agency (signup flow)
     createAgency(name: String!, billingEmail: String): Agency!
     
@@ -592,6 +596,9 @@ export const typeDefs = gql`
       deliverableVersionId: ID!
       caption: String
     ): DeliverableVersion!
+    
+    # Delete a deliverable version (and its file). Only when deliverable is PENDING/REJECTED and version has no approvals.
+    deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
     
     # ---------------------------------------------
     # Creator Mutations

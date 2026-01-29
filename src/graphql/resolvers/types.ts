@@ -65,6 +65,14 @@ export const typeResolvers = {
         isActive: au.is_active,
       }));
     },
+    contact: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('user_id', parent.id)
+        .maybeSingle();
+      return data ?? null;
+    },
   },
 
   Agency: {

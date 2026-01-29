@@ -4,7 +4,7 @@
  * Combines all mutation resolvers.
  */
 
-import { createUser } from './user';
+import { createUser, ensureClientUser } from './user';
 import { createAgency, joinAgencyByCode, createClient } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover } from './project';
@@ -31,6 +31,7 @@ import {
   approveDeliverable,
   rejectDeliverable,
   updateDeliverableVersionCaption,
+  deleteDeliverableVersion,
 } from './deliverable';
 import {
   addCreator,
@@ -46,6 +47,7 @@ import { markNotificationRead, markAllNotificationsRead } from './notification';
 export const mutationResolvers = {
   // Identity (signup)
   createUser,
+  ensureClientUser,
   // Agency & Client
   createAgency,
   joinAgencyByCode,
@@ -81,6 +83,7 @@ export const mutationResolvers = {
   approveDeliverable,
   rejectDeliverable,
   updateDeliverableVersionCaption,
+  deleteDeliverableVersion,
   
   // Creators
   addCreator,

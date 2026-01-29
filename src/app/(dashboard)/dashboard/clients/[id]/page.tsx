@@ -39,7 +39,7 @@ import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
 import { getCampaignStatusLabel } from '@/lib/campaign-status'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 
 interface Project {
@@ -160,7 +160,7 @@ export default function ClientDetailPage() {
     setSubmitting(true)
     try {
       if (editingContact) {
-        await graphqlRequest(queries.updateContact, {
+        await graphqlRequest(mutations.updateContact, {
           id: editingContact.id,
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
@@ -173,7 +173,7 @@ export default function ClientDetailPage() {
         })
         toast({ title: 'Contact updated' })
       } else {
-        await graphqlRequest(queries.createContact, {
+        await graphqlRequest(mutations.createContact, {
           clientId,
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
@@ -198,7 +198,7 @@ export default function ClientDetailPage() {
   const handleDeleteContact = async (contactId: string) => {
     if (!confirm('Delete this contact?')) return
     try {
-      await graphqlRequest(queries.deleteContact, { id: contactId })
+      await graphqlRequest(mutations.deleteContact, { id: contactId })
       toast({ title: 'Contact deleted' })
       await fetchClient()
     } catch (err) {
@@ -208,7 +208,7 @@ export default function ClientDetailPage() {
 
   const handleToggleApprover = async (c: Contact) => {
     try {
-      await graphqlRequest(queries.updateContact, {
+      await graphqlRequest(mutations.updateContact, {
         id: c.id,
         isClientApprover: !c.isClientApprover,
       })
