@@ -167,7 +167,7 @@ export async function getAgencyIdForCampaign(campaignId: string): Promise<string
 }
 
 /**
- * Get user's campaign role if assigned
+ * Get user's campaign-level assignment (override only: approver, viewer, or exception operator)
  */
 export async function getCampaignRole(
   userId: string,
@@ -185,17 +185,33 @@ export async function getCampaignRole(
 }
 
 /**
+ * Check if user is assigned to a project (operator assignment at project level)
+ */
+export async function isAssignedToProject(
+  userId: string,
+  projectId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('project_users')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  
+  return !error && !!data;
+}
+
+/**
  * Comprehensive campaign access check
- * 
- * Follows the resolution order from LLD:
- * Campaign Permission → Project Permission → Client Permission → Agency Permission → Deny
+ *
+ * Resolution order (canonical): Campaign Assignment → Project Assignment → Client Ownership → Agency Role → DENY
+ * No implicit access. Operators have zero access by default; visibility only via project or campaign assignment.
  */
 export async function hasCampaignAccess(
   user: AuthenticatedUser,
   campaignId: string,
   permission?: Permission
 ): Promise<PermissionCheckResult> {
-  // Get campaign with its hierarchy
   const { data: campaign, error } = await supabaseAdmin
     .from('campaigns')
     .select(`
@@ -213,11 +229,11 @@ export async function hasCampaignAccess(
     `)
     .eq('id', campaignId)
     .single();
-  
+
   if (error || !campaign) {
     return { allowed: false, reason: 'Campaign not found' };
   }
-  
+
   const projects = campaign.projects as {
     id: string;
     client_id: string;
@@ -227,64 +243,68 @@ export async function hasCampaignAccess(
       account_manager_id: string;
     };
   };
-  
+
   const agencyId = projects.clients.agency_id;
-  const clientId = projects.clients.id;
   const accountManagerId = projects.clients.account_manager_id;
-  
-  // Check if user belongs to this agency
+  const projectId = projects.id;
+
   if (!belongsToAgency(user, agencyId)) {
     return { allowed: false, reason: 'Not a member of this agency' };
   }
-  
+
   const agencyRole = getAgencyRole(user, agencyId);
-  
-  // Agency Admin has full access
-  if (agencyRole === AgencyRole.AGENCY_ADMIN) {
-    return { allowed: true };
-  }
-  
-  // Account Manager has access to their clients' campaigns
-  if (agencyRole === AgencyRole.ACCOUNT_MANAGER && accountManagerId === user.id) {
-    return { allowed: true };
-  }
-  
-  // Check campaign-level assignment
+
+  // 1. Campaign assignment (override: approver, viewer, or exception operator)
   const campaignRole = await getCampaignRole(user.id, campaignId);
   if (campaignRole) {
-    // If checking a specific permission, verify campaign role has it
     if (permission) {
       const hasAccess = CAMPAIGN_ROLE_PERMISSIONS[campaignRole]?.includes(permission);
       return {
-        allowed: hasAccess || false,
+        allowed: hasAccess ?? false,
         reason: hasAccess ? undefined : `Campaign role ${campaignRole} does not have ${permission}`,
       };
     }
     return { allowed: true };
   }
-  
-  // Internal Approver can view campaigns in their agency
-  if (agencyRole === AgencyRole.INTERNAL_APPROVER) {
-    if (!permission || permission === Permission.VIEW_CAMPAIGN) {
-      return { allowed: true };
+
+  // 2. Project assignment (operator sees all campaigns under project)
+  const assignedToProject = await isAssignedToProject(user.id, projectId);
+  if (assignedToProject) {
+    if (permission) {
+      const hasAccess = CAMPAIGN_ROLE_PERMISSIONS[CampaignRole.OPERATOR]?.includes(permission);
+      return {
+        allowed: hasAccess ?? false,
+        reason: hasAccess ? undefined : `Project assignment does not grant ${permission}`,
+      };
     }
-    // Check if they have the specific permission
+    return { allowed: true };
+  }
+
+  // 3. Client ownership (Account Manager)
+  if (agencyRole === AgencyRole.ACCOUNT_MANAGER && accountManagerId === user.id) {
+    return { allowed: true };
+  }
+
+  // 4. Agency role
+  if (agencyRole === AgencyRole.AGENCY_ADMIN) {
+    return { allowed: true };
+  }
+
+  // Internal Approver: agency-wide view + internal approval only (no project/campaign assignment required for those)
+  if (agencyRole === AgencyRole.INTERNAL_APPROVER) {
+    if (!permission || permission === Permission.VIEW_CAMPAIGN || permission === Permission.APPROVE_INTERNAL) {
+      const hasAccess = AGENCY_ROLE_PERMISSIONS[agencyRole]?.includes(permission ?? Permission.VIEW_CAMPAIGN);
+      return { allowed: hasAccess ?? true };
+    }
     const hasAccess = AGENCY_ROLE_PERMISSIONS[agencyRole]?.includes(permission);
     return {
-      allowed: hasAccess || false,
+      allowed: hasAccess ?? false,
       reason: hasAccess ? undefined : 'Internal approvers have limited campaign access',
     };
   }
-  
-  // Operator can view campaigns in their agency but needs assignment for more
-  if (agencyRole === AgencyRole.OPERATOR) {
-    if (!permission || permission === Permission.VIEW_CAMPAIGN) {
-      return { allowed: true };
-    }
-    return { allowed: false, reason: 'Operator must be assigned to campaign for this action' };
-  }
-  
-  return { allowed: false, reason: 'Access denied' };
+
+  // Operator with no project/campaign assignment: no access
+  return { allowed: false, reason: 'Access denied. No assignment or ownership.' };
 }
 
 /**
@@ -296,17 +316,59 @@ export async function requireCampaignAccess(
   permission?: Permission
 ): Promise<AuthenticatedUser> {
   const user = requireAuth(ctx);
-  
+
   const result = await hasCampaignAccess(user, campaignId, permission);
   if (!result.allowed) {
-    throw forbiddenError(result.reason || 'You do not have access to this campaign');
+    throw forbiddenError(result.reason ?? 'You do not have access to this campaign');
   }
-  
+
   return user;
 }
 
 /**
- * Check client access
+ * Check project access: Agency Admin, Account Manager for client, or assigned to project (project_users)
+ */
+export async function hasProjectAccess(
+  user: AuthenticatedUser,
+  projectId: string
+): Promise<boolean> {
+  const agencyId = await getAgencyIdForProject(projectId);
+  if (!agencyId) return false;
+  if (!belongsToAgency(user, agencyId)) return false;
+
+  const role = getAgencyRole(user, agencyId);
+  if (role === AgencyRole.AGENCY_ADMIN) return true;
+
+  const { data: project, error } = await supabaseAdmin
+    .from('projects')
+    .select('client_id, clients!inner(account_manager_id)')
+    .eq('id', projectId)
+    .single();
+  if (error || !project) return false;
+  const client = project.clients as { account_manager_id: string };
+  if (client?.account_manager_id === user.id) return true;
+
+  return isAssignedToProject(user.id, projectId);
+}
+
+/**
+ * Require project access - throws if not authorized
+ */
+export async function requireProjectAccess(
+  ctx: GraphQLContext,
+  projectId: string
+): Promise<AuthenticatedUser> {
+  const user = requireAuth(ctx);
+  const allowed = await hasProjectAccess(user, projectId);
+  if (!allowed) {
+    throw forbiddenError('You do not have access to this project');
+  }
+  return user;
+}
+
+/**
+ * Check client access.
+ * No implicit access: Operator only has access to clients that have at least one project they're assigned to.
  */
 export async function hasClientAccess(
   user: AuthenticatedUser,
@@ -314,23 +376,36 @@ export async function hasClientAccess(
 ): Promise<boolean> {
   const agencyId = await getAgencyIdForClient(clientId);
   if (!agencyId) return false;
-  
-  // Must belong to the agency
+
   if (!belongsToAgency(user, agencyId)) return false;
-  
+
   const role = getAgencyRole(user, agencyId);
   if (!role) return false;
-  
-  // Agency Admin has access to all clients
+
   if (role === AgencyRole.AGENCY_ADMIN) return true;
-  
-  // Account Manager has access to their clients
   if (role === AgencyRole.ACCOUNT_MANAGER) {
     return await isAccountManagerForClient(user.id, clientId);
   }
-  
-  // Other agency roles can view clients in their agency
-  return [AgencyRole.OPERATOR, AgencyRole.INTERNAL_APPROVER].includes(role);
+  if (role === AgencyRole.INTERNAL_APPROVER) return true; // read-only agency-wide
+
+  // Operator: only if assigned to at least one project under this client
+  if (role === AgencyRole.OPERATOR) {
+    const { data: assignedProjects } = await supabaseAdmin
+      .from('project_users')
+      .select('project_id')
+      .eq('user_id', user.id);
+    const projectIds = (assignedProjects ?? []).map((r: { project_id: string }) => r.project_id);
+    if (projectIds.length === 0) return false;
+    const { data: projectsUnderClient } = await supabaseAdmin
+      .from('projects')
+      .select('id')
+      .eq('client_id', clientId)
+      .in('id', projectIds)
+      .limit(1);
+    return (projectsUnderClient?.length ?? 0) > 0;
+  }
+
+  return false;
 }
 
 /**

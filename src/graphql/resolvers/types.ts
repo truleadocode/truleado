@@ -59,8 +59,8 @@ export const typeResolvers = {
         .select('*, agencies!inner(*)')
         .eq('user_id', parent.id);
       
-      return (data || []).map((au) => ({
-        agency: (au as Record<string, unknown>).agencies,
+      return (data || []).map((au: { agencies: unknown; role: string; is_active: boolean }) => ({
+        agency: au.agencies,
         role: au.role.toUpperCase(),
         isActive: au.is_active,
       }));
@@ -243,7 +243,7 @@ export const typeResolvers = {
         .select('user_id')
         .eq('project_id', parent.id);
       if (!approvers?.length) return [];
-      const userIds = approvers.map((a) => a.user_id);
+      const userIds = approvers.map((a: { user_id: string }) => a.user_id);
       const { data: users } = await supabaseAdmin
         .from('users')
         .select('*')
@@ -258,9 +258,38 @@ export const typeResolvers = {
         .order('created_at', { ascending: true });
       return data || [];
     },
+    projectUsers: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('project_users')
+        .select('*')
+        .eq('project_id', parent.id)
+        .order('created_at', { ascending: true });
+      return data || [];
+    },
   },
 
   ProjectApprover: {
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    project: async (parent: { project_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', parent.project_id)
+        .single();
+      return data;
+    },
+    user: async (parent: { user_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.user_id)
+        .single();
+      return data;
+    },
+  },
+
+  ProjectUser: {
+    id: (parent: WithId) => parent.id,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     project: async (parent: { project_id: string }) => {
       const { data } = await supabaseAdmin

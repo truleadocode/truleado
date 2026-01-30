@@ -11,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { useAuth } from '@/contexts/auth-context'
 
 const applicationIdentifier = process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER
 
@@ -20,6 +21,16 @@ const NovuInbox = applicationIdentifier
       { ssr: false }
     )
   : null
+
+/** Wraps Inbox with tenant context so notifications triggered with agency tenant are shown. */
+function NovuInboxWithContext() {
+  const { currentAgency } = useAuth()
+  // Must match trigger context exactly: { tenant: { id, data } }
+  const context = currentAgency?.id
+    ? { tenant: { id: currentAgency.id, data: {} } }
+    : undefined
+  return NovuInbox ? <NovuInbox context={context} /> : null
+}
 
 interface HeaderProps {
   title?: string
@@ -65,7 +76,7 @@ export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
       {/* Notifications: Novu Inbox when configured, else placeholder */}
       {NovuInbox ? (
         <div className="flex items-center">
-          <NovuInbox />
+          <NovuInboxWithContext />
         </div>
       ) : (
         <DropdownMenu>

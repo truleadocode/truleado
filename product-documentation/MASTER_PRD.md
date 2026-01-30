@@ -76,54 +76,66 @@ AGENCY
 
 ---
 
-## 4. User Roles & Philosophy
+## 4. User Roles, Assignments & Philosophy
 
-### 4.1 Role Philosophy
+### 4.1 Separation of Roles, Assignments, and Approvals
+
+- **Roles** define *capabilities* (agency-level, fixed set).
+- **Assignments** define *visibility & scope* (project-level for operators, campaign-level for overrides).
+- **Approvals** are *responsibilities*, not hierarchy (campaign-level approver is an assignment, not a role).
+
+No implicit access. Lowest scope always wins.
+
+### 4.2 Role Philosophy
 
 - Roles define responsibility, not unlimited power
-- Permissions are campaign-scoped
+- Permissions are resolved in order: Campaign Assignment → Project Assignment → Client Ownership → Agency Role → DENY
 - The lowest scope always wins
 - No implicit access
 
-### 4.2 Roles
+### 4.3 Fixed Agency Roles (No Custom Roles)
 
 #### Agency Admin
 - Exists at agency level
-- Manages billing and subscriptions
-- Creates clients
-- Assigns Account Managers
-- Full visibility across agency
+- Full agency visibility: billing, settings, users, clients
+- Creates clients; can assign any Account Manager
+- Manages user roles and project/campaign assignments
 
 #### Account Manager (Client Owner)
-- Exactly one Account Manager per client
-- Owns the client relationship
-- Owns projects and campaigns under the client
-- Defines approval flows
-- Final authority on campaigns
-
-> The same user may be Account Manager for multiple clients.
+- A single Account Manager can own **multiple clients**
+- Each client has **exactly one** Account Manager
+- Can create new clients and automatically become owner of those clients
+- Agency Admin may create clients for any Account Manager
+- Owns projects and campaigns under their clients; defines approval flows
 
 #### Operator (Execution Role)
+- **No implicit access.** New users joining an agency default to Operator with **zero access**.
+- Visibility is granted only via **project assignment** (primary) or campaign override.
+- Operators are assigned at **project level**; once assigned, they see **all campaigns under that project** and can execute deliverables, uploads, revisions, coordination.
+- Campaign-level user assignment is for **overrides only** (extra approvers, viewers, exceptions), not required for normal execution.
 
-Operators are the day-to-day execution engine.
-
-**They can:**
-- Run campaigns
-- Coordinate creators
-- Upload content
-- Manage revisions
-- Prepare reports
-- Trigger analytics (subject to tokens)
+**They can (when assigned):**
+- Run campaigns (under assigned projects)
+- Coordinate creators, upload content, manage revisions, prepare reports, trigger analytics (subject to tokens)
 
 **They cannot:**
-- Own clients
-- Approve content
-- Control billing
+- Own clients, approve content, control billing
+- See any project or campaign without assignment
 
-#### Internal Approver (Agency)
-- Reviews deliverables before client visibility
-- Approves or rejects with comments
-- Quality control role
+#### Internal Approver (Agency-Wide Only)
+- Assigned only at **agency level**; not project- or campaign-scoped
+- Intended for senior leadership, compliance, exceptional internal approvals
+- Can approve deliverables during **internal review** when involved
+- Rare, escalation-based role
+
+### 4.4 Default Behavior
+
+- Any user joining an agency: **Role = OPERATOR**, **zero access by default**
+- Visibility is granted only via:
+  - **Client ownership** (Account Manager)
+  - **Project assignment** (Operators)
+  - **Campaign override assignment** (Approvers/Viewers)
+- Role changes apply **immediately** (no re-login)
 
 #### Client / Brand User
 - Belongs to a single client
@@ -147,8 +159,9 @@ Operators are the day-to-day execution engine.
 - Invites internal users
 
 ### 5.2 Client Setup
-- Agency Admin creates client
-- Assigns one Account Manager
+- Agency Admin or Account Manager creates client
+- Account Manager creating a client can omit assignee to become owner
+- Agency Admin may create clients for any Account Manager
 - Invites client users (approvers/viewers)
 
 ---
@@ -196,11 +209,8 @@ Draft → Active → Content In Review → Approved → Completed → Archived
 > Archived campaigns are read-only.
 
 ### 7.3 Campaign Setup
-- Campaign brief
-- Objectives
-- Deliverables
-- Timeline
-- Assigned users
+- Campaign brief, objectives, deliverables, timeline
+- **Assigned users**: Operators get access via **project assignment** (see all campaigns under project). Campaign-level user assignment is for **overrides only** (extra approvers, viewers, exceptions).
 - Approval workflow
 
 ---

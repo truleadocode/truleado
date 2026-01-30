@@ -35,7 +35,7 @@ async function getCampaignApproverUserIds(campaignId: string): Promise<string[]>
     .select('user_id')
     .eq('campaign_id', campaignId)
     .eq('role', 'approver');
-  return (data || []).map((r) => r.user_id);
+  return (data || []).map((r: { user_id: string }) => r.user_id);
 }
 
 async function notifyApprovalRequested(params: {
@@ -49,7 +49,10 @@ async function notifyApprovalRequested(params: {
   const { agencyId, deliverableId, deliverableTitle, campaignId, approvalLevel, recipientUserIds } = params;
   for (const userId of recipientUserIds) {
     const { data: u } = await supabaseAdmin.from('users').select('id, email, full_name').eq('id', userId).single();
-    if (!u) continue;
+    if (!u) {
+      console.warn('[Novu] Skipping notification: user not found', userId);
+      continue;
+    }
     await ensureSubscriber({ subscriberId: u.id, email: u.email, firstName: u.full_name?.split(' ')[0] ?? null, lastName: u.full_name?.split(' ').slice(1).join(' ') || null });
     await triggerNotification({
       workflowId: 'approval-requested',
@@ -73,9 +76,17 @@ async function notifyApprovalDecided(params: {
   const { agencyId, deliverableId, deliverableTitle, decision, decidedByName, comment, recipientUserIds } = params;
   const workflowId = decision === 'approved' ? 'approval-approved' : 'approval-rejected';
   for (const userId of recipientUserIds) {
-    const { data: u } = await supabaseAdmin.from('users').select('id, email').eq('id', userId).single();
-    if (!u) continue;
-    await ensureSubscriber({ subscriberId: u.id, email: u.email });
+    const { data: u } = await supabaseAdmin.from('users').select('id, email, full_name').eq('id', userId).single();
+    if (!u) {
+      console.warn('[Novu] Skipping approval-decided notification: user not found', userId);
+      continue;
+    }
+    await ensureSubscriber({
+      subscriberId: u.id,
+      email: u.email,
+      firstName: (u as { full_name?: string | null }).full_name?.split(' ')[0] ?? null,
+      lastName: (u as { full_name?: string | null }).full_name?.split(' ').slice(1).join(' ') || null,
+    });
     await triggerNotification({
       workflowId,
       subscriberId: u.id,
@@ -323,15 +334,21 @@ export async function submitDeliverableForReview(
     if (approverIds.length === 0) {
       console.warn('[Novu] No campaign approvers to notify for campaign', campaigns.id, '- assign approvers in Campaign → Users');
     } else {
-      console.log('[Novu] Notifying', approverIds.length, 'campaign approver(s) for approval-requested');
-      notifyApprovalRequested({
-        agencyId,
-        deliverableId,
-        deliverableTitle: updated.title,
-        campaignId: campaigns.id,
-        approvalLevel: 'internal',
-        recipientUserIds: approverIds,
-      }).catch((err) => console.error('[Novu] approval-requested notify failed:', err));
+      console.log('[Novu] Notifying', approverIds.length, 'campaign approver(s) for approval-requested', { campaignId: campaigns.id, approverIds });
+      try {
+        await notifyApprovalRequested({
+          agencyId,
+          deliverableId,
+          deliverableTitle: updated.title,
+          campaignId: campaigns.id,
+          approvalLevel: 'internal',
+          recipientUserIds: approverIds,
+        });
+        console.log('[Novu] approval-requested notifications sent');
+      } catch (err) {
+        console.error('[Novu] approval-requested notify failed:', err);
+        // Don't fail the mutation; deliverable was already submitted
+      }
     }
   }
 
@@ -442,9 +459,9 @@ async function createApproval(
       .eq('deliverable_version_id', versionId)
       .eq('approval_level', 'internal')
       .eq('decision', 'approved');
-    const approverIds = new Set((campaignApprovers || []).map((r) => r.user_id));
-    const approvedIds = new Set((internalApprovals || []).map((a) => a.decided_by));
-    const allCampaignApproved = approverIds.size > 0 && [...approverIds].every((id) => approvedIds.has(id));
+    const approverIds = new Set((campaignApprovers || []).map((r: { user_id: string }) => r.user_id));
+    const approvedIds = new Set((internalApprovals || []).map((a: { decided_by: string }) => a.decided_by));
+    const allCampaignApproved = approverIds.size > 0 && Array.from(approverIds).every((id) => approvedIds.has(id));
     if (allCampaignApproved) {
       const { data: projectApprovers } = await supabaseAdmin
         .from('project_approvers')
@@ -485,11 +502,12 @@ async function createApproval(
   }
 
   // Notify client approvers when status moves to client_review
-  if (newStatus === 'client_review') {
+  if (newStatus === 'client_review' && agencyId) {
     const { data: projectRow } = await supabaseAdmin.from('projects').select('client_id').eq('id', campaign.project_id).single();
     const clientId = projectRow?.client_id;
     if (clientId) {
       const deliverableTitle = deliverable.title as string;
+      const agencyIdForNotify = agencyId;
       (async () => {
         const { data: contacts } = await supabaseAdmin.from('contacts').select('id, user_id, email, first_name, last_name').eq('client_id', clientId).eq('is_client_approver', true);
         for (const c of contacts || []) {
@@ -501,7 +519,7 @@ async function createApproval(
               workflowId: 'approval-requested',
               subscriberId,
               email,
-              agencyId,
+              agencyId: agencyIdForNotify,
               data: { deliverableId, deliverableTitle, campaignId: campaign.id, approvalLevel: 'client', actionUrl: `/dashboard/deliverables/${deliverableId}` },
             });
           } catch (err) {
@@ -512,36 +530,71 @@ async function createApproval(
     }
   }
 
-  // Notify approvers / creator about approval decision
+  // Notify the requester (who submitted for review) + other approvers about approval decision
   const { data: submitterUser } = await supabaseAdmin.from('users').select('id, full_name').eq('id', user.id).single();
   const decidedByName = submitterUser?.full_name ?? 'Someone';
   const deliverableTitle = deliverable.title as string;
   const recipientIds = new Set<string>();
-  const { data: d } = await supabaseAdmin.from('deliverables').select('created_by').eq('id', deliverableId).single();
-  if (d?.created_by) recipientIds.add(d.created_by);
+
+  // Who requested approval: last "submitted_for_review" actor, or latest version's submitted_by
+  const { data: submitLog } = await supabaseAdmin
+    .from('activity_logs')
+    .select('actor_id')
+    .eq('entity_type', 'deliverable')
+    .eq('entity_id', deliverableId)
+    .eq('action', 'submitted_for_review')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if ((submitLog as { actor_id?: string } | null)?.actor_id) {
+    recipientIds.add((submitLog as { actor_id: string }).actor_id);
+  } else {
+    const { data: latestVersion } = await supabaseAdmin
+      .from('deliverable_versions')
+      .select('submitted_by')
+      .eq('deliverable_id', deliverableId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if ((latestVersion as { submitted_by?: string } | null)?.submitted_by) {
+      recipientIds.add((latestVersion as { submitted_by: string }).submitted_by);
+    }
+  }
+
   if (level === 'internal') {
     (await getCampaignApproverUserIds(campaign.id)).forEach((id) => recipientIds.add(id));
   } else if (level === 'project') {
     const { data: pa } = await supabaseAdmin.from('project_approvers').select('user_id').eq('project_id', campaign.project_id);
-    (pa || []).forEach((r) => recipientIds.add(r.user_id));
+    (pa || []).forEach((r: { user_id: string }) => recipientIds.add(r.user_id));
   } else if (level === 'client' || level === 'final') {
     const { data: projectRow } = await supabaseAdmin.from('projects').select('client_id').eq('id', campaign.project_id).single();
     if (projectRow?.client_id) {
       const { data: contacts } = await supabaseAdmin.from('contacts').select('user_id').eq('client_id', projectRow.client_id).eq('is_client_approver', true);
-      (contacts || []).filter((c) => c.user_id).forEach((c) => recipientIds.add(c.user_id!));
+      (contacts || []).filter((c: { user_id: string | null }) => c.user_id).forEach((c: { user_id: string | null }) => recipientIds.add(c.user_id!));
     }
   }
   recipientIds.delete(user.id);
+  if (recipientIds.size === 0) {
+    console.warn('[Novu] No recipients for approval-decided (submitter not found or same as approver)');
+  }
   if (agencyId && recipientIds.size > 0) {
-    notifyApprovalDecided({
-      agencyId,
-      deliverableId,
-      deliverableTitle,
-      decision,
-      decidedByName,
-      comment,
-      recipientUserIds: [...recipientIds],
-    }).catch((err) => console.error('Novu approval-decided notify:', err));
+    const workflowLabel = decision === 'approved' ? 'approval-approved' : 'approval-rejected';
+    console.log('[Novu] Notifying', recipientIds.size, 'recipient(s) for', workflowLabel, { recipientIds: Array.from(recipientIds) });
+    try {
+      await notifyApprovalDecided({
+        agencyId,
+        deliverableId,
+        deliverableTitle,
+        decision,
+        decidedByName,
+        comment,
+        recipientUserIds: Array.from(recipientIds),
+      });
+      console.log('[Novu]', workflowLabel, 'notifications sent');
+    } catch (err) {
+      console.error('[Novu] approval-decided notify failed:', err);
+      // Don't fail the mutation; approval was already recorded
+    }
   }
 
   return approval;

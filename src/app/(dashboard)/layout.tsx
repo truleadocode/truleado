@@ -19,7 +19,12 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  const { user } = useAuth()
+  const { user, currentAgency } = useAuth()
+
+  // Must match trigger context exactly so tenant-scoped notifications appear in Inbox.
+  const novuContext = currentAgency?.id
+    ? { tenant: { id: currentAgency.id, data: {} } }
+    : undefined
 
   return (
     <ProtectedRoute>
@@ -27,6 +32,7 @@ export default function DashboardLayout({
         <NovuProvider
           applicationIdentifier={applicationIdentifier}
           subscriberId={user.id}
+          context={novuContext}
         >
           <DashboardContent>{children}</DashboardContent>
         </NovuProvider>

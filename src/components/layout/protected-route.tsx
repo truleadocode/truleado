@@ -56,7 +56,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null
   }
 
-  if (agencies.length === 0) return null
-
+  // Remove the early return for agencies.length === 0 - let useEffect handle redirect
   return <>{children}</>
 }

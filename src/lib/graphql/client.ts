@@ -270,6 +270,11 @@ export const queries = {
           createdAt
           user { id name email }
         }
+        projectUsers {
+          id
+          createdAt
+          user { id name email }
+        }
       }
     }
   `,
@@ -655,6 +660,32 @@ export const mutations = {
   removeProjectApprover: `
     mutation RemoveProjectApprover($projectApproverId: ID!) {
       removeProjectApprover(projectApproverId: $projectApproverId)
+    }
+  `,
+  
+  addProjectUser: `
+    mutation AddProjectUser($projectId: ID!, $userId: ID!) {
+      addProjectUser(projectId: $projectId, userId: $userId) {
+        id
+        createdAt
+        user { id name email }
+      }
+    }
+  `,
+  
+  removeProjectUser: `
+    mutation RemoveProjectUser($projectUserId: ID!) {
+      removeProjectUser(projectUserId: $projectUserId)
+    }
+  `,
+  
+  setAgencyUserRole: `
+    mutation SetAgencyUserRole($agencyId: ID!, $userId: ID!, $role: UserRole!) {
+      setAgencyUserRole(agencyId: $agencyId, userId: $userId, role: $role) {
+        id
+        role
+        user { id name email }
+      }
     }
   `,
   

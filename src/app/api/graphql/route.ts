@@ -9,11 +9,17 @@
  * is consumed or not parsed correctly).
  */
 
-import { ApolloServer } from '@apollo/server';
+import { ApolloServer, HeaderMap } from '@apollo/server';
 import { startServerAndCreateNextHandler } from '@as-integrations/next';
 import { NextRequest } from 'next/server';
 import { schema } from '@/graphql/schema';
 import { createContext, GraphQLContext } from '@/graphql/context';
+
+function headersToHeaderMap(headers: Headers): HeaderMap {
+  const map = new HeaderMap();
+  headers.forEach((value, key) => map.set(key, value));
+  return map;
+}
 
 // Create Apollo Server instance
 const apolloServer = new ApolloServer<GraphQLContext>({
@@ -96,7 +102,7 @@ export async function POST(request: NextRequest) {
       body: normalizedBody,
       method: request.method || 'POST',
       search,
-      headers: request.headers,
+      headers: headersToHeaderMap(request.headers),
     },
     context: async () => createContext(request),
   });

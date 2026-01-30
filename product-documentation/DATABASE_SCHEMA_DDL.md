@@ -157,7 +157,28 @@ CREATE TABLE contacts (
 
 ## 3. Projects & Campaigns
 
-### 3.1 projects
+### 3.1 project_users (RBAC: operator assignment at project level)
+
+Operators are assigned to **projects**, not campaigns. Once assigned to a project, an operator can see and work on **all campaigns under that project**. This is the primary assignment path for operators; campaign_users is for overrides only.
+
+```sql
+CREATE TABLE project_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (project_id, user_id)
+);
+
+CREATE INDEX idx_project_users_project_id ON project_users(project_id);
+CREATE INDEX idx_project_users_user_id ON project_users(user_id);
+```
+
+Migration: `00014_project_users_rbac.sql`.
+
+---
+
+### 3.2 projects
 
 ```sql
 CREATE TABLE projects (
@@ -176,7 +197,7 @@ CREATE TABLE projects (
 
 ---
 
-### 3.2 campaigns
+### 3.3 campaigns
 
 ```sql
 CREATE TABLE campaigns (
@@ -199,7 +220,9 @@ CREATE TABLE campaigns (
 
 ## 4. Campaign User Access & Roles
 
-### 4.1 campaign_users
+### 4.1 campaign_users (override-only)
+
+Used **only for overrides**: extra approvers, viewers, or exception operator assignments. **Primary operator assignment is at project level** via `project_users`. Operators assigned to a project see all campaigns under that project; campaign-level assignment here is for exceptions or for adding approvers/viewers to a specific campaign.
 
 ```sql
 CREATE TABLE campaign_users (

@@ -57,7 +57,7 @@ export async function upsertNovuSmtpIntegration(
   };
 
   try {
-    await novu.integrations.create(CUSTOM_SMTP_PROVIDER_ID, payload);
+    await novu.integrations.create(CUSTOM_SMTP_PROVIDER_ID, payload as Parameters<typeof novu.integrations.create>[1]);
   } catch (err: unknown) {
     const ax = err as { response?: { status?: number; data?: unknown } };
     if (ax?.response?.status === 409 || String(ax).includes('identifier') || String(ax).includes('duplicate')) {

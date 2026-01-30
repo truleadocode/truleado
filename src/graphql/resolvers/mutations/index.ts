@@ -5,9 +5,9 @@
  */
 
 import { createUser, ensureClientUser } from './user';
-import { createAgency, joinAgencyByCode, createClient } from './agency';
+import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
-import { addProjectApprover, removeProjectApprover } from './project';
+import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
 import {
   createProject,
   createCampaign,
@@ -61,6 +61,8 @@ export const mutationResolvers = {
   createProject,
   addProjectApprover,
   removeProjectApprover,
+  addProjectUser,
+  removeProjectUser,
   createCampaign,
   updateCampaignDetails,
   setCampaignDates,
@@ -73,7 +75,7 @@ export const mutationResolvers = {
   completeCampaign,
   archiveCampaign,
   
-  // Campaign User Assignment
+  setAgencyUserRole,
   assignUserToCampaign,
   removeUserFromCampaign,
   

@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2025-01-29. Next session: **test email delivery** (Novu + agency SMTP).
+**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP).
 
 ---
 
@@ -42,6 +42,13 @@
    - **“Email already in use”**: If the email has an existing Firebase account (e.g. agency email/password), verify page shows “Use agency sign-in” and links to `/login`.
 
 4. **Deliverables** — Delete version, caption audit, preview, approval workflow; notifications now trigger from deliverable mutations.
+
+5. **Project-level RBAC for operators (implemented)**  
+   - **DB**: Migration `00014_project_users_rbac.sql` — `project_users` table (project_id, user_id, created_at); RLS policies for agency-scoped access. Operators assigned to projects see **all campaigns under that project**. This is the **primary assignment path** for operators; campaign_users is for overrides only (approvers, viewers, exceptions).  
+   - **GraphQL**: `Project.projectUsers` field; mutations `addProjectUser(projectId, userId)` and `removeProjectUser(projectUserId)`. Permissions: Agency Admin or Account Manager for the project's client. User must be an active agency member.  
+   - **RBAC**: Updated authorization logic in `src/lib/rbac/authorize.ts` to check project-level assignment. Resolution order: Campaign Assignment (override) → Project Assignment (primary for operators) → Client Ownership → Agency Role → DENY.  
+   - **UI**: Team settings page at `/dashboard/settings/team` shows agency users and roles. Project detail page allows assigning operators to projects (Agency Admin or Account Manager only).  
+   - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §3.1, `GRAPHQL_API_CONTRACT.md` §4.4, `TECHNICAL_LLD.md` §6.2, `MASTER_PRD.md` §4.3.
 
 **If you are a new agent:**  
 - Skim **§1–§5** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
@@ -148,6 +155,7 @@ These Supabase migrations exist and should be applied in order:
 10. `00011_phase2_approval_system.sql` – project_approvers table; deliverable status `pending_project_approval`; approval_level includes `project`; RLS for project_approvers.
 11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
 12. `00013_agency_email_config.sql` – **agency_email_config** table (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped; agency admin for insert/update/delete. Used for Novu per-agency SMTP.
+13. `00014_project_users_rbac.sql` – **project_users** table (project_id, user_id, created_at); RLS for agency-scoped access. Operators assigned to projects see all campaigns under that project. Primary assignment path for operators; campaign_users is for overrides only.
 
 **Manual actions required in Supabase:**
 
@@ -332,7 +340,7 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
 
 When a new AI (or engineer) picks this up:
 
-1. **Re-run migrations** (or verify applied) in order `00001` → `00013` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`).
+1. **Re-run migrations** (or verify applied) in order `00001` → `00014` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`, `00014_project_users_rbac.sql`).
 2. **Ensure buckets exist** in Supabase: `campaign-attachments`, `deliverables`, with appropriate RLS.
 3. **Skim these files first**:
    - `product-documentation/MASTER_PRD.md`
@@ -367,6 +375,13 @@ When a new AI (or engineer) picks this up:
      - `src/app/(dashboard)/dashboard/settings/notifications/page.tsx`; header Inbox (`src/components/layout/header.tsx`); dashboard layout NovuProvider (`src/app/(dashboard)/layout.tsx`)
      - `scripts/trigger-sample-notification.js`
      - `product-documentation/notification-service-implementation.md`
+   - **Project-level RBAC (operators)**:
+     - `supabase/migrations/00014_project_users_rbac.sql` (project_users table, RLS)
+     - `src/graphql/resolvers/mutations/project.ts` (addProjectUser, removeProjectUser)
+     - `src/graphql/resolvers/types.ts` (Project.projectUsers resolver)
+     - `src/lib/rbac/authorize.ts` (project-level access checks)
+     - `src/app/(dashboard)/dashboard/settings/team/page.tsx` (team settings UI)
+     - `src/app/(dashboard)/dashboard/projects/[id]/page.tsx` (project detail with operator assignment)
 
 This should provide enough context for a new agent to continue seamlessly from where the last session left off.
 

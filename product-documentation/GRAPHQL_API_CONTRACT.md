@@ -200,9 +200,28 @@ type Project {
   endDate: DateTime
   isArchived: Boolean!
   campaigns: [Campaign!]!
+  approverUsers: [User!]!
+  projectApprovers: [ProjectApprover!]!
+  projectUsers: [ProjectUser!]!
+  createdAt: DateTime!
+}
+
+type ProjectApprover {
+  id: ID!
+  project: Project!
+  user: User!
+  createdAt: DateTime!
+}
+
+type ProjectUser {
+  id: ID!
+  project: Project!
+  user: User!
   createdAt: DateTime!
 }
 ```
+
+> **projectUsers**: Operators assigned to this project; they see all campaigns under it. Primary assignment path for operators. **projectApprovers**: Optional project-level approval stage.
 
 ---
 
@@ -258,6 +277,8 @@ type CampaignCreator {
   createdAt: DateTime!
 }
 ```
+
+> **Campaign users** are **override-only** (extra approvers, viewers, or exception operators). Primary operator assignment is at **project level** via `projectUsers` / `addProjectUser`.
 
 ---
 
@@ -535,7 +556,7 @@ type Mutation {
   createClient(
     agencyId: ID!
     name: String!
-    accountManagerId: ID!
+    accountManagerId: ID
   ): Client!
   
   archiveClient(id: ID!): Client!
@@ -631,10 +652,16 @@ type Mutation {
   archiveCampaign(campaignId: ID!): Campaign!
   
   # Campaign user management
+  addProjectUser(projectId: ID!, userId: ID!): ProjectUser!
+  removeProjectUser(projectUserId: ID!): Boolean!
+  setAgencyUserRole(agencyId: ID!, userId: ID!, role: UserRole!): AgencyUser!
   assignUserToCampaign(campaignId: ID!, userId: ID!, role: String!): CampaignUser!
-  removeUserFromCampaign(campaignId: ID!, userId: ID!): Boolean!
+  removeUserFromCampaign(campaignUserId: ID!): Boolean!
 }
 ```
+
+- **addProjectUser**: Assigns an operator to a project. **Permissions**: Agency Admin or Account Manager for the project's client. The user must be an active member of the agency. Once assigned, the operator sees all campaigns under that project. This is the **primary assignment path** for operators. Returns `ProjectUser` or throws if user is already assigned or not an agency member.
+- **removeProjectUser**: Removes an operator from a project. **Permissions**: Agency Admin or Account Manager for the project's client. Returns `true` on success.
 
 ---
 

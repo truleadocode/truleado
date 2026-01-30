@@ -180,10 +180,18 @@ export const typeDefs = gql`
     campaigns: [Campaign!]!
     approverUsers: [User!]!
     projectApprovers: [ProjectApprover!]!
+    projectUsers: [ProjectUser!]!
     createdAt: DateTime!
   }
 
   type ProjectApprover {
+    id: ID!
+    project: Project!
+    user: User!
+    createdAt: DateTime!
+  }
+
+  type ProjectUser {
     id: ID!
     project: Project!
     user: User!
@@ -494,8 +502,8 @@ export const typeDefs = gql`
     # Join an existing agency by code (onboarding)
     joinAgencyByCode(agencyCode: String!): Agency!
     
-    # Create a client under an agency
-    createClient(agencyId: ID!, name: String!, accountManagerId: ID!): Client!
+    # Create a client under an agency (Account Manager can omit accountManagerId to become owner)
+    createClient(agencyId: ID!, name: String!, accountManagerId: ID): Client!
     
     # Create/update/delete contacts (Phase 3)
     createContact(
@@ -701,10 +709,19 @@ export const typeDefs = gql`
     ): Payment!
     
     # ---------------------------------------------
-    # Campaign User Assignment
+    # Project & Campaign Assignment (RBAC)
     # ---------------------------------------------
     
-    # Assign a user to a campaign with a specific role
+    # Assign an operator to a project (sees all campaigns under project)
+    addProjectUser(projectId: ID!, userId: ID!): ProjectUser!
+    
+    # Remove an operator from a project
+    removeProjectUser(projectUserId: ID!): Boolean!
+    
+    # Set agency user role (Agency Admin only). Applies immediately.
+    setAgencyUserRole(agencyId: ID!, userId: ID!, role: UserRole!): AgencyUser!
+    
+    # Campaign-level override: assign approver/viewer (or exception operator)
     assignUserToCampaign(
       campaignId: ID!
       userId: ID!

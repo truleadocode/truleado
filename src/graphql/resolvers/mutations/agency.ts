@@ -144,32 +144,45 @@ export async function joinAgencyByCode(
 }
 
 /**
- * Create a client under an agency
+ * Create a client under an agency.
+ * Account Manager can omit accountManagerId to become owner.
+ * Agency Admin may create clients for any Account Manager.
  */
 export async function createClient(
   _: unknown,
   {
     agencyId,
     name,
-    accountManagerId,
+    accountManagerId: accountManagerIdInput,
   }: {
     agencyId: string;
     name: string;
-    accountManagerId: string;
+    accountManagerId?: string | null;
   },
   ctx: GraphQLContext
 ) {
-  // Only Agency Admin or Account Manager can create clients
   requireAgencyRole(ctx, agencyId, [
     AgencyRole.AGENCY_ADMIN,
     AgencyRole.ACCOUNT_MANAGER,
   ]);
-  
+
   if (!name || name.trim().length < 2) {
     throw validationError('Client name must be at least 2 characters', 'name');
   }
-  
-  // Verify the account manager exists and belongs to the agency
+
+  const accountManagerId =
+    accountManagerIdInput?.trim() ||
+    (ctx.user!.agencies.some((a) => a.agencyId === agencyId && a.role === AgencyRole.ACCOUNT_MANAGER)
+      ? ctx.user!.id
+      : null);
+
+  if (!accountManagerId) {
+    throw validationError(
+      'Account manager is required, or sign in as an Account Manager to become owner',
+      'accountManagerId'
+    );
+  }
+
   const { data: accountManager, error: amError } = await supabaseAdmin
     .from('agency_users')
     .select('user_id, role')
@@ -177,15 +190,14 @@ export async function createClient(
     .eq('user_id', accountManagerId)
     .eq('is_active', true)
     .single();
-  
+
   if (amError || !accountManager) {
     throw validationError(
       'Account manager must be an active member of the agency',
       'accountManagerId'
     );
   }
-  
-  // Account manager role check
+
   if (
     accountManager.role !== AgencyRole.AGENCY_ADMIN &&
     accountManager.role !== AgencyRole.ACCOUNT_MANAGER
@@ -224,7 +236,6 @@ export async function createClient(
     throw new Error('Failed to create client');
   }
   
-  // Log the activity
   await logActivity({
     agencyId,
     entityType: 'client',
@@ -234,6 +245,76 @@ export async function createClient(
     actorType: 'user',
     afterState: client,
   });
-  
+
   return client;
+}
+
+const AGENCY_ROLES = [
+  AgencyRole.AGENCY_ADMIN,
+  AgencyRole.ACCOUNT_MANAGER,
+  AgencyRole.OPERATOR,
+  AgencyRole.INTERNAL_APPROVER,
+] as const;
+
+/**
+ * Set agency user role (Agency Admin only). Applies immediately.
+ */
+export async function setAgencyUserRole(
+  _: unknown,
+  {
+    agencyId,
+    userId,
+    role,
+  }: {
+    agencyId: string;
+    userId: string;
+    role: string;
+  },
+  ctx: GraphQLContext
+) {
+  requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN]);
+
+  const normalizedRole = role.toLowerCase();
+  if (!AGENCY_ROLES.includes(normalizedRole as (typeof AGENCY_ROLES)[number])) {
+    throw validationError(
+      `Role must be one of: ${AGENCY_ROLES.join(', ')}`,
+      'role'
+    );
+  }
+
+  const { data: agencyUser, error: fetchError } = await supabaseAdmin
+    .from('agency_users')
+    .select('id, role')
+    .eq('agency_id', agencyId)
+    .eq('user_id', userId)
+    .single();
+
+  if (fetchError || !agencyUser) {
+    throw notFoundError('Agency user', `${agencyId}:${userId}`);
+  }
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('agency_users')
+    .update({ role: normalizedRole, updated_at: new Date().toISOString() })
+    .eq('id', agencyUser.id)
+    .select()
+    .single();
+
+  if (updateError || !updated) {
+    throw new Error('Failed to update role');
+  }
+
+  await logActivity({
+    agencyId,
+    entityType: 'agency_user',
+    entityId: agencyUser.id,
+    action: 'role_updated',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: { role: agencyUser.role },
+    afterState: { role: normalizedRole },
+    metadata: { userId },
+  });
+
+  return updated;
 }

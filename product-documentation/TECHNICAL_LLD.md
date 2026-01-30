@@ -157,11 +157,13 @@ External Services
 
 - agencies
 - users
-- agency_users (role mapping)
+- agency_users (role mapping: agency_admin, account_manager, operator, internal_approver)
 - clients
 - projects
+- **project_users** (operator assignment at project level; primary path for operator visibility)
+- project_approvers (optional project-level approval stage)
 - campaigns
-- campaign_users
+- campaign_users (override-only: approver, viewer, exception operator)
 - creators
 - deliverables
 - deliverable_versions
@@ -179,25 +181,30 @@ All domain entities include:
 
 ---
 
-## 6. Authorization Model
+## 6. Authorization Model (RBAC + Assignments)
 
-- Authorization is **NOT role-only**
-- Permissions are evaluated at runtime
+- Authorization is **NOT role-only**; **assignments** define visibility and scope
+- Permissions are evaluated at runtime; no implicit access
 
 ### 6.1 Enforcement Points
 
 - API middleware enforces permissions
 - Frontend only reflects backend decisions
+- Permission changes apply immediately (no re-login)
 
-### 6.2 Resolution Order
+### 6.2 Resolution Order (Canonical)
 
 ```
-Campaign Permission
-  → Project Permission
-    → Client Permission
-      → Agency Permission
-        → Deny
+Campaign Assignment (override: approver/viewer/exception operator)
+  → Project Assignment (operator assigned to project; sees all campaigns under it)
+    → Client Ownership (Account Manager for client)
+      → Agency Role (Agency Admin; Internal Approver for view + internal approval)
+        → DENY
 ```
+
+- **No implicit access.** Operators have zero access by default; visibility only via project or campaign assignment.
+- **project_users**: Operator assignment at project level (primary path)
+- **campaign_users**: Override-only (extra approvers, viewers, exceptions)
 
 Permission rules are defined in the **Permission Matrix (Canonical)**.
 

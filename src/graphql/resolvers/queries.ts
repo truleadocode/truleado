@@ -12,11 +12,14 @@ import {
   requireAgencyMembership,
   requireCampaignAccess,
   requireClientAccess,
+  requireProjectAccess,
   hasClientAccess,
   getAgencyIdForProject,
   getAgencyIdForCampaign,
   getAgencyIdForClient,
+  getAgencyRole,
   requireClientApproverDeliverableAccess,
+  AgencyRole,
 } from '@/lib/rbac';
 import { notFoundError, forbiddenError } from '../errors';
 
@@ -112,27 +115,44 @@ export const queryResolvers = {
   },
 
   /**
-   * Get all clients for an agency
+   * Get all clients for an agency. Operators only see clients that have at least one project they're assigned to.
    */
   clients: async (
     _: unknown,
     { agencyId }: { agencyId: string },
     ctx: GraphQLContext
   ) => {
+    const user = requireAuth(ctx);
     requireAgencyMembership(ctx, agencyId);
-    
+
     const { data, error } = await supabaseAdmin
       .from('clients')
       .select('*')
       .eq('agency_id', agencyId)
       .eq('is_active', true)
       .order('name');
-    
+
     if (error) {
       throw new Error('Failed to fetch clients');
     }
-    
-    return data || [];
+
+    const role = getAgencyRole(user, agencyId);
+    if (role === AgencyRole.OPERATOR && (data?.length ?? 0) > 0) {
+      const { data: assigned } = await supabaseAdmin
+        .from('project_users')
+        .select('project_id')
+        .eq('user_id', user.id);
+      const projectIds = (assigned ?? []).map((r: { project_id: string }) => r.project_id);
+      if (projectIds.length === 0) return [];
+      const { data: projects } = await supabaseAdmin
+        .from('projects')
+        .select('client_id')
+        .in('id', projectIds);
+      const clientIds = new Set((projects ?? []).map((p: { client_id: string }) => p.client_id));
+      return (data ?? []).filter((c: { id: string }) => clientIds.has(c.id));
+    }
+
+    return data ?? [];
   },
 
   /**
@@ -210,53 +230,57 @@ export const queryResolvers = {
   },
 
   /**
-   * Get a project by ID
+   * Get a project by ID (requires project access: admin, AM for client, or assigned to project)
    */
   project: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
-    const user = requireAuth(ctx);
-    
-    const agencyId = await getAgencyIdForProject(id);
-    if (!agencyId) {
-      throw notFoundError('Project', id);
-    }
-    
-    requireAgencyMembership(ctx, agencyId);
-    
+    await requireProjectAccess(ctx, id);
+
     const { data, error } = await supabaseAdmin
       .from('projects')
       .select('*')
       .eq('id', id)
       .single();
-    
+
     if (error || !data) {
       throw notFoundError('Project', id);
     }
-    
+
     return data;
   },
 
   /**
-   * Get all projects for a client
+   * Get all projects for a client. Operators only see projects they're assigned to.
    */
   projects: async (
     _: unknown,
     { clientId }: { clientId: string },
     ctx: GraphQLContext
   ) => {
-    await requireClientAccess(ctx, clientId);
-    
+    const user = await requireClientAccess(ctx, clientId);
+
     const { data, error } = await supabaseAdmin
       .from('projects')
       .select('*')
       .eq('client_id', clientId)
       .eq('is_archived', false)
       .order('created_at', { ascending: false });
-    
+
     if (error) {
       throw new Error('Failed to fetch projects');
     }
-    
-    return data || [];
+
+    const agencyId = await getAgencyIdForClient(clientId);
+    const role = agencyId ? getAgencyRole(user, agencyId) : null;
+    if (role === AgencyRole.OPERATOR && (data?.length ?? 0) > 0) {
+      const { data: assigned } = await supabaseAdmin
+        .from('project_users')
+        .select('project_id')
+        .eq('user_id', user.id);
+      const projectIds = new Set((assigned ?? []).map((r: { project_id: string }) => r.project_id));
+      return (data ?? []).filter((p: { id: string }) => projectIds.has(p.id));
+    }
+
+    return data ?? [];
   },
 
   /**
@@ -279,29 +303,22 @@ export const queryResolvers = {
   },
 
   /**
-   * Get all campaigns for a project
+   * Get all campaigns for a project (requires project access)
    */
   campaigns: async (
     _: unknown,
     { projectId }: { projectId: string },
     ctx: GraphQLContext
   ) => {
-    const user = requireAuth(ctx);
-    
-    const agencyId = await getAgencyIdForProject(projectId);
-    if (!agencyId) {
-      throw notFoundError('Project', projectId);
-    }
-    
-    requireAgencyMembership(ctx, agencyId);
-    
+    await requireProjectAccess(ctx, projectId);
+
     const { data, error } = await supabaseAdmin
       .from('campaigns')
       .select('*')
       .eq('project_id', projectId)
       .neq('status', 'archived')
       .order('created_at', { ascending: false });
-    
+
     if (error) {
       throw new Error('Failed to fetch campaigns');
     }

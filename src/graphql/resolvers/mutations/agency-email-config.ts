@@ -41,12 +41,13 @@ export async function saveAgencyEmailConfig(
   const identifier = getNovuIntegrationIdentifier(agencyId);
 
   let passwordToStore: string | null = null;
-  const { data: existing } = await supabaseAdmin
+  const { data: existingData } = await supabaseAdmin
     .from('agency_email_config')
     .select('id, smtp_password')
     .eq('agency_id', agencyId)
     .maybeSingle();
 
+  const existing = existingData as { id: string; smtp_password: string | null } | null;
   if (smtpPassword != null && smtpPassword !== '') {
     passwordToStore = smtpPassword;
   } else if (existing?.smtp_password) {
@@ -86,7 +87,7 @@ export async function saveAgencyEmailConfig(
   };
 
   if (existing?.id) {
-    const { data: updated, error } = await supabaseAdmin
+    const { data: updated, error } = await (supabaseAdmin as any)
       .from('agency_email_config')
       .update({
         smtp_host: row.smtp_host,
@@ -104,10 +105,10 @@ export async function saveAgencyEmailConfig(
       .single();
 
     if (error) throw new Error('Failed to save email settings');
-    return updated;
+    return updated!;
   }
 
-  const { data: inserted, error } = await supabaseAdmin
+  const { data: inserted, error } = await (supabaseAdmin as any)
     .from('agency_email_config')
     .insert({
       ...row,
@@ -117,5 +118,5 @@ export async function saveAgencyEmailConfig(
     .single();
 
   if (error) throw new Error('Failed to save email settings');
-  return inserted;
+  return inserted!;
 }
