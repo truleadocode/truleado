@@ -84,6 +84,7 @@ interface Deliverable {
 interface Creator {
   id: string
   displayName: string
+  email: string | null
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
@@ -92,7 +93,20 @@ interface Creator {
 interface CampaignCreator {
   id: string
   status: string
+  rateAmount: number | null
+  rateCurrency: string | null
+  notes: string | null
   creator: Creator
+}
+
+interface RosterCreator {
+  id: string
+  displayName: string
+  email: string | null
+  instagramHandle: string | null
+  youtubeHandle: string | null
+  tiktokHandle: string | null
+  isActive: boolean
 }
 
 interface Attachment {
@@ -183,6 +197,17 @@ export default function CampaignDetailPage() {
   const [loadingAgencyUsers, setLoadingAgencyUsers] = useState(false)
   const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
   const [savingApprovers, setSavingApprovers] = useState(false)
+
+  // Assign creator dialog
+  const [assignCreatorOpen, setAssignCreatorOpen] = useState(false)
+  const [rosterCreators, setRosterCreators] = useState<RosterCreator[]>([])
+  const [loadingRoster, setLoadingRoster] = useState(false)
+  const [creatorSearch, setCreatorSearch] = useState('')
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null)
+  const [assignRate, setAssignRate] = useState('')
+  const [assignCurrency, setAssignCurrency] = useState('INR')
+  const [assignNotes, setAssignNotes] = useState('')
+  const [assigning, setAssigning] = useState(false)
 
   const fetchCampaign = useCallback(async () => {
     try {
@@ -499,6 +524,116 @@ export default function CampaignDetailPage() {
   }
 
   const isArchived = campaign?.status.toLowerCase() === 'archived'
+
+  // Assign Creator handlers
+  const openAssignCreator = async () => {
+    if (!currentAgency?.id) return
+    setAssignCreatorOpen(true)
+    setSelectedCreatorId(null)
+    setAssignRate('')
+    setAssignCurrency('INR')
+    setAssignNotes('')
+    setCreatorSearch('')
+    setLoadingRoster(true)
+    try {
+      const data = await graphqlRequest<{ creators: RosterCreator[] }>(
+        queries.creators,
+        { agencyId: currentAgency.id }
+      )
+      setRosterCreators(data.creators)
+    } catch {
+      toast({ title: 'Error', description: 'Failed to load creators', variant: 'destructive' })
+    } finally {
+      setLoadingRoster(false)
+    }
+  }
+
+  const handleAssignCreator = async () => {
+    if (!selectedCreatorId || !campaign) return
+    setAssigning(true)
+    try {
+      await graphqlRequest(mutations.inviteCreatorToCampaign, {
+        campaignId: campaign.id,
+        creatorId: selectedCreatorId,
+        rateAmount: assignRate ? parseFloat(assignRate) : null,
+        rateCurrency: assignCurrency || 'INR',
+        notes: assignNotes.trim() || null,
+      })
+      toast({ title: 'Creator assigned to campaign' })
+      setAssignCreatorOpen(false)
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to assign creator',
+        variant: 'destructive',
+      })
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  const handleRemoveCreator = async (campaignCreatorId: string) => {
+    try {
+      await graphqlRequest(mutations.removeCreatorFromCampaign, { campaignCreatorId })
+      toast({ title: 'Creator removed from campaign' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to remove creator',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleAcceptInvite = async (campaignCreatorId: string) => {
+    try {
+      await graphqlRequest(mutations.acceptCampaignInvite, { campaignCreatorId })
+      toast({ title: 'Invitation accepted' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to accept invitation',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeclineInvite = async (campaignCreatorId: string) => {
+    try {
+      await graphqlRequest(mutations.declineCampaignInvite, { campaignCreatorId })
+      toast({ title: 'Invitation declined' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to decline invitation',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const getCreatorStatusColor = (status: string) => {
+    switch (status) {
+      case 'INVITED': return 'bg-yellow-100 text-yellow-800'
+      case 'ACCEPTED': return 'bg-green-100 text-green-800'
+      case 'DECLINED': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  // Filter available creators (exclude already assigned)
+  const assignedCreatorIds = campaign?.creators.map(cc => cc.creator.id) || []
+  const availableCreators = rosterCreators.filter(
+    (c) =>
+      !assignedCreatorIds.includes(c.id) &&
+      (creatorSearch === '' ||
+        c.displayName.toLowerCase().includes(creatorSearch.toLowerCase()) ||
+        (c.instagramHandle && c.instagramHandle.toLowerCase().includes(creatorSearch.toLowerCase())) ||
+        (c.email && c.email.toLowerCase().includes(creatorSearch.toLowerCase())))
+  )
 
   if (loading) {
     return (
@@ -896,11 +1031,9 @@ export default function CampaignDetailPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Creators</h2>
               {!isArchived && (
-                <Button size="sm" variant="outline" asChild>
-                  <Link href={`/dashboard/creators?assign=${campaign.id}`}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Assign Creator
-                  </Link>
+                <Button size="sm" variant="outline" onClick={openAssignCreator}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Assign Creator
                 </Button>
               )}
             </div>
@@ -920,20 +1053,65 @@ export default function CampaignDetailPage() {
                 {campaign.creators.map((campaignCreator) => (
                   <Card key={campaignCreator.id}>
                     <CardContent className="p-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarFallback>
-                            {getInitials(campaignCreator.creator.displayName)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{campaignCreator.creator.displayName}</p>
-                          <div className="flex gap-2 text-xs text-muted-foreground">
-                            {campaignCreator.creator.instagramHandle && <span>@{campaignCreator.creator.instagramHandle}</span>}
-                            {campaignCreator.creator.youtubeHandle && <span>YT: {campaignCreator.creator.youtubeHandle}</span>}
-                            {campaignCreator.creator.tiktokHandle && <span>TT: @{campaignCreator.creator.tiktokHandle}</span>}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback>
+                              {getInitials(campaignCreator.creator.displayName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <Link
+                              href={`/dashboard/creators/${campaignCreator.creator.id}`}
+                              className="font-medium hover:underline"
+                            >
+                              {campaignCreator.creator.displayName}
+                            </Link>
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getCreatorStatusColor(campaignCreator.status)}`}>
+                                {campaignCreator.status}
+                              </span>
+                              {campaignCreator.rateAmount && (
+                                <span className="text-xs text-muted-foreground">
+                                  {campaignCreator.rateCurrency || 'INR'} {campaignCreator.rateAmount.toLocaleString()}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-2 text-xs text-muted-foreground mt-1">
+                              {campaignCreator.creator.instagramHandle && <span>@{campaignCreator.creator.instagramHandle}</span>}
+                              {campaignCreator.creator.youtubeHandle && <span>YT: {campaignCreator.creator.youtubeHandle}</span>}
+                              {campaignCreator.creator.tiktokHandle && <span>TT: @{campaignCreator.creator.tiktokHandle}</span>}
+                            </div>
                           </div>
                         </div>
+                        {!isArchived && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {campaignCreator.status === 'INVITED' && (
+                                <>
+                                  <DropdownMenuItem onClick={() => handleAcceptInvite(campaignCreator.id)}>
+                                    Accept Invite
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleDeclineInvite(campaignCreator.id)}>
+                                    Decline Invite
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                </>
+                              )}
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => handleRemoveCreator(campaignCreator.id)}
+                              >
+                                Remove from Campaign
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -1157,6 +1335,96 @@ export default function CampaignDetailPage() {
             </Button>
             <Button onClick={handleSaveDates} disabled={saving}>
               {saving ? 'Saving...' : 'Save Dates'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Creator Dialog */}
+      <Dialog open={assignCreatorOpen} onOpenChange={setAssignCreatorOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Assign Creator to Campaign</DialogTitle>
+            <DialogDescription>Select a creator from your roster</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Input
+              placeholder="Search creators..."
+              value={creatorSearch}
+              onChange={(e) => setCreatorSearch(e.target.value)}
+            />
+            <div className="max-h-48 overflow-y-auto space-y-2">
+              {loadingRoster ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">Loading creators...</div>
+              ) : availableCreators.length === 0 ? (
+                <div className="py-4 text-center text-sm text-muted-foreground">
+                  {rosterCreators.length === 0 ? 'No creators in roster yet' : 'No matching creators available'}
+                </div>
+              ) : (
+                availableCreators.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => setSelectedCreatorId(c.id)}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedCreatorId === c.id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <p className="font-medium text-sm">{c.displayName}</p>
+                    <div className="flex gap-2 text-xs text-muted-foreground mt-0.5">
+                      {c.instagramHandle && <span>@{c.instagramHandle}</span>}
+                      {c.youtubeHandle && <span>YT: {c.youtubeHandle}</span>}
+                      {c.email && <span>{c.email}</span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {selectedCreatorId && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Rate Amount</Label>
+                    <Input
+                      type="number"
+                      placeholder="0.00"
+                      value={assignRate}
+                      onChange={(e) => setAssignRate(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Currency</Label>
+                    <select
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      value={assignCurrency}
+                      onChange={(e) => setAssignCurrency(e.target.value)}
+                    >
+                      <option value="INR">INR</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                      <option value="GBP">GBP</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <textarea
+                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder="Optional notes..."
+                    value={assignNotes}
+                    onChange={(e) => setAssignNotes(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignCreatorOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAssignCreator} disabled={!selectedCreatorId || assigning}>
+              {assigning ? 'Assigning...' : 'Assign Creator'}
             </Button>
           </DialogFooter>
         </DialogContent>

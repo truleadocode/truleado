@@ -543,6 +543,16 @@ export const typeResolvers = {
     tiktokHandle: (parent: { tiktok_handle: string | null }) => parent.tiktok_handle,
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    campaignAssignments: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_creators')
+        .select('*')
+        .eq('creator_id', parent.id)
+        .neq('status', 'removed')
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
   },
 
   CampaignCreator: {

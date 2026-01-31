@@ -443,22 +443,26 @@ export const queryResolvers = {
    */
   creators: async (
     _: unknown,
-    { agencyId }: { agencyId: string },
+    { agencyId, includeInactive }: { agencyId: string; includeInactive?: boolean },
     ctx: GraphQLContext
   ) => {
     requireAgencyMembership(ctx, agencyId);
-    
-    const { data, error } = await supabaseAdmin
+
+    let query = supabaseAdmin
       .from('creators')
       .select('*')
-      .eq('agency_id', agencyId)
-      .eq('is_active', true)
-      .order('display_name');
-    
+      .eq('agency_id', agencyId);
+
+    if (!includeInactive) {
+      query = query.eq('is_active', true);
+    }
+
+    const { data, error } = await query.order('display_name');
+
     if (error) {
       throw new Error('Failed to fetch creators');
     }
-    
+
     return data || [];
   },
 

@@ -254,30 +254,38 @@ export async function hasCampaignAccess(
 
   const agencyRole = getAgencyRole(user, agencyId);
 
-  // 1. Campaign assignment (override: approver, viewer, or exception operator)
+  // Track whether the user has campaign-level access (via campaign or project assignment)
+  let hasCampaignLevelAccess = false;
+
+  // 1. Campaign assignment (approver, viewer, or exception operator)
+  // Campaign-level permissions are additive: if the campaign role grants the
+  // permission, allow immediately. If not, fall through to check agency-level
+  // permissions — a user's agency role should never be blocked by a narrower
+  // campaign assignment.
   const campaignRole = await getCampaignRole(user.id, campaignId);
   if (campaignRole) {
-    if (permission) {
-      const hasAccess = CAMPAIGN_ROLE_PERMISSIONS[campaignRole]?.includes(permission);
-      return {
-        allowed: hasAccess ?? false,
-        reason: hasAccess ? undefined : `Campaign role ${campaignRole} does not have ${permission}`,
-      };
+    hasCampaignLevelAccess = true;
+    if (!permission) {
+      return { allowed: true };
     }
-    return { allowed: true };
+    if (CAMPAIGN_ROLE_PERMISSIONS[campaignRole]?.includes(permission)) {
+      return { allowed: true };
+    }
+    // Campaign role doesn't grant this specific permission — fall through
+    // to check agency-level role.
   }
 
   // 2. Project assignment (operator sees all campaigns under project)
   const assignedToProject = await isAssignedToProject(user.id, projectId);
   if (assignedToProject) {
-    if (permission) {
-      const hasAccess = CAMPAIGN_ROLE_PERMISSIONS[CampaignRole.OPERATOR]?.includes(permission);
-      return {
-        allowed: hasAccess ?? false,
-        reason: hasAccess ? undefined : `Project assignment does not grant ${permission}`,
-      };
+    hasCampaignLevelAccess = true;
+    if (!permission) {
+      return { allowed: true };
     }
-    return { allowed: true };
+    if (CAMPAIGN_ROLE_PERMISSIONS[CampaignRole.OPERATOR]?.includes(permission)) {
+      return { allowed: true };
+    }
+    // Project assignment doesn't grant this specific permission — fall through.
   }
 
   // 3. Client ownership (Account Manager)
@@ -288,6 +296,14 @@ export async function hasCampaignAccess(
   // 4. Agency role
   if (agencyRole === AgencyRole.AGENCY_ADMIN) {
     return { allowed: true };
+  }
+
+  // 5. For users with campaign/project access, also check if their agency role
+  // grants the specific permission (agency permissions are additive).
+  if (hasCampaignLevelAccess && agencyRole && permission) {
+    if (AGENCY_ROLE_PERMISSIONS[agencyRole]?.includes(permission)) {
+      return { allowed: true };
+    }
   }
 
   // Internal Approver: agency-wide view + internal approval only (no project/campaign assignment required for those)

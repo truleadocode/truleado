@@ -35,10 +35,15 @@ import {
 } from './deliverable';
 import {
   addCreator,
+  updateCreator,
+  deactivateCreator,
+  activateCreator,
+  deleteCreator,
   inviteCreatorToCampaign,
   acceptCampaignInvite,
   declineCampaignInvite,
   removeCreatorFromCampaign,
+  updateCampaignCreator,
 } from './creator';
 import { fetchPreCampaignAnalytics } from './analytics';
 import { createPayment, markPaymentPaid } from './payment';
@@ -90,10 +95,15 @@ export const mutationResolvers = {
   
   // Creators
   addCreator,
+  updateCreator,
+  deactivateCreator,
+  activateCreator,
+  deleteCreator,
   inviteCreatorToCampaign,
   acceptCampaignInvite,
   declineCampaignInvite,
   removeCreatorFromCampaign,
+  updateCampaignCreator,
   
   // Analytics
   fetchPreCampaignAnalytics,

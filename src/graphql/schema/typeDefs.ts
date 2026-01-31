@@ -296,7 +296,9 @@ export const typeDefs = gql`
     tiktokHandle: String
     notes: String
     isActive: Boolean!
+    campaignAssignments: [CampaignCreator!]!
     createdAt: DateTime!
+    updatedAt: DateTime!
   }
 
   type CampaignCreator {
@@ -467,7 +469,7 @@ export const typeDefs = gql`
     projects(clientId: ID!): [Project!]!
     campaigns(projectId: ID!): [Campaign!]!
     deliverables(campaignId: ID!): [Deliverable!]!
-    creators(agencyId: ID!): [Creator!]!
+    creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     
     # Notifications for current user
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
@@ -673,7 +675,36 @@ export const typeDefs = gql`
     
     # Remove creator from campaign
     removeCreatorFromCampaign(campaignCreatorId: ID!): CampaignCreator!
-    
+
+    # Update a creator in the agency roster
+    updateCreator(
+      id: ID!
+      displayName: String
+      email: String
+      phone: String
+      instagramHandle: String
+      youtubeHandle: String
+      tiktokHandle: String
+      notes: String
+    ): Creator!
+
+    # Deactivate a creator (soft delete - keeps history)
+    deactivateCreator(id: ID!): Creator!
+
+    # Reactivate a previously deactivated creator
+    activateCreator(id: ID!): Creator!
+
+    # Permanently delete a creator (only if no campaign assignments)
+    deleteCreator(id: ID!): Boolean!
+
+    # Update campaign creator rate/notes
+    updateCampaignCreator(
+      id: ID!
+      rateAmount: Money
+      rateCurrency: String
+      notes: String
+    ): CampaignCreator!
+
     # ---------------------------------------------
     # Analytics Mutations (Token-Aware)
     # ---------------------------------------------
