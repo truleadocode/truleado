@@ -720,16 +720,41 @@ type Mutation {
 
 ```graphql
 type Mutation {
-  createCreator(
+  # Add a creator to the agency roster
+  addCreator(
     agencyId: ID!
     displayName: String!
     email: String
+    phone: String
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    notes: String
   ): Creator!
   
-  assignCreatorToCampaign(
+  # Update a creator in the agency roster
+  updateCreator(
+    id: ID!
+    displayName: String
+    email: String
+    phone: String
+    instagramHandle: String
+    youtubeHandle: String
+    tiktokHandle: String
+    notes: String
+  ): Creator!
+  
+  # Deactivate a creator (soft delete - keeps history)
+  deactivateCreator(id: ID!): Creator!
+  
+  # Reactivate a previously deactivated creator
+  activateCreator(id: ID!): Creator!
+  
+  # Permanently delete a creator (only if no campaign assignments)
+  deleteCreator(id: ID!): Boolean!
+  
+  # Invite a creator to a campaign
+  inviteCreatorToCampaign(
     campaignId: ID!
     creatorId: ID!
     rateAmount: Money
@@ -737,14 +762,35 @@ type Mutation {
     notes: String
   ): CampaignCreator!
   
-  removeCreatorFromCampaign(campaignCreatorId: ID!): Boolean!
+  # Accept campaign invitation (creator action)
+  acceptCampaignInvite(campaignCreatorId: ID!): CampaignCreator!
   
-  updateCampaignCreatorStatus(
-    campaignCreatorId: ID!
-    status: CampaignCreatorStatus!
+  # Decline campaign invitation (creator action)
+  declineCampaignInvite(campaignCreatorId: ID!): CampaignCreator!
+  
+  # Remove creator from campaign
+  removeCreatorFromCampaign(campaignCreatorId: ID!): CampaignCreator!
+  
+  # Update campaign creator rate/notes
+  updateCampaignCreator(
+    id: ID!
+    rateAmount: Money
+    rateCurrency: String
+    notes: String
   ): CampaignCreator!
 }
 ```
+
+- **addCreator**: Creates a new creator in the agency roster. Requires `MANAGE_CREATOR_ROSTER` permission (Agency Admin, Account Manager). Display name must be at least 2 characters.
+- **updateCreator**: Updates creator details. Requires `MANAGE_CREATOR_ROSTER` permission. All fields are optional; only provided fields are updated.
+- **deactivateCreator**: Soft-deletes a creator by setting `is_active = false`. Preserves all historical data (campaign assignments, analytics, payments). Requires `MANAGE_CREATOR_ROSTER` permission.
+- **activateCreator**: Reactivates a previously deactivated creator. Requires `MANAGE_CREATOR_ROSTER` permission.
+- **deleteCreator**: Permanently deletes a creator. Only allowed if the creator has no campaign assignments. Requires `MANAGE_CREATOR_ROSTER` permission.
+- **inviteCreatorToCampaign**: Assigns a creator to a campaign with optional rate and notes. Requires `INVITE_CREATOR` permission (Agency Admin, Account Manager, Operator). Creator must belong to the same agency as the campaign. Status defaults to `INVITED`.
+- **acceptCampaignInvite**: Changes campaign creator status from `INVITED` to `ACCEPTED`. Currently requires campaign access (future: creator authentication).
+- **declineCampaignInvite**: Changes campaign creator status from `INVITED` to `DECLINED`. Currently requires campaign access (future: creator authentication).
+- **removeCreatorFromCampaign**: Sets campaign creator status to `REMOVED`. Requires `INVITE_CREATOR` permission.
+- **updateCampaignCreator**: Updates rate amount, currency, or notes for a campaign creator assignment. Requires `INVITE_CREATOR` permission.
 
 ---
 

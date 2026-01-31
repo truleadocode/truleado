@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP).
+**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP) and **creator portal** (future phase).
 
 ---
 
@@ -50,10 +50,19 @@
    - **UI**: Team settings page at `/dashboard/settings/team` shows agency users and roles. Project detail page allows assigning operators to projects (Agency Admin or Account Manager only).  
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §3.1, `GRAPHQL_API_CONTRACT.md` §4.4, `TECHNICAL_LLD.md` §6.2, `MASTER_PRD.md` §4.3.
 
+6. **Creator Module (implemented)**  
+   - **Creator Roster Management**: Full CRUD for creators (add, edit, deactivate, activate, delete). Creator list page with search, filter by platform, and creator cards. Creator detail page shows campaigns, analytics, and payments.  
+   - **Campaign Creator Assignment**: Assign creators to campaigns with rate and notes. Update campaign creator details. Status management (invited/accepted/declined/removed).  
+   - **GraphQL**: Mutations `addCreator`, `updateCreator`, `deactivateCreator`, `activateCreator`, `deleteCreator`, `inviteCreatorToCampaign`, `acceptCampaignInvite`, `declineCampaignInvite`, `removeCreatorFromCampaign`, `updateCampaignCreator`. Queries `creators(agencyId)`, `creator(id)`.  
+   - **UI**: `/dashboard/creators` (list), `/dashboard/creators/new` (add), `/dashboard/creators/[id]` (detail), `/dashboard/creators/[id]/edit` (edit). `AssignCreatorDialog` component for campaign assignment. Enhanced creators section on campaign detail page.  
+   - **Permissions**: `MANAGE_CREATOR_ROSTER` (Agency Admin, Account Manager), `VIEW_CREATOR_ROSTER` (all agency roles), `INVITE_CREATOR` (Agency Admin, Account Manager, Operator).  
+   - **Docs**: `product-documentation/GRAPHQL_API_CONTRACT.md` §9.
+
 **If you are a new agent:**  
-- Skim **§1–§5** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
+- Skim **§1–§6** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
 - Notifications: `src/lib/novu/*`, `src/graphql/resolvers/mutations/agency-email-config.ts`, deliverable.ts (trigger calls), `src/app/(dashboard)/dashboard/settings/notifications/page.tsx`, header Inbox.  
-- Client portal: `src/app/client/*`, `src/app/api/client-auth/*`, `ensureClientUser`, `User.contact`.
+- Client portal: `src/app/client/*`, `src/app/api/client-auth/*`, `ensureClientUser`, `User.contact`.  
+- Creators: `src/app/(dashboard)/dashboard/creators/**`, `src/graphql/resolvers/mutations/creator.ts`, `src/components/creators/*`.
 
 ---
 
@@ -331,10 +340,16 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
      - Select subset of campaign creators.
      - (Eventually) email/in-app notifications.
    - Creator-side upload experience and restricted scope.
-4. **Email & Notifications**
-   - Wiring of notification events to an email provider.
+4. **Creator Portal** (Future Phase)
+   - Creator authentication (separate from agency users)
+   - Creator dashboard
+   - View campaign briefs and deadlines
+   - Submit content URLs
+   - Track payment status
+   - Accept/decline campaign invitations
 5. **Reporting & Analytics UI**
    - Surfaces for creator analytics snapshots and post metrics.
+   - Campaign performance dashboards
 
 ## 8. How to Safely Resume Work
 
@@ -382,6 +397,20 @@ When a new AI (or engineer) picks this up:
      - `src/lib/rbac/authorize.ts` (project-level access checks)
      - `src/app/(dashboard)/dashboard/settings/team/page.tsx` (team settings UI)
      - `src/app/(dashboard)/dashboard/projects/[id]/page.tsx` (project detail with operator assignment)
+   - **Creator Module**:
+     - `src/app/(dashboard)/dashboard/creators/**` (list, detail, add, edit pages)
+     - `src/components/creators/AssignCreatorDialog.tsx` (campaign assignment dialog)
+     - `src/graphql/resolvers/mutations/creator.ts` (all creator mutations)
+     - `src/graphql/resolvers/types.ts` (Creator, CampaignCreator resolvers)
+     - `src/lib/graphql/client.ts` (creator queries and mutations)
+     - `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx` (enhanced creators section)
+   - **Creator Module**:
+     - `src/app/(dashboard)/dashboard/creators/**` (list, detail, add, edit pages)
+     - `src/components/creators/AssignCreatorDialog.tsx` (campaign assignment dialog)
+     - `src/graphql/resolvers/mutations/creator.ts` (all creator mutations)
+     - `src/graphql/resolvers/types.ts` (Creator, CampaignCreator resolvers)
+     - `src/lib/graphql/client.ts` (creator queries and mutations)
+     - `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx` (enhanced creators section)
 
 This should provide enough context for a new agent to continue seamlessly from where the last session left off.
 
