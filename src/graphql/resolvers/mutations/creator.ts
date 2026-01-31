@@ -330,25 +330,25 @@ export async function removeCreatorFromCampaign(
     .select('*, campaigns!inner(id)')
     .eq('id', campaignCreatorId)
     .single();
-  
+
   if (fetchError || !campaignCreator) {
     throw notFoundError('CampaignCreator', campaignCreatorId);
   }
-  
+
   const campaigns = campaignCreator.campaigns as { id: string };
   await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
-  
+
   const { data: updated, error } = await supabaseAdmin
     .from('campaign_creators')
     .update({ status: 'removed' })
     .eq('id', campaignCreatorId)
     .select()
     .single();
-  
+
   if (error || !updated) {
     throw new Error('Failed to remove creator');
   }
-  
+
   // Log activity
   const agencyId = await getAgencyIdForCampaign(campaigns.id);
   if (agencyId) {
@@ -363,6 +363,323 @@ export async function removeCreatorFromCampaign(
       afterState: updated,
     });
   }
-  
+
+  return updated;
+}
+
+/**
+ * Update a creator in the agency roster
+ */
+export async function updateCreator(
+  _: unknown,
+  {
+    id,
+    displayName,
+    email,
+    phone,
+    instagramHandle,
+    youtubeHandle,
+    tiktokHandle,
+    notes,
+  }: {
+    id: string;
+    displayName?: string;
+    email?: string;
+    phone?: string;
+    instagramHandle?: string;
+    youtubeHandle?: string;
+    tiktokHandle?: string;
+    notes?: string;
+  },
+  ctx: GraphQLContext
+) {
+  // Fetch creator to get agency_id
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('creators')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw notFoundError('Creator', id);
+  }
+
+  const user = requireAgencyMembership(ctx, existing.agency_id);
+
+  if (!hasAgencyPermission(user, existing.agency_id, Permission.MANAGE_CREATOR_ROSTER)) {
+    throw forbiddenError('You do not have permission to manage the creator roster');
+  }
+
+  if (displayName !== undefined && displayName.trim().length < 2) {
+    throw validationError('Creator name must be at least 2 characters', 'displayName');
+  }
+
+  // Build update object from provided fields
+  const updates: Record<string, unknown> = {};
+  if (displayName !== undefined) updates.display_name = displayName.trim();
+  if (email !== undefined) updates.email = email.trim() || null;
+  if (phone !== undefined) updates.phone = phone.trim() || null;
+  if (instagramHandle !== undefined) updates.instagram_handle = instagramHandle.trim() || null;
+  if (youtubeHandle !== undefined) updates.youtube_handle = youtubeHandle.trim() || null;
+  if (tiktokHandle !== undefined) updates.tiktok_handle = tiktokHandle.trim() || null;
+  if (notes !== undefined) updates.notes = notes.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return existing;
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('creators')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    throw new Error('Failed to update creator');
+  }
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'creator',
+    entityId: id,
+    action: 'updated',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: existing,
+    afterState: updated,
+  });
+
+  return updated;
+}
+
+/**
+ * Deactivate a creator (soft delete)
+ */
+export async function deactivateCreator(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('creators')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw notFoundError('Creator', id);
+  }
+
+  const user = requireAgencyMembership(ctx, existing.agency_id);
+
+  if (!hasAgencyPermission(user, existing.agency_id, Permission.MANAGE_CREATOR_ROSTER)) {
+    throw forbiddenError('You do not have permission to manage the creator roster');
+  }
+
+  if (!existing.is_active) {
+    throw validationError('Creator is already deactivated');
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('creators')
+    .update({ is_active: false })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    throw new Error('Failed to deactivate creator');
+  }
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'creator',
+    entityId: id,
+    action: 'deactivated',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: existing,
+    afterState: updated,
+  });
+
+  return updated;
+}
+
+/**
+ * Reactivate a previously deactivated creator
+ */
+export async function activateCreator(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('creators')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw notFoundError('Creator', id);
+  }
+
+  const user = requireAgencyMembership(ctx, existing.agency_id);
+
+  if (!hasAgencyPermission(user, existing.agency_id, Permission.MANAGE_CREATOR_ROSTER)) {
+    throw forbiddenError('You do not have permission to manage the creator roster');
+  }
+
+  if (existing.is_active) {
+    throw validationError('Creator is already active');
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('creators')
+    .update({ is_active: true })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    throw new Error('Failed to activate creator');
+  }
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'creator',
+    entityId: id,
+    action: 'activated',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: existing,
+    afterState: updated,
+  });
+
+  return updated;
+}
+
+/**
+ * Permanently delete a creator (only if no campaign assignments)
+ */
+export async function deleteCreator(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('creators')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw notFoundError('Creator', id);
+  }
+
+  const user = requireAgencyMembership(ctx, existing.agency_id);
+
+  if (!hasAgencyPermission(user, existing.agency_id, Permission.MANAGE_CREATOR_ROSTER)) {
+    throw forbiddenError('You do not have permission to manage the creator roster');
+  }
+
+  // Check for active campaign assignments
+  const { data: assignments } = await supabaseAdmin
+    .from('campaign_creators')
+    .select('id')
+    .eq('creator_id', id)
+    .neq('status', 'removed');
+
+  if (assignments && assignments.length > 0) {
+    throw validationError('Cannot delete a creator with campaign assignments. Deactivate instead.');
+  }
+
+  const { error } = await supabaseAdmin
+    .from('creators')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    throw new Error('Failed to delete creator');
+  }
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'creator',
+    entityId: id,
+    action: 'deleted',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: existing,
+  });
+
+  return true;
+}
+
+/**
+ * Update campaign creator rate/notes
+ */
+export async function updateCampaignCreator(
+  _: unknown,
+  {
+    id,
+    rateAmount,
+    rateCurrency,
+    notes,
+  }: {
+    id: string;
+    rateAmount?: number;
+    rateCurrency?: string;
+    notes?: string;
+  },
+  ctx: GraphQLContext
+) {
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select('*, campaigns!inner(id)')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existing) {
+    throw notFoundError('CampaignCreator', id);
+  }
+
+  const campaigns = existing.campaigns as { id: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+  const updates: Record<string, unknown> = {};
+  if (rateAmount !== undefined) updates.rate_amount = rateAmount;
+  if (rateCurrency !== undefined) updates.rate_currency = rateCurrency;
+  if (notes !== undefined) updates.notes = notes?.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return existing;
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('campaign_creators')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !updated) {
+    throw new Error('Failed to update campaign creator');
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign_creator',
+      entityId: id,
+      action: 'updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState: existing,
+      afterState: updated,
+    });
+  }
+
   return updated;
 }

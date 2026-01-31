@@ -106,6 +106,7 @@ export const typeDefs = gql`
     avatarUrl: String
     isActive: Boolean!
     agencies: [AgencyMembership!]!
+    contact: Contact
     createdAt: DateTime!
   }
 
@@ -179,10 +180,18 @@ export const typeDefs = gql`
     campaigns: [Campaign!]!
     approverUsers: [User!]!
     projectApprovers: [ProjectApprover!]!
+    projectUsers: [ProjectUser!]!
     createdAt: DateTime!
   }
 
   type ProjectApprover {
+    id: ID!
+    project: Project!
+    user: User!
+    createdAt: DateTime!
+  }
+
+  type ProjectUser {
     id: ID!
     project: Project!
     user: User!
@@ -287,7 +296,9 @@ export const typeDefs = gql`
     tiktokHandle: String
     notes: String
     isActive: Boolean!
+    campaignAssignments: [CampaignCreator!]!
     createdAt: DateTime!
+    updatedAt: DateTime!
   }
 
   type CampaignCreator {
@@ -393,6 +404,31 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # Agency email (SMTP) config for notifications (Novu)
+  type AgencyEmailConfig {
+    id: ID!
+    agencyId: ID!
+    smtpHost: String!
+    smtpPort: Int!
+    smtpSecure: Boolean!
+    smtpUsername: String
+    fromEmail: String!
+    fromName: String
+    novuIntegrationIdentifier: String
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  input AgencyEmailConfigInput {
+    smtpHost: String!
+    smtpPort: Int!
+    smtpSecure: Boolean!
+    smtpUsername: String
+    smtpPassword: String
+    fromEmail: String!
+    fromName: String
+  }
+
   # =============================================================================
   # QUERY ROOT
   # =============================================================================
@@ -416,8 +452,11 @@ export const typeDefs = gql`
     # Campaign (permission-scoped)
     campaign(id: ID!): Campaign
     
-    # Deliverable (permission-scoped via campaign)
+    # Deliverable (permission-scoped via campaign or client approver)
     deliverable(id: ID!): Deliverable
+    
+    # Client portal: deliverables pending client approval for the contact's client
+    deliverablesPendingClientApproval: [Deliverable!]!
     
     # Creator (agency-scoped)
     creator(id: ID!): Creator
@@ -430,10 +469,12 @@ export const typeDefs = gql`
     projects(clientId: ID!): [Project!]!
     campaigns(projectId: ID!): [Campaign!]!
     deliverables(campaignId: ID!): [Deliverable!]!
-    creators(agencyId: ID!): [Creator!]!
+    creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     
     # Notifications for current user
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
+    # Agency email (SMTP) config for notifications (agency members; password never returned)
+    agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
   }
 
   # =============================================================================
@@ -454,14 +495,17 @@ export const typeDefs = gql`
     # Create user in DB and link to Firebase UID (signup flow)
     createUser(input: CreateUserInput!): User!
     
+    # Client portal: create user from magic-link auth and link to contact. Idempotent.
+    ensureClientUser: User!
+    
     # Create a new agency (signup flow)
     createAgency(name: String!, billingEmail: String): Agency!
     
     # Join an existing agency by code (onboarding)
     joinAgencyByCode(agencyCode: String!): Agency!
     
-    # Create a client under an agency
-    createClient(agencyId: ID!, name: String!, accountManagerId: ID!): Client!
+    # Create a client under an agency (Account Manager can omit accountManagerId to become owner)
+    createClient(agencyId: ID!, name: String!, accountManagerId: ID): Client!
     
     # Create/update/delete contacts (Phase 3)
     createContact(
@@ -489,6 +533,8 @@ export const typeDefs = gql`
       userId: ID
     ): Contact!
     deleteContact(id: ID!): Boolean!
+    # Save agency email (SMTP) config; agency_admin only. Creates/updates Novu integration.
+    saveAgencyEmailConfig(agencyId: ID!, input: AgencyEmailConfigInput!): AgencyEmailConfig!
     
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
@@ -593,6 +639,9 @@ export const typeDefs = gql`
       caption: String
     ): DeliverableVersion!
     
+    # Delete a deliverable version (and its file). Only when deliverable is PENDING/REJECTED and version has no approvals.
+    deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
+    
     # ---------------------------------------------
     # Creator Mutations
     # ---------------------------------------------
@@ -626,7 +675,36 @@ export const typeDefs = gql`
     
     # Remove creator from campaign
     removeCreatorFromCampaign(campaignCreatorId: ID!): CampaignCreator!
-    
+
+    # Update a creator in the agency roster
+    updateCreator(
+      id: ID!
+      displayName: String
+      email: String
+      phone: String
+      instagramHandle: String
+      youtubeHandle: String
+      tiktokHandle: String
+      notes: String
+    ): Creator!
+
+    # Deactivate a creator (soft delete - keeps history)
+    deactivateCreator(id: ID!): Creator!
+
+    # Reactivate a previously deactivated creator
+    activateCreator(id: ID!): Creator!
+
+    # Permanently delete a creator (only if no campaign assignments)
+    deleteCreator(id: ID!): Boolean!
+
+    # Update campaign creator rate/notes
+    updateCampaignCreator(
+      id: ID!
+      rateAmount: Money
+      rateCurrency: String
+      notes: String
+    ): CampaignCreator!
+
     # ---------------------------------------------
     # Analytics Mutations (Token-Aware)
     # ---------------------------------------------
@@ -662,10 +740,19 @@ export const typeDefs = gql`
     ): Payment!
     
     # ---------------------------------------------
-    # Campaign User Assignment
+    # Project & Campaign Assignment (RBAC)
     # ---------------------------------------------
     
-    # Assign a user to a campaign with a specific role
+    # Assign an operator to a project (sees all campaigns under project)
+    addProjectUser(projectId: ID!, userId: ID!): ProjectUser!
+    
+    # Remove an operator from a project
+    removeProjectUser(projectUserId: ID!): Boolean!
+    
+    # Set agency user role (Agency Admin only). Applies immediately.
+    setAgencyUserRole(agencyId: ID!, userId: ID!, role: UserRole!): AgencyUser!
+    
+    # Campaign-level override: assign approver/viewer (or exception operator)
     assignUserToCampaign(
       campaignId: ID!
       userId: ID!

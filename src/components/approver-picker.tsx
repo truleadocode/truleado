@@ -93,7 +93,7 @@ export function ApproverPicker({
     const allIds = filteredUsers.map((u) => u.id)
     const currentSet = new Set(value)
     allIds.forEach((id) => currentSet.add(id))
-    onChange([...currentSet])
+    onChange(Array.from(currentSet))
   }
 
   const clearAll = () => {

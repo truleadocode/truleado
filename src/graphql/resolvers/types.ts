@@ -59,11 +59,19 @@ export const typeResolvers = {
         .select('*, agencies!inner(*)')
         .eq('user_id', parent.id);
       
-      return (data || []).map((au) => ({
-        agency: (au as Record<string, unknown>).agencies,
+      return (data || []).map((au: { agencies: unknown; role: string; is_active: boolean }) => ({
+        agency: au.agencies,
         role: au.role.toUpperCase(),
         isActive: au.is_active,
       }));
+    },
+    contact: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('user_id', parent.id)
+        .maybeSingle();
+      return data ?? null;
     },
   },
 
@@ -235,7 +243,7 @@ export const typeResolvers = {
         .select('user_id')
         .eq('project_id', parent.id);
       if (!approvers?.length) return [];
-      const userIds = approvers.map((a) => a.user_id);
+      const userIds = approvers.map((a: { user_id: string }) => a.user_id);
       const { data: users } = await supabaseAdmin
         .from('users')
         .select('*')
@@ -250,9 +258,38 @@ export const typeResolvers = {
         .order('created_at', { ascending: true });
       return data || [];
     },
+    projectUsers: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('project_users')
+        .select('*')
+        .eq('project_id', parent.id)
+        .order('created_at', { ascending: true });
+      return data || [];
+    },
   },
 
   ProjectApprover: {
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    project: async (parent: { project_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', parent.project_id)
+        .single();
+      return data;
+    },
+    user: async (parent: { user_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.user_id)
+        .single();
+      return data;
+    },
+  },
+
+  ProjectUser: {
+    id: (parent: WithId) => parent.id,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     project: async (parent: { project_id: string }) => {
       const { data } = await supabaseAdmin
@@ -506,6 +543,16 @@ export const typeResolvers = {
     tiktokHandle: (parent: { tiktok_handle: string | null }) => parent.tiktok_handle,
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    campaignAssignments: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_creators')
+        .select('*')
+        .eq('creator_id', parent.id)
+        .neq('status', 'removed')
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
   },
 
   CampaignCreator: {
@@ -678,5 +725,18 @@ export const typeResolvers = {
     entityId: (parent: { entity_id: string | null }) => parent.entity_id,
     isRead: (parent: { is_read: boolean }) => parent.is_read,
     readAt: (parent: { read_at: string | null }) => parent.read_at,
+  },
+
+  AgencyEmailConfig: {
+    agencyId: (parent: { agency_id: string }) => parent.agency_id,
+    smtpHost: (parent: { smtp_host: string }) => parent.smtp_host,
+    smtpPort: (parent: { smtp_port: number }) => parent.smtp_port,
+    smtpSecure: (parent: { smtp_secure: boolean }) => parent.smtp_secure,
+    smtpUsername: (parent: { smtp_username: string | null }) => parent.smtp_username,
+    fromEmail: (parent: { from_email: string }) => parent.from_email,
+    fromName: (parent: { from_name: string | null }) => parent.from_name,
+    novuIntegrationIdentifier: (parent: { novu_integration_identifier: string | null }) => parent.novu_integration_identifier,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
   },
 };

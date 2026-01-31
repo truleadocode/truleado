@@ -64,7 +64,7 @@ CREATE TABLE auth_identities (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider TEXT NOT NULL,
-  -- e.g. firebase_email, firebase_google, firebase_facebook, firebase_apple
+  -- e.g. firebase_email, firebase_google, firebase_facebook, firebase_apple, firebase_email_link
   provider_uid TEXT NOT NULL,
   email TEXT,
   email_verified BOOLEAN DEFAULT false,
@@ -73,7 +73,10 @@ CREATE TABLE auth_identities (
 );
 ```
 
+> **firebase_email_link**: Used for **client portal** magic-link sign-in. Users created via `ensureClientUser` (after completing sign-in at `/client/verify`) are stored with this provider. Same Firebase UID as Email Link auth; distinct from `firebase_email` (agency email/password).
+
 ---
+
 
 ### 1.4 agency_users
 
@@ -154,7 +157,28 @@ CREATE TABLE contacts (
 
 ## 3. Projects & Campaigns
 
-### 3.1 projects
+### 3.1 project_users (RBAC: operator assignment at project level)
+
+Operators are assigned to **projects**, not campaigns. Once assigned to a project, an operator can see and work on **all campaigns under that project**. This is the primary assignment path for operators; campaign_users is for overrides only.
+
+```sql
+CREATE TABLE project_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (project_id, user_id)
+);
+
+CREATE INDEX idx_project_users_project_id ON project_users(project_id);
+CREATE INDEX idx_project_users_user_id ON project_users(user_id);
+```
+
+Migration: `00014_project_users_rbac.sql`.
+
+---
+
+### 3.2 projects
 
 ```sql
 CREATE TABLE projects (
@@ -173,7 +197,7 @@ CREATE TABLE projects (
 
 ---
 
-### 3.2 campaigns
+### 3.3 campaigns
 
 ```sql
 CREATE TABLE campaigns (
@@ -196,7 +220,9 @@ CREATE TABLE campaigns (
 
 ## 4. Campaign User Access & Roles
 
-### 4.1 campaign_users
+### 4.1 campaign_users (override-only)
+
+Used **only for overrides**: extra approvers, viewers, or exception operator assignments. **Primary operator assignment is at project level** via `project_users`. Operators assigned to a project see all campaigns under that project; campaign-level assignment here is for exceptions or for adding approvers/viewers to a specific campaign.
 
 ```sql
 CREATE TABLE campaign_users (
@@ -481,6 +507,34 @@ CREATE TABLE notifications (
 
 CREATE INDEX idx_notifications_user ON notifications(user_id, is_read);
 ```
+
+---
+
+### 9.3 agency_email_config (Phase 4/5 – Novu)
+
+Per-agency SMTP configuration for notification emails. When saved, the app creates/updates a Novu Custom SMTP integration and stores its identifier. Migration: `00013_agency_email_config.sql`.
+
+```sql
+CREATE TABLE agency_email_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  smtp_host TEXT NOT NULL,
+  smtp_port INTEGER NOT NULL DEFAULT 587,
+  smtp_secure BOOLEAN NOT NULL DEFAULT false,
+  smtp_username TEXT,
+  smtp_password TEXT,
+  from_email TEXT NOT NULL,
+  from_name TEXT,
+  novu_integration_identifier TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (agency_id)
+);
+
+CREATE INDEX idx_agency_email_config_agency_id ON agency_email_config(agency_id);
+```
+
+RLS: agency members can SELECT; only agency admins can INSERT/UPDATE/DELETE.
 
 ---
 

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/auth-context'
 
 interface ProtectedRouteProps {
@@ -9,7 +9,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, agencies, loading } = useAuth()
+  const { user, agencies, contact, loading } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
@@ -18,11 +18,10 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       router.push('/login')
       return
     }
-    // User must belong to an agency to access dashboard
     if (agencies.length === 0) {
-      router.push('/choose-agency')
+      router.push(contact ? '/client' : '/choose-agency')
     }
-  }, [user, agencies.length, loading, router])
+  }, [user, agencies.length, contact, loading, router])
 
   if (loading) {
     return (
@@ -57,9 +56,6 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return null
   }
 
-  if (agencies.length === 0) {
-    return null
-  }
-
+  // Remove the early return for agencies.length === 0 - let useEffect handle redirect
   return <>{children}</>
 }

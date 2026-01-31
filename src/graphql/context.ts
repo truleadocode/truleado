@@ -26,11 +26,23 @@ export interface AuthenticatedUser {
 }
 
 /**
+ * Linked contact (client portal user) - set when user was created via ensureClientUser
+ */
+export interface ContextContact {
+  id: string;
+  clientId: string;
+  isClientApprover: boolean;
+}
+
+/**
  * GraphQL context available to all resolvers
  */
 export interface GraphQLContext {
   // Authenticated user (null if not authenticated)
   user: AuthenticatedUser | null;
+  
+  // Linked contact for client portal users (null if not a contact-linked user)
+  contact: ContextContact | null;
   
   // Firebase decoded token (for additional claims if needed)
   decodedToken: DecodedIdToken | null;
@@ -62,6 +74,7 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
   // Base context (unauthenticated)
   const baseContext: GraphQLContext = {
     user: null,
+    contact: null,
     decodedToken: null,
     requestId,
     ipAddress,
@@ -88,7 +101,7 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
       .eq('provider_uid', decodedToken.uid)
       .limit(1);
 
-    const authIdentity = authIdentities?.[0];
+    const authIdentity = authIdentities?.[0] as { user_id: string } | undefined;
     if (authError || !authIdentity) {
       // User has a valid Firebase account but not registered in our system
       // This can happen if they haven't completed onboarding
@@ -98,14 +111,14 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
         decodedToken,
       };
     }
-    
+
     // Get user details
     const { data: user, error: userError } = await supabaseAdmin
       .from('users')
       .select('*')
       .eq('id', authIdentity.user_id)
       .single();
-    
+
     if (userError || !user) {
       console.error(`User not found for ID: ${authIdentity.user_id}`);
       return {
@@ -113,31 +126,51 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
         decodedToken,
       };
     }
-    
+
+    const userRow = user as { id: string; email: string | null; full_name: string };
+
     // Get user's agency memberships
     const { data: memberships, error: membershipError } = await supabaseAdmin
       .from('agency_users')
       .select('agency_id, role, is_active')
-      .eq('user_id', user.id);
-    
+      .eq('user_id', userRow.id);
+
     if (membershipError) {
       console.error('Error fetching agency memberships:', membershipError);
     }
-    
+
+    const membershipRows = (memberships || []) as Array<{ agency_id: string; role: string; is_active: boolean }>;
     const authenticatedUser: AuthenticatedUser = {
-      id: user.id,
+      id: userRow.id,
       firebaseUid: decodedToken.uid,
-      email: user.email,
-      fullName: user.full_name,
-      agencies: (memberships || []).map((m) => ({
+      email: userRow.email,
+      fullName: userRow.full_name,
+      agencies: membershipRows.map((m) => ({
         agencyId: m.agency_id,
         role: m.role,
         isActive: m.is_active,
       })),
     };
+
+    // Load linked contact (for client portal users)
+    let contact: ContextContact | null = null;
+    const { data: contactRow } = await supabaseAdmin
+      .from('contacts')
+      .select('id, client_id, is_client_approver')
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+    const contactData = contactRow as { id: string; client_id: string; is_client_approver: boolean } | null;
+    if (contactData) {
+      contact = {
+        id: contactData.id,
+        clientId: contactData.client_id,
+        isClientApprover: contactData.is_client_approver ?? false,
+      };
+    }
     
     return {
       user: authenticatedUser,
+      contact,
       decodedToken,
       requestId,
       ipAddress,

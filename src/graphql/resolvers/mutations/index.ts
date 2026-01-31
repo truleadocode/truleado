@@ -4,10 +4,10 @@
  * Combines all mutation resolvers.
  */
 
-import { createUser } from './user';
-import { createAgency, joinAgencyByCode, createClient } from './agency';
+import { createUser, ensureClientUser } from './user';
+import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
-import { addProjectApprover, removeProjectApprover } from './project';
+import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
 import {
   createProject,
   createCampaign,
@@ -31,21 +31,29 @@ import {
   approveDeliverable,
   rejectDeliverable,
   updateDeliverableVersionCaption,
+  deleteDeliverableVersion,
 } from './deliverable';
 import {
   addCreator,
+  updateCreator,
+  deactivateCreator,
+  activateCreator,
+  deleteCreator,
   inviteCreatorToCampaign,
   acceptCampaignInvite,
   declineCampaignInvite,
   removeCreatorFromCampaign,
+  updateCampaignCreator,
 } from './creator';
 import { fetchPreCampaignAnalytics } from './analytics';
 import { createPayment, markPaymentPaid } from './payment';
 import { markNotificationRead, markAllNotificationsRead } from './notification';
+import { saveAgencyEmailConfig } from './agency-email-config';
 
 export const mutationResolvers = {
   // Identity (signup)
   createUser,
+  ensureClientUser,
   // Agency & Client
   createAgency,
   joinAgencyByCode,
@@ -58,6 +66,8 @@ export const mutationResolvers = {
   createProject,
   addProjectApprover,
   removeProjectApprover,
+  addProjectUser,
+  removeProjectUser,
   createCampaign,
   updateCampaignDetails,
   setCampaignDates,
@@ -70,7 +80,7 @@ export const mutationResolvers = {
   completeCampaign,
   archiveCampaign,
   
-  // Campaign User Assignment
+  setAgencyUserRole,
   assignUserToCampaign,
   removeUserFromCampaign,
   
@@ -81,13 +91,19 @@ export const mutationResolvers = {
   approveDeliverable,
   rejectDeliverable,
   updateDeliverableVersionCaption,
+  deleteDeliverableVersion,
   
   // Creators
   addCreator,
+  updateCreator,
+  deactivateCreator,
+  activateCreator,
+  deleteCreator,
   inviteCreatorToCampaign,
   acceptCampaignInvite,
   declineCampaignInvite,
   removeCreatorFromCampaign,
+  updateCampaignCreator,
   
   // Analytics
   fetchPreCampaignAnalytics,
@@ -99,4 +115,6 @@ export const mutationResolvers = {
   // Notifications
   markNotificationRead,
   markAllNotificationsRead,
+  // Agency email config (SMTP for Novu)
+  saveAgencyEmailConfig,
 };

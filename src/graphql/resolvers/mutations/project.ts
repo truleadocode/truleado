@@ -132,3 +132,106 @@ async function getProjectClientId(projectId: string): Promise<string | null> {
   if (error || !data) return null;
   return (data as { client_id: string }).client_id;
 }
+
+/**
+ * Assign an operator to a project (sees all campaigns under project).
+ * Agency Admin or Account Manager for the project's client only.
+ */
+export async function addProjectUser(
+  _: unknown,
+  { projectId, userId }: { projectId: string; userId: string },
+  ctx: GraphQLContext
+) {
+  const clientId = await getProjectClientId(projectId);
+  if (!clientId) throw notFoundError('Project', projectId);
+  await requireClientAccess(ctx, clientId, true);
+
+  const agencyId = await getAgencyIdForProject(projectId);
+  if (!agencyId) throw notFoundError('Project', projectId);
+
+  const { data: membership } = await supabaseAdmin
+    .from('agency_users')
+    .select('user_id')
+    .eq('agency_id', agencyId)
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (!membership) {
+    throw validationError('User must be an active member of the agency', 'userId');
+  }
+
+  const { data: row, error } = await supabaseAdmin
+    .from('project_users')
+    .insert({ project_id: projectId, user_id: userId })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      throw validationError('User is already assigned to this project', 'userId');
+    }
+    throw new Error('Failed to add project user');
+  }
+
+  await logActivity({
+    agencyId,
+    entityType: 'project_user',
+    entityId: row.id,
+    action: 'created',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    afterState: row,
+    metadata: { projectId, userId },
+  });
+
+  return row;
+}
+
+/**
+ * Remove an operator from a project.
+ */
+export async function removeProjectUser(
+  _: unknown,
+  { projectUserId }: { projectUserId: string },
+  ctx: GraphQLContext
+) {
+  const { data: row, error: fetchError } = await supabaseAdmin
+    .from('project_users')
+    .select('id, project_id')
+    .eq('id', projectUserId)
+    .single();
+
+  if (fetchError || !row) {
+    throw notFoundError('ProjectUser', projectUserId);
+  }
+
+  const clientId = await getProjectClientId(row.project_id);
+  if (!clientId) throw notFoundError('Project', row.project_id);
+  await requireClientAccess(ctx, clientId, true);
+
+  const agencyId = await getAgencyIdForProject(row.project_id);
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('project_users')
+    .delete()
+    .eq('id', projectUserId);
+
+  if (deleteError) {
+    throw new Error('Failed to remove project user');
+  }
+
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'project_user',
+      entityId: projectUserId,
+      action: 'deleted',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState: row,
+    });
+  }
+
+  return true;
+}

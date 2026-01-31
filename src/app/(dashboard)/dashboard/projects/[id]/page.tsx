@@ -62,6 +62,12 @@ interface ProjectApproverRow {
   user: { id: string; name: string | null; email: string }
 }
 
+interface ProjectUserRow {
+  id: string
+  createdAt: string
+  user: { id: string; name: string | null; email: string }
+}
+
 interface Project {
   id: string
   name: string
@@ -81,6 +87,7 @@ interface Project {
   }
   campaigns: Campaign[]
   projectApprovers: ProjectApproverRow[]
+  projectUsers: ProjectUserRow[]
 }
 
 interface AgencyUserOption {
@@ -104,6 +111,10 @@ export default function ProjectDetailPage() {
   const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
   const [savingApprovers, setSavingApprovers] = useState(false)
   const [removingId, setRemovingId] = useState<string | null>(null)
+  const [manageProjectUsersOpen, setManageProjectUsersOpen] = useState(false)
+  const [projectUserPickerIds, setProjectUserPickerIds] = useState<string[]>([])
+  const [savingProjectUsers, setSavingProjectUsers] = useState(false)
+  const [removingProjectUserId, setRemovingProjectUserId] = useState<string | null>(null)
 
   const fetchProject = useCallback(async () => {
     try {
@@ -129,7 +140,12 @@ export default function ProjectDetailPage() {
   }, [manageApproversOpen, project])
 
   useEffect(() => {
-    if (!manageApproversOpen || !currentAgency?.id) return
+    if (!manageProjectUsersOpen || !project) return
+    setProjectUserPickerIds(project.projectUsers?.map((pu) => pu.user.id) ?? [])
+  }, [manageProjectUsersOpen, project])
+
+  useEffect(() => {
+    if ((!manageApproversOpen && !manageProjectUsersOpen) || !currentAgency?.id) return
     setLoadingAgencyUsers(true)
     graphqlRequest<{ agency: { users: AgencyUserOption[] } }>(
       queries.agencyUsers,
@@ -138,7 +154,7 @@ export default function ProjectDetailPage() {
       .then((data) => setAgencyUsers(data.agency?.users ?? []))
       .catch(() => setAgencyUsers([]))
       .finally(() => setLoadingAgencyUsers(false))
-  }, [manageApproversOpen, currentAgency?.id])
+  }, [manageApproversOpen, manageProjectUsersOpen, currentAgency?.id])
 
   const handleSaveApprovers = async () => {
     if (!project) return
@@ -175,6 +191,40 @@ export default function ProjectDetailPage() {
     }
   }
 
+  const handleSaveProjectUsers = async () => {
+    if (!project) return
+    setSavingProjectUsers(true)
+    try {
+      const currentIds = new Set(project.projectUsers?.map((pu) => pu.user.id) ?? [])
+      const selectedSet = new Set(projectUserPickerIds)
+      const toAdd = projectUserPickerIds.filter((id) => !currentIds.has(id))
+      const toRemove = (project.projectUsers ?? []).filter((pu) => !selectedSet.has(pu.user.id))
+      for (const userId of toAdd) {
+        await graphqlRequest(mutations.addProjectUser, { projectId, userId })
+      }
+      for (const pu of toRemove) {
+        await graphqlRequest(mutations.removeProjectUser, { projectUserId: pu.id })
+      }
+      setManageProjectUsersOpen(false)
+      await fetchProject()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setSavingProjectUsers(false)
+    }
+  }
+
+  const handleRemoveProjectUser = async (projectUserId: string) => {
+    setRemovingProjectUserId(projectUserId)
+    try {
+      await graphqlRequest(mutations.removeProjectUser, { projectUserId })
+      await fetchProject()
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setRemovingProjectUserId(null)
+    }
+  }
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Not set'
@@ -280,6 +330,10 @@ export default function ProjectDetailPage() {
               <DropdownMenuItem onClick={() => setManageApproversOpen(true)}>
                 <UserPlus className="mr-2 h-4 w-4" />
                 Manage approvers
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setManageProjectUsersOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Assign operators
               </DropdownMenuItem>
               <DropdownMenuItem>Set Dates</DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -420,6 +474,89 @@ export default function ProjectDetailPage() {
                 </Button>
                 <Button onClick={handleSaveApprovers} disabled={savingApprovers}>
                   {savingApprovers ? 'Saving...' : 'Save approvers'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Project operators (assignment at project level – operators see all campaigns) */}
+          <div className="flex items-center justify-between mb-4 mt-8">
+            <h2 className="text-lg font-semibold">Project operators</h2>
+            <Button variant="outline" size="sm" onClick={() => setManageProjectUsersOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Assign operators
+            </Button>
+          </div>
+          <Card className="mb-6">
+            <CardContent className="pt-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Operators assigned to this project can see and work on all campaigns under it. Assign operators here instead of per campaign.
+              </p>
+              {!project.projectUsers?.length ? (
+                <p className="text-sm text-muted-foreground">No operators assigned yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {project.projectUsers.map((pu) => (
+                    <li
+                      key={pu.id}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs">
+                            {(pu.user.name || pu.user.email || '?').slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm">{pu.user.name || pu.user.email || pu.user.id}</span>
+                        {pu.user.email && (
+                          <span className="text-xs text-muted-foreground">({pu.user.email})</span>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        disabled={removingProjectUserId === pu.id}
+                        onClick={() => handleRemoveProjectUser(pu.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={manageProjectUsersOpen} onOpenChange={setManageProjectUsersOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Assign operators to project</DialogTitle>
+                <DialogDescription>
+                  Operators assigned here can see and execute all campaigns under this project.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="py-2">
+                <ApproverPicker
+                  users={agencyUsers.map((au) => ({
+                    id: au.user.id,
+                    name: au.user.name,
+                    email: au.user.email ?? '',
+                  }))}
+                  value={projectUserPickerIds}
+                  onChange={setProjectUserPickerIds}
+                  multiple
+                  loading={loadingAgencyUsers}
+                  emptyPlaceholder="No agency users found."
+                  hint="Select one or more operators to assign to this project."
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setManageProjectUsersOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveProjectUsers} disabled={savingProjectUsers}>
+                  {savingProjectUsers ? 'Saving...' : 'Save'}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -270,6 +270,11 @@ export const queries = {
           createdAt
           user { id name email }
         }
+        projectUsers {
+          id
+          createdAt
+          user { id name email }
+        }
       }
     }
   `,
@@ -418,6 +423,98 @@ export const queries = {
     }
   `,
 
+  deliverablesPendingClientApproval: `
+    query GetDeliverablesPendingClientApproval {
+      deliverablesPendingClientApproval {
+        id
+        title
+        description
+        deliverableType
+        status
+        dueDate
+        createdAt
+        campaign {
+          id
+          name
+          project {
+            id
+            name
+            client {
+              id
+              name
+            }
+          }
+        }
+      }
+    }
+  `,
+
+  agencyEmailConfig: `
+    query GetAgencyEmailConfig($agencyId: ID!) {
+      agencyEmailConfig(agencyId: $agencyId) {
+        id
+        agencyId
+        smtpHost
+        smtpPort
+        smtpSecure
+        smtpUsername
+        fromEmail
+        fromName
+        novuIntegrationIdentifier
+        createdAt
+        updatedAt
+      }
+    }
+  `,
+
+  creators: `
+    query GetCreators($agencyId: ID!, $includeInactive: Boolean) {
+      creators(agencyId: $agencyId, includeInactive: $includeInactive) {
+        id
+        displayName
+        email
+        phone
+        instagramHandle
+        youtubeHandle
+        tiktokHandle
+        notes
+        isActive
+        createdAt
+      }
+    }
+  `,
+
+  creator: `
+    query GetCreator($id: ID!) {
+      creator(id: $id) {
+        id
+        displayName
+        email
+        phone
+        instagramHandle
+        youtubeHandle
+        tiktokHandle
+        notes
+        isActive
+        createdAt
+        updatedAt
+        campaignAssignments {
+          id
+          status
+          rateAmount
+          rateCurrency
+          notes
+          campaign {
+            id
+            name
+            status
+          }
+          createdAt
+        }
+      }
+    }
+  `,
+
   campaign: `
     query GetCampaign($id: ID!) {
       campaign(id: $id) {
@@ -458,9 +555,13 @@ export const queries = {
         creators {
           id
           status
+          rateAmount
+          rateCurrency
+          notes
           creator {
             id
             displayName
+            email
             instagramHandle
             youtubeHandle
             tiktokHandle
@@ -517,6 +618,17 @@ export const mutations = {
         name
         isActive
         createdAt
+      }
+    }
+  `,
+
+  ensureClientUser: `
+    mutation EnsureClientUser {
+      ensureClientUser {
+        id
+        email
+        name
+        contact { id }
       }
     }
   `,
@@ -600,6 +712,32 @@ export const mutations = {
   removeProjectApprover: `
     mutation RemoveProjectApprover($projectApproverId: ID!) {
       removeProjectApprover(projectApproverId: $projectApproverId)
+    }
+  `,
+  
+  addProjectUser: `
+    mutation AddProjectUser($projectId: ID!, $userId: ID!) {
+      addProjectUser(projectId: $projectId, userId: $userId) {
+        id
+        createdAt
+        user { id name email }
+      }
+    }
+  `,
+  
+  removeProjectUser: `
+    mutation RemoveProjectUser($projectUserId: ID!) {
+      removeProjectUser(projectUserId: $projectUserId)
+    }
+  `,
+  
+  setAgencyUserRole: `
+    mutation SetAgencyUserRole($agencyId: ID!, $userId: ID!, $role: UserRole!) {
+      setAgencyUserRole(agencyId: $agencyId, userId: $userId, role: $role) {
+        id
+        role
+        user { id name email }
+      }
     }
   `,
   
@@ -793,6 +931,137 @@ export const mutations = {
             email
           }
         }
+      }
+    }
+  `,
+
+  deleteDeliverableVersion: `
+    mutation DeleteDeliverableVersion($deliverableVersionId: ID!) {
+      deleteDeliverableVersion(deliverableVersionId: $deliverableVersionId)
+    }
+  `,
+
+  saveAgencyEmailConfig: `
+    mutation SaveAgencyEmailConfig($agencyId: ID!, $input: AgencyEmailConfigInput!) {
+      saveAgencyEmailConfig(agencyId: $agencyId, input: $input) {
+        id
+        agencyId
+        smtpHost
+        smtpPort
+        smtpSecure
+        smtpUsername
+        fromEmail
+        fromName
+        novuIntegrationIdentifier
+        createdAt
+        updatedAt
+      }
+    }
+  `,
+
+  // Creator mutations
+  addCreator: `
+    mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
+      addCreator(agencyId: $agencyId, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+        id
+        displayName
+        email
+        isActive
+        createdAt
+      }
+    }
+  `,
+
+  updateCreator: `
+    mutation UpdateCreator($id: ID!, $displayName: String, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
+      updateCreator(id: $id, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+        id
+        displayName
+        email
+        phone
+        instagramHandle
+        youtubeHandle
+        tiktokHandle
+        notes
+        isActive
+        updatedAt
+      }
+    }
+  `,
+
+  deactivateCreator: `
+    mutation DeactivateCreator($id: ID!) {
+      deactivateCreator(id: $id) {
+        id
+        isActive
+      }
+    }
+  `,
+
+  activateCreator: `
+    mutation ActivateCreator($id: ID!) {
+      activateCreator(id: $id) {
+        id
+        isActive
+      }
+    }
+  `,
+
+  deleteCreator: `
+    mutation DeleteCreator($id: ID!) {
+      deleteCreator(id: $id)
+    }
+  `,
+
+  inviteCreatorToCampaign: `
+    mutation InviteCreatorToCampaign($campaignId: ID!, $creatorId: ID!, $rateAmount: Money, $rateCurrency: String, $notes: String) {
+      inviteCreatorToCampaign(campaignId: $campaignId, creatorId: $creatorId, rateAmount: $rateAmount, rateCurrency: $rateCurrency, notes: $notes) {
+        id
+        status
+        rateAmount
+        rateCurrency
+        creator {
+          id
+          displayName
+        }
+      }
+    }
+  `,
+
+  updateCampaignCreator: `
+    mutation UpdateCampaignCreator($id: ID!, $rateAmount: Money, $rateCurrency: String, $notes: String) {
+      updateCampaignCreator(id: $id, rateAmount: $rateAmount, rateCurrency: $rateCurrency, notes: $notes) {
+        id
+        rateAmount
+        rateCurrency
+        notes
+      }
+    }
+  `,
+
+  removeCreatorFromCampaign: `
+    mutation RemoveCreatorFromCampaign($campaignCreatorId: ID!) {
+      removeCreatorFromCampaign(campaignCreatorId: $campaignCreatorId) {
+        id
+        status
+      }
+    }
+  `,
+
+  acceptCampaignInvite: `
+    mutation AcceptCampaignInvite($campaignCreatorId: ID!) {
+      acceptCampaignInvite(campaignCreatorId: $campaignCreatorId) {
+        id
+        status
+      }
+    }
+  `,
+
+  declineCampaignInvite: `
+    mutation DeclineCampaignInvite($campaignCreatorId: ID!) {
+      declineCampaignInvite(campaignCreatorId: $campaignCreatorId) {
+        id
+        status
       }
     }
   `,

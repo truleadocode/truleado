@@ -4,7 +4,7 @@
 
 This folder contains the canonical documents that define Truleado. Any implementation must align with these specifications.
 
-**For agent handoff and the Create Client bug context:** see **[ai-doc.md](./ai-doc.md)** (§0 Session Context and §9 Active Bug).
+**For agent handoff and recent context:** see **[ai-doc.md](./ai-doc.md)** (§0 Session Context, §5 Implemented Features, §8 How to Resume).
 
 ---
 
@@ -17,7 +17,8 @@ This folder contains the canonical documents that define Truleado. Any implement
 | [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Jan 2026 |
 | [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
-| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; Create Client bug handoff | Jan 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Jan 2026 |
+| [Notification Service Implementation](./notification-service-implementation.md) | Novu setup, agency SMTP, Inbox, workflows, triggers | Jan 2026 |
 
 ---
 
@@ -59,21 +60,21 @@ Campaign Permission
 - [x] RBAC framework
 - [x] Agency dashboard
 - [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
-- [x] Client management (**known bug**: Create Client form returns "GraphQL operations must contain a non-empty query" — see ai-doc.md §9)
-- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers can come from contacts with `is_client_approver`
+- [x] Client management
+- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries).
+- [x] **Client login portal**: Magic-link sign-in at `/client/login`; verify at `/client/verify`; dashboard placeholder at `/client`. `ensureClientUser` mutation; `User.contact`; auth redirect for contact-only users → `/client`. Dev-only `POST /api/client-auth/dev-magic-link` to display sign-in link when SMTP not configured.
 - [x] Project management
 - [x] Campaign engine with state machine
-- [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges)
+- [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
+- [x] **Notifications (Phase 4/5)**: Novu in-app Inbox + email; agency SMTP at Settings → Notifications; workflows `approval-requested`, `approval-approved`, `approval-rejected`; sample script `scripts/trigger-sample-notification.js`
 - [ ] Creator roster
 - [ ] Audit logs
-- [ ] Basic notifications
 
 ### Excluded (Post-MVP)
 - Post-campaign analytics
 - Paid media reporting
 - Token system for analytics
 - ROI dashboards
-- Client login portal
 - Creator onboarding flows
 
 ---
@@ -123,8 +124,19 @@ When adding new features:
   - Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`.
   - Mutations: `createContact`, `updateContact`, `deleteContact`.
   - UI: Client detail page has **Contacts** tab (list, add/edit/delete, toggle client approver); **Global Contacts** page at `/dashboard/contacts` with filters (client, department, approver); sidebar link "Contacts".
-- **Known bug (unresolved)**: Create Client form: on submit, user sees "GraphQL operations must contain a non-empty `query` or a `persistedQuery` extension." Request body appears empty or missing `query` on the server. See `ai-doc.md` §0 (Session Context) and §9 for full context and next steps for a new agent.
-- **Docs**: Updated `ai-doc.md` with §0 "Session Context for New Agent" (Jira alignment, Phase 3 implementation summary, Create Client bug with exact error and what was tried). README now links to ai-doc for agent handoff and Create Client bug.
+  - **Create Contact fix**: Client detail Contacts tab was incorrectly using `queries.createContact` / `updateContact` / `deleteContact` (those are mutations). Fixed by using `mutations.*`; "non-empty query" errors on contact CRUD resolved.
+- **Client login portal (magic link)**:
+  - Routes: `/client` (dashboard placeholder), `/client/login`, `/client/verify`. Layout: `src/app/client/layout.tsx`.
+  - Firebase Email Link auth; helpers in `src/lib/firebase/client.ts` (`sendClientSignInLink`, `isClientSignInLink`, `signInWithClientLink`, `CLIENT_MAGIC_LINK_EMAIL_KEY`).
+  - API: `POST /api/client-auth/request-magic-link` (validates contact `is_client_approver` by email); `POST /api/client-auth/dev-magic-link` (dev-only, returns sign-in link for testing without SMTP; localhost only).
+  - GraphQL: `ensureClientUser` mutation (create user + `auth_identities` provider `firebase_email_link`, link contact); `User.contact`; `me` fetches `contact { id }` for redirect logic.
+  - Auth context: `contact` in state; redirect logic: if `agencies.length === 0` and `contact` exists → `/client` (login, root, onboarding, `ProtectedRoute`).
+  - Verify page: on Firebase "email already in use" / "account exists with different credential", show "Use agency sign-in" and link to `/login`.
+- **Deliverables**: `deleteDeliverableVersion(deliverableVersionId)` mutation; delete button on deliverable detail when status PENDING/REJECTED; version must have no approvals; storage file removed.
+- **Docs**: `ai-doc.md` §0 Session Context, §5 Implemented Features, §8 How to Resume; GRAPHQL_API_CONTRACT (User.contact, ensureClientUser, deleteDeliverableVersion); TECHNICAL_LLD §4.5 Client Portal; DATABASE_SCHEMA_DDL (auth_identities `firebase_email_link`).
+- **Phase 4/5 — Notifications & Agency Email**:
+  - Novu: in-app Inbox (header), email via per-agency SMTP. Migration `00013_agency_email_config.sql`; GraphQL `agencyEmailConfig`, `saveAgencyEmailConfig`; Settings → Notifications SMTP form (agency admin). Triggers on submit-for-review, approval, reject; workflows `approval-requested`, `approval-approved`, `approval-rejected`. See `notification-service-implementation.md`. Sample trigger: `node scripts/trigger-sample-notification.js`.
+- **2025-01-29**: ai-doc handoff updated with "Start here tomorrow" for email delivery testing.
 
 ---
 

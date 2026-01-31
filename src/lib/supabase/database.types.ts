@@ -225,6 +225,26 @@ export interface Database {
           updated_at?: string;
         };
       };
+      project_users: {
+        Row: {
+          id: string;
+          project_id: string;
+          user_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          project_id: string;
+          user_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          project_id?: string;
+          user_id?: string;
+          created_at?: string;
+        };
+      };
       campaigns: {
         Row: {
           id: string;
@@ -687,6 +707,50 @@ export interface Database {
           is_read?: boolean;
           read_at?: string | null;
           created_at?: string;
+        };
+      };
+      agency_email_config: {
+        Row: {
+          id: string;
+          agency_id: string;
+          smtp_host: string;
+          smtp_port: number;
+          smtp_secure: boolean;
+          smtp_username: string | null;
+          smtp_password: string | null;
+          from_email: string;
+          from_name: string | null;
+          novu_integration_identifier: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agency_id: string;
+          smtp_host: string;
+          smtp_port: number;
+          smtp_secure: boolean;
+          smtp_username?: string | null;
+          smtp_password?: string | null;
+          from_email: string;
+          from_name?: string | null;
+          novu_integration_identifier?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          agency_id?: string;
+          smtp_host?: string;
+          smtp_port?: number;
+          smtp_secure?: boolean;
+          smtp_username?: string | null;
+          smtp_password?: string | null;
+          from_email?: string;
+          from_name?: string | null;
+          novu_integration_identifier?: string | null;
+          created_at?: string;
+          updated_at?: string;
         };
       };
     };

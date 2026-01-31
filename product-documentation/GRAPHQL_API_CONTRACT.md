@@ -108,6 +108,7 @@ type User {
   avatarUrl: String
   isActive: Boolean!
   agencies: [AgencyMembership!]!
+  contact: Contact      # Set when user is linked from a contact (e.g. client portal magic-link)
   createdAt: DateTime!
 }
 
@@ -118,6 +119,8 @@ type AgencyMembership {
   isActive: Boolean!
 }
 ```
+
+> **User.contact**: Optional. Present when the user was created via the **client portal** magic-link flow (`ensureClientUser`) and linked to a `contacts` row. Used for redirect logic (contact-only users → `/client`) and client portal UX.
 
 ---
 
@@ -197,9 +200,28 @@ type Project {
   endDate: DateTime
   isArchived: Boolean!
   campaigns: [Campaign!]!
+  approverUsers: [User!]!
+  projectApprovers: [ProjectApprover!]!
+  projectUsers: [ProjectUser!]!
+  createdAt: DateTime!
+}
+
+type ProjectApprover {
+  id: ID!
+  project: Project!
+  user: User!
+  createdAt: DateTime!
+}
+
+type ProjectUser {
+  id: ID!
+  project: Project!
+  user: User!
   createdAt: DateTime!
 }
 ```
+
+> **projectUsers**: Operators assigned to this project; they see all campaigns under it. Primary assignment path for operators. **projectApprovers**: Optional project-level approval stage.
 
 ---
 
@@ -255,6 +277,8 @@ type CampaignCreator {
   createdAt: DateTime!
 }
 ```
+
+> **Campaign users** are **override-only** (extra approvers, viewers, or exception operators). Primary operator assignment is at **project level** via `projectUsers` / `addProjectUser`.
 
 ---
 
@@ -428,6 +452,31 @@ type Notification {
   isRead: Boolean!
   createdAt: DateTime!
 }
+
+# Agency email (SMTP) config for Novu – agency_admin can save; password never returned
+type AgencyEmailConfig {
+  id: ID!
+  agencyId: ID!
+  smtpHost: String!
+  smtpPort: Int!
+  smtpSecure: Boolean!
+  smtpUsername: String
+  fromEmail: String!
+  fromName: String
+  novuIntegrationIdentifier: String
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+input AgencyEmailConfigInput {
+  smtpHost: String!
+  smtpPort: Int!
+  smtpSecure: Boolean!
+  smtpUsername: String
+  smtpPassword: String
+  fromEmail: String!
+  fromName: String
+}
 ```
 
 ---
@@ -466,7 +515,8 @@ type Query {
   
   # Activity & Notifications
   activityLogs(agencyId: ID!, entityType: String, entityId: ID): [ActivityLog!]!
-  notifications(unreadOnly: Boolean): [Notification!]!
+  notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
+  agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
 }
 ```
 
@@ -488,12 +538,12 @@ input CreateUserInput {
 
 type Mutation {
   createUser(input: CreateUserInput!): User!
+  ensureClientUser: User!
 }
 ```
 
-- **Auth**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup).
-- **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user.
-- **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
+- **createUser**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup). **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user. **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
+- **ensureClientUser**: **Client portal** magic-link flow. Requires a valid Firebase token from **email-link sign-in** (not email/password). **Idempotent**: If an `auth_identities` row exists for this Firebase UID with provider `firebase_email_link`, returns the existing user. Otherwise: finds a `contacts` row with matching email and `is_client_approver = true`, creates `users` and `auth_identities` (provider `firebase_email_link`), updates the contact’s `user_id`, returns the user. Used after the user completes sign-in via the magic link on `/client/verify`.
 
 ### 6.2 Agency & Client
 
@@ -506,7 +556,7 @@ type Mutation {
   createClient(
     agencyId: ID!
     name: String!
-    accountManagerId: ID!
+    accountManagerId: ID
   ): Client!
   
   archiveClient(id: ID!): Client!
@@ -602,10 +652,16 @@ type Mutation {
   archiveCampaign(campaignId: ID!): Campaign!
   
   # Campaign user management
+  addProjectUser(projectId: ID!, userId: ID!): ProjectUser!
+  removeProjectUser(projectUserId: ID!): Boolean!
+  setAgencyUserRole(agencyId: ID!, userId: ID!, role: UserRole!): AgencyUser!
   assignUserToCampaign(campaignId: ID!, userId: ID!, role: String!): CampaignUser!
-  removeUserFromCampaign(campaignId: ID!, userId: ID!): Boolean!
+  removeUserFromCampaign(campaignUserId: ID!): Boolean!
 }
 ```
+
+- **addProjectUser**: Assigns an operator to a project. **Permissions**: Agency Admin or Account Manager for the project's client. The user must be an active member of the agency. Once assigned, the operator sees all campaigns under that project. This is the **primary assignment path** for operators. Returns `ProjectUser` or throws if user is already assigned or not an agency member.
+- **removeProjectUser**: Removes an operator from a project. **Permissions**: Agency Admin or Account Manager for the project's client. Returns `true` on success.
 
 ---
 
@@ -650,10 +706,13 @@ type Mutation {
     deliverableVersionId: ID!
     caption: String
   ): DeliverableVersion!
+
+  deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
 }
 ```
 
-> **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **deleteDeliverableVersion**: Permanently deletes a deliverable version and its file in the `deliverables` storage bucket. **Allowed only when**: (1) the deliverable status is `PENDING` or `REJECTED`, (2) the user has `UPLOAD_VERSION` on the campaign, and (3) the version has no associated approvals. Throws if the version has been used in any approval. UI: delete button on the deliverable detail page (when status permits).
 
 ---
 
@@ -661,16 +720,41 @@ type Mutation {
 
 ```graphql
 type Mutation {
-  createCreator(
+  # Add a creator to the agency roster
+  addCreator(
     agencyId: ID!
     displayName: String!
     email: String
+    phone: String
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    notes: String
   ): Creator!
   
-  assignCreatorToCampaign(
+  # Update a creator in the agency roster
+  updateCreator(
+    id: ID!
+    displayName: String
+    email: String
+    phone: String
+    instagramHandle: String
+    youtubeHandle: String
+    tiktokHandle: String
+    notes: String
+  ): Creator!
+  
+  # Deactivate a creator (soft delete - keeps history)
+  deactivateCreator(id: ID!): Creator!
+  
+  # Reactivate a previously deactivated creator
+  activateCreator(id: ID!): Creator!
+  
+  # Permanently delete a creator (only if no campaign assignments)
+  deleteCreator(id: ID!): Boolean!
+  
+  # Invite a creator to a campaign
+  inviteCreatorToCampaign(
     campaignId: ID!
     creatorId: ID!
     rateAmount: Money
@@ -678,14 +762,35 @@ type Mutation {
     notes: String
   ): CampaignCreator!
   
-  removeCreatorFromCampaign(campaignCreatorId: ID!): Boolean!
+  # Accept campaign invitation (creator action)
+  acceptCampaignInvite(campaignCreatorId: ID!): CampaignCreator!
   
-  updateCampaignCreatorStatus(
-    campaignCreatorId: ID!
-    status: CampaignCreatorStatus!
+  # Decline campaign invitation (creator action)
+  declineCampaignInvite(campaignCreatorId: ID!): CampaignCreator!
+  
+  # Remove creator from campaign
+  removeCreatorFromCampaign(campaignCreatorId: ID!): CampaignCreator!
+  
+  # Update campaign creator rate/notes
+  updateCampaignCreator(
+    id: ID!
+    rateAmount: Money
+    rateCurrency: String
+    notes: String
   ): CampaignCreator!
 }
 ```
+
+- **addCreator**: Creates a new creator in the agency roster. Requires `MANAGE_CREATOR_ROSTER` permission (Agency Admin, Account Manager). Display name must be at least 2 characters.
+- **updateCreator**: Updates creator details. Requires `MANAGE_CREATOR_ROSTER` permission. All fields are optional; only provided fields are updated.
+- **deactivateCreator**: Soft-deletes a creator by setting `is_active = false`. Preserves all historical data (campaign assignments, analytics, payments). Requires `MANAGE_CREATOR_ROSTER` permission.
+- **activateCreator**: Reactivates a previously deactivated creator. Requires `MANAGE_CREATOR_ROSTER` permission.
+- **deleteCreator**: Permanently deletes a creator. Only allowed if the creator has no campaign assignments. Requires `MANAGE_CREATOR_ROSTER` permission.
+- **inviteCreatorToCampaign**: Assigns a creator to a campaign with optional rate and notes. Requires `INVITE_CREATOR` permission (Agency Admin, Account Manager, Operator). Creator must belong to the same agency as the campaign. Status defaults to `INVITED`.
+- **acceptCampaignInvite**: Changes campaign creator status from `INVITED` to `ACCEPTED`. Currently requires campaign access (future: creator authentication).
+- **declineCampaignInvite**: Changes campaign creator status from `INVITED` to `DECLINED`. Currently requires campaign access (future: creator authentication).
+- **removeCreatorFromCampaign**: Sets campaign creator status to `REMOVED`. Requires `INVITE_CREATOR` permission.
+- **updateCampaignCreator**: Updates rate amount, currency, or notes for a campaign creator assignment. Requires `INVITE_CREATOR` permission.
 
 ---
 
@@ -755,9 +860,12 @@ type Mutation {
 ```graphql
 type Mutation {
   markNotificationRead(notificationId: ID!): Notification!
-  markAllNotificationsRead: Boolean!
+  markAllNotificationsRead(agencyId: ID!): Boolean!
+  saveAgencyEmailConfig(agencyId: ID!, input: AgencyEmailConfigInput!): AgencyEmailConfig!
 }
 ```
+
+- **saveAgencyEmailConfig**: Agency admin only. Saves SMTP to `agency_email_config` and creates/updates Novu Custom SMTP integration for that agency; password optional on update.
 
 ---
 

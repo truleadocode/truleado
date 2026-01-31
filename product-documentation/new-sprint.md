@@ -161,7 +161,11 @@ This is suitable for **Cursor agent execution, Jira import, or internal tech pla
 
 ## ✅ PHASE 3 — Client & Contacts (CRM Foundation)
 
-**Implementation status:** Implemented. Migration `00012_phase3_contacts.sql`; GraphQL type `Contact`, `Client.contacts`, `Client.clientApprovers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`; Client page **Contacts** tab (list, add/edit/delete, toggle client approver); Global Contacts page at `/dashboard/contacts` (filters: client, department, approver; search); sidebar link "Contacts". See README changelog and `ai-doc.md` §5.2.1.
+**Implementation status:** Implemented. Migration `00012_phase3_contacts.sql`; GraphQL type `Contact`, `Client.contacts`, `Client.clientApprovers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`; Client page **Contacts** tab (list, add/edit/delete, toggle client approver); Global Contacts page at `/dashboard/contacts` (filters: client, department, approver; search); sidebar link "Contacts". Contact CRUD uses `mutations.*` (not queries). See README changelog and `ai-doc.md` §5.2.1.
+
+**Client portal (magic link):** Implemented. Routes `/client`, `/client/login`, `/client/verify`; Firebase Email Link auth; `ensureClientUser` mutation; `User.contact`; auth redirect for contact-only users → `/client`. API: `request-magic-link`, `dev-magic-link` (dev-only, display link when SMTP not configured). Verify page handles "email already in use" → suggest agency login.
+
+**Deliverables:** `deleteDeliverableVersion` mutation and UI delete button (when status PENDING/REJECTED, no approvals on version).
 
 ### Task 3.1 — Contacts Data Model
 

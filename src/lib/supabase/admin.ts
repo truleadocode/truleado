@@ -26,8 +26,9 @@ if (!supabaseUrl || !supabaseServiceRoleKey) {
 /**
  * Supabase admin client - BYPASSES RLS
  * Only use for trusted server-side operations
+ * Typed as any to avoid Supabase client inferring never for table ops when Database shape doesn't match.
  */
-export const supabaseAdmin: SupabaseClient<Database> = createClient<Database>(
+export const supabaseAdmin = createClient<Database>(
   supabaseUrl,
   supabaseServiceRoleKey,
   {
@@ -36,4 +37,5 @@ export const supabaseAdmin: SupabaseClient<Database> = createClient<Database>(
       persistSession: false,
     },
   }
-);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+) as any;
