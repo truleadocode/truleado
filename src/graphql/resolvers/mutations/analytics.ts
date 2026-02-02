@@ -27,6 +27,9 @@ import {
 } from '../../errors';
 import { logActivity } from '@/lib/audit';
 
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
+const APP_URL = process.env.NEXT_PUBLIC_URL || process.env.VERCEL_URL || 'http://localhost:3000';
+
 /**
  * Fetch pre-campaign analytics for a creator
  * 
@@ -191,4 +194,155 @@ export async function fetchPreCampaignAnalytics(
   });
   
   return snapshot;
+}
+
+/**
+ * Trigger a background social data fetch for a creator.
+ *
+ * Token-gated: 1 token per fetch.
+ * Creates a job record, deducts a token, then fires-and-forgets
+ * a call to /api/social-fetch to do the actual work.
+ */
+export async function triggerSocialFetch(
+  _: unknown,
+  {
+    creatorId,
+    platform,
+    jobType,
+  }: {
+    creatorId: string;
+    platform: string;
+    jobType: string;
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+
+  // Validate platform and jobType
+  const validPlatforms = ['instagram', 'youtube'];
+  const validJobTypes = ['basic_scrape', 'enriched_profile'];
+  if (!validPlatforms.includes(platform)) {
+    throw new Error(`Invalid platform: ${platform}. Must be one of: ${validPlatforms.join(', ')}`);
+  }
+  if (!validJobTypes.includes(jobType)) {
+    throw new Error(`Invalid job type: ${jobType}`);
+  }
+
+  // Fetch creator and verify agency membership
+  const { data: creator, error: creatorError } = await supabaseAdmin
+    .from('creators')
+    .select('id, agency_id, instagram_handle, youtube_handle, tiktok_handle')
+    .eq('id', creatorId)
+    .single();
+
+  if (creatorError || !creator) {
+    throw notFoundError('Creator', creatorId);
+  }
+
+  const agencyId = creator.agency_id;
+
+  // Check permission
+  const hasPermission = hasAgencyPermission(
+    user,
+    agencyId,
+    Permission.FETCH_ANALYTICS
+  );
+  if (!hasPermission) {
+    throw forbiddenError('You do not have permission to fetch analytics');
+  }
+
+  // Validate creator has the handle for the requested platform
+  const handleMap: Record<string, string | null> = {
+    instagram: creator.instagram_handle,
+    youtube: creator.youtube_handle,
+  };
+  if (!handleMap[platform]) {
+    throw new Error(`Creator does not have a ${platform} handle configured`);
+  }
+
+  // Check agency token balance
+  const { data: agency, error: agencyError } = await supabaseAdmin
+    .from('agencies')
+    .select('token_balance')
+    .eq('id', agencyId)
+    .single();
+
+  if (agencyError || !agency) {
+    throw notFoundError('Agency', agencyId);
+  }
+
+  if (agency.token_balance < 1) {
+    throw insufficientTokensError(
+      'Your agency has insufficient tokens for social data fetch',
+      1,
+      agency.token_balance
+    );
+  }
+
+  // Deduct token BEFORE creating the job
+  const { error: deductError } = await supabaseAdmin
+    .from('agencies')
+    .update({ token_balance: agency.token_balance - 1 })
+    .eq('id', agencyId);
+
+  if (deductError) {
+    throw new Error('Failed to deduct analytics token');
+  }
+
+  // Create job record
+  const { data: job, error: jobError } = await supabaseAdmin
+    .from('social_data_jobs')
+    .insert({
+      creator_id: creatorId,
+      agency_id: agencyId,
+      platform,
+      job_type: jobType,
+      status: 'pending',
+      tokens_consumed: 1,
+      triggered_by: user.id,
+    })
+    .select()
+    .single();
+
+  if (jobError || !job) {
+    // Refund token on failure
+    await supabaseAdmin
+      .from('agencies')
+      .update({ token_balance: agency.token_balance })
+      .eq('id', agencyId);
+    throw new Error('Failed to create social data job');
+  }
+
+  // Fire-and-forget: call the background API route
+  const baseUrl = APP_URL.startsWith('http') ? APP_URL : `https://${APP_URL}`;
+  fetch(`${baseUrl}/api/social-fetch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-secret': INTERNAL_API_SECRET || '',
+    },
+    body: JSON.stringify({ jobId: job.id }),
+  }).catch((err) => {
+    console.error('Failed to trigger social-fetch route:', err);
+  });
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'social_data_job',
+    entityId: job.id,
+    action: 'triggered',
+    actorId: user.id,
+    actorType: 'user',
+    afterState: job,
+    metadata: {
+      creatorId,
+      platform,
+      jobType,
+      tokensConsumed: 1,
+      newBalance: agency.token_balance - 1,
+    },
+  });
+
+  return job;
 }

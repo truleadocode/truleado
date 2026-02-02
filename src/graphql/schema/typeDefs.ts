@@ -124,6 +124,7 @@ export const typeDefs = gql`
     billingEmail: String
     status: String!
     tokenBalance: Int!
+    premiumTokenBalance: Int!
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -404,6 +405,70 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # =============================================================================
+  # SOCIAL MEDIA ANALYTICS
+  # =============================================================================
+
+  # Social data background job
+  type SocialDataJob {
+    id: ID!
+    creatorId: ID!
+    platform: String!
+    jobType: String!
+    status: String!
+    errorMessage: String
+    tokensConsumed: Int!
+    startedAt: DateTime
+    completedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  # Creator social profile (latest data per platform)
+  type CreatorSocialProfile {
+    id: ID!
+    creatorId: ID!
+    platform: String!
+    platformUsername: String
+    platformDisplayName: String
+    profilePicUrl: String
+    bio: String
+    followersCount: Int
+    followingCount: Int
+    postsCount: Int
+    isVerified: Boolean
+    isBusinessAccount: Boolean
+    externalUrl: String
+    subscribersCount: Int
+    totalViews: String
+    channelId: String
+    avgLikes: Float
+    avgComments: Float
+    avgViews: Float
+    engagementRate: Float
+    lastFetchedAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # Individual social post/video
+  type CreatorSocialPost {
+    id: ID!
+    platform: String!
+    platformPostId: String!
+    postType: String
+    caption: String
+    url: String
+    thumbnailUrl: String
+    likesCount: Int
+    commentsCount: Int
+    viewsCount: Int
+    sharesCount: Int
+    savesCount: Int
+    hashtags: [String!]
+    mentions: [String!]
+    publishedAt: DateTime
+    createdAt: DateTime!
+  }
+
   # Agency email (SMTP) config for notifications (Novu)
   type AgencyEmailConfig {
     id: ID!
@@ -417,6 +482,19 @@ export const typeDefs = gql`
     novuIntegrationIdentifier: String
     createdAt: DateTime!
     updatedAt: DateTime!
+  }
+
+  # Token purchase record (billing)
+  type TokenPurchase {
+    id: ID!
+    purchaseType: String!
+    tokenQuantity: Int!
+    amountPaise: Int!
+    currency: String!
+    razorpayOrderId: String
+    status: String!
+    createdAt: DateTime!
+    completedAt: DateTime
   }
 
   input AgencyEmailConfigInput {
@@ -475,6 +553,32 @@ export const typeDefs = gql`
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
     # Agency email (SMTP) config for notifications (agency members; password never returned)
     agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
+
+    # ---------------------------------------------
+    # Social Media Analytics Queries
+    # ---------------------------------------------
+
+    # Social profile for a creator on a specific platform
+    creatorSocialProfile(creatorId: ID!, platform: String!): CreatorSocialProfile
+
+    # All social profiles for a creator
+    creatorSocialProfiles(creatorId: ID!): [CreatorSocialProfile!]!
+
+    # Social posts for a creator on a platform
+    creatorSocialPosts(creatorId: ID!, platform: String!, limit: Int): [CreatorSocialPost!]!
+
+    # Get a specific social data job
+    socialDataJob(jobId: ID!): SocialDataJob
+
+    # All social data jobs for a creator
+    socialDataJobs(creatorId: ID!): [SocialDataJob!]!
+
+    # ---------------------------------------------
+    # Billing / Token Purchases
+    # ---------------------------------------------
+
+    # Purchase history for an agency (most recent first, limit 50)
+    tokenPurchases(agencyId: ID!): [TokenPurchase!]!
   }
 
   # =============================================================================
@@ -708,7 +812,7 @@ export const typeDefs = gql`
     # ---------------------------------------------
     # Analytics Mutations (Token-Aware)
     # ---------------------------------------------
-    
+
     # Fetch pre-campaign analytics for a creator
     # Rules:
     # - Role must be Admin / Account Manager / Operator
@@ -718,6 +822,14 @@ export const typeDefs = gql`
       campaignCreatorId: ID!
       platform: String!
     ): CreatorAnalyticsSnapshot!
+
+    # Trigger social data fetch (background, token-gated)
+    # Creates a job and fires async worker. Returns job for polling.
+    triggerSocialFetch(
+      creatorId: ID!
+      platform: String!
+      jobType: String!
+    ): SocialDataJob!
     
     # ---------------------------------------------
     # Payment Mutations

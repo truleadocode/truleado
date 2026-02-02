@@ -516,4 +516,184 @@ export const queryResolvers = {
     if (error) throw new Error('Failed to fetch email config');
     return data;
   },
+
+  // =============================================================================
+  // SOCIAL MEDIA ANALYTICS QUERIES
+  // =============================================================================
+
+  /**
+   * Get a creator's social profile for a specific platform
+   */
+  creatorSocialProfile: async (
+    _: unknown,
+    { creatorId, platform }: { creatorId: string; platform: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    // Verify creator exists and get agency
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from('creators')
+      .select('agency_id')
+      .eq('id', creatorId)
+      .single();
+
+    if (creatorError || !creator) throw notFoundError('Creator', creatorId);
+    requireAgencyMembership(ctx, creator.agency_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('creator_social_profiles')
+      .select('*')
+      .eq('creator_id', creatorId)
+      .eq('platform', platform)
+      .maybeSingle();
+
+    if (error) throw new Error('Failed to fetch social profile');
+    return data;
+  },
+
+  /**
+   * Get all social profiles for a creator
+   */
+  creatorSocialProfiles: async (
+    _: unknown,
+    { creatorId }: { creatorId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from('creators')
+      .select('agency_id')
+      .eq('id', creatorId)
+      .single();
+
+    if (creatorError || !creator) throw notFoundError('Creator', creatorId);
+    requireAgencyMembership(ctx, creator.agency_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('creator_social_profiles')
+      .select('*')
+      .eq('creator_id', creatorId)
+      .order('platform');
+
+    if (error) throw new Error('Failed to fetch social profiles');
+    return data || [];
+  },
+
+  /**
+   * Get social posts for a creator on a specific platform
+   */
+  creatorSocialPosts: async (
+    _: unknown,
+    { creatorId, platform, limit }: { creatorId: string; platform: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from('creators')
+      .select('agency_id')
+      .eq('id', creatorId)
+      .single();
+
+    if (creatorError || !creator) throw notFoundError('Creator', creatorId);
+    requireAgencyMembership(ctx, creator.agency_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('creator_social_posts')
+      .select('*')
+      .eq('creator_id', creatorId)
+      .eq('platform', platform)
+      .order('published_at', { ascending: false })
+      .limit(limit || 30);
+
+    if (error) throw new Error('Failed to fetch social posts');
+    return data || [];
+  },
+
+  /**
+   * Get a specific social data job
+   */
+  socialDataJob: async (
+    _: unknown,
+    { jobId }: { jobId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    const { data: job, error } = await supabaseAdmin
+      .from('social_data_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
+
+    if (error || !job) throw notFoundError('SocialDataJob', jobId);
+
+    // Verify agency membership through the creator
+    const { data: creator } = await supabaseAdmin
+      .from('creators')
+      .select('agency_id')
+      .eq('id', job.creator_id)
+      .single();
+
+    if (creator) {
+      requireAgencyMembership(ctx, creator.agency_id);
+    }
+
+    return job;
+  },
+
+  /**
+   * Get all social data jobs for a creator
+   */
+  socialDataJobs: async (
+    _: unknown,
+    { creatorId }: { creatorId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from('creators')
+      .select('agency_id')
+      .eq('id', creatorId)
+      .single();
+
+    if (creatorError || !creator) throw notFoundError('Creator', creatorId);
+    requireAgencyMembership(ctx, creator.agency_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('social_data_jobs')
+      .select('*')
+      .eq('creator_id', creatorId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
+    if (error) throw new Error('Failed to fetch social data jobs');
+    return data || [];
+  },
+
+  // -----------------------------------------------
+  // Billing / Token Purchases
+  // -----------------------------------------------
+
+  tokenPurchases: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data, error } = await supabaseAdmin
+      .from('token_purchases')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw new Error('Failed to fetch token purchases');
+    return data || [];
+  },
 };

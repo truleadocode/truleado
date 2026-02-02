@@ -583,6 +583,107 @@ export const queries = {
       }
     }
   `,
+
+  // Social Media Analytics
+  creatorSocialProfiles: `
+    query GetCreatorSocialProfiles($creatorId: ID!) {
+      creatorSocialProfiles(creatorId: $creatorId) {
+        id
+        platform
+        platformUsername
+        platformDisplayName
+        profilePicUrl
+        bio
+        followersCount
+        followingCount
+        postsCount
+        isVerified
+        isBusinessAccount
+        externalUrl
+        subscribersCount
+        totalViews
+        channelId
+        avgLikes
+        avgComments
+        avgViews
+        engagementRate
+        lastFetchedAt
+      }
+    }
+  `,
+
+  creatorSocialPosts: `
+    query GetCreatorSocialPosts($creatorId: ID!, $platform: String!, $limit: Int) {
+      creatorSocialPosts(creatorId: $creatorId, platform: $platform, limit: $limit) {
+        id
+        platform
+        platformPostId
+        postType
+        caption
+        url
+        thumbnailUrl
+        likesCount
+        commentsCount
+        viewsCount
+        publishedAt
+      }
+    }
+  `,
+
+  socialDataJobs: `
+    query GetSocialDataJobs($creatorId: ID!) {
+      socialDataJobs(creatorId: $creatorId) {
+        id
+        platform
+        jobType
+        status
+        errorMessage
+        tokensConsumed
+        startedAt
+        completedAt
+        createdAt
+      }
+    }
+  `,
+
+  socialDataJob: `
+    query GetSocialDataJob($jobId: ID!) {
+      socialDataJob(jobId: $jobId) {
+        id
+        platform
+        status
+        errorMessage
+        completedAt
+      }
+    }
+  `,
+
+  // Billing / Token Purchases
+  agencyTokenBalance: `
+    query GetAgencyTokenBalance($id: ID!) {
+      agency(id: $id) {
+        id
+        tokenBalance
+        premiumTokenBalance
+      }
+    }
+  `,
+
+  tokenPurchases: `
+    query GetTokenPurchases($agencyId: ID!) {
+      tokenPurchases(agencyId: $agencyId) {
+        id
+        purchaseType
+        tokenQuantity
+        amountPaise
+        currency
+        razorpayOrderId
+        status
+        createdAt
+        completedAt
+      }
+    }
+  `,
 };
 
 /**
@@ -1062,6 +1163,19 @@ export const mutations = {
       declineCampaignInvite(campaignCreatorId: $campaignCreatorId) {
         id
         status
+      }
+    }
+  `,
+
+  // Social Media Analytics
+  triggerSocialFetch: `
+    mutation TriggerSocialFetch($creatorId: ID!, $platform: String!, $jobType: String!) {
+      triggerSocialFetch(creatorId: $creatorId, platform: $platform, jobType: $jobType) {
+        id
+        platform
+        jobType
+        status
+        createdAt
       }
     }
   `,
