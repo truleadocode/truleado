@@ -133,13 +133,15 @@ type Agency {
   agencyCode: String
   billingEmail: String
   tokenBalance: Int!
+  premiumTokenBalance: Int!
   clients: [Client!]!
   users: [AgencyMembership!]!
   createdAt: DateTime!
 }
 ```
 
-> **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.
+> **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.  
+> **premiumTokenBalance**: Separate token balance for premium features (social analytics, enriched profiles). Added in migration 00016.
 
 ---
 
@@ -390,6 +392,66 @@ type PostMetricsSnapshot {
   source: String!
   createdAt: DateTime!
 }
+
+# Social Media Analytics (Background Jobs)
+type SocialDataJob {
+  id: ID!
+  creatorId: ID!
+  platform: String!
+  jobType: String!
+  status: String!
+  errorMessage: String
+  tokensConsumed: Int!
+  startedAt: DateTime
+  completedAt: DateTime
+  createdAt: DateTime!
+}
+
+# Creator Social Profile (Latest per platform)
+type CreatorSocialProfile {
+  id: ID!
+  creatorId: ID!
+  platform: String!
+  platformUsername: String
+  platformDisplayName: String
+  profilePicUrl: String
+  bio: String
+  followersCount: Int
+  followingCount: Int
+  postsCount: Int
+  isVerified: Boolean
+  isBusinessAccount: Boolean
+  externalUrl: String
+  subscribersCount: Int      # YouTube-specific
+  totalViews: String         # YouTube-specific
+  channelId: String          # YouTube-specific
+  avgLikes: Float
+  avgComments: Float
+  avgViews: Float
+  engagementRate: Float
+  lastFetchedAt: DateTime!
+  createdAt: DateTime!
+}
+
+# Individual Social Post/Video
+type CreatorSocialPost {
+  id: ID!
+  platform: String!
+  platformPostId: String!
+  postType: String
+  caption: String
+  url: String
+  thumbnailUrl: String
+  likesCount: Int
+  commentsCount: Int
+  viewsCount: Int
+  sharesCount: Int
+  savesCount: Int
+  hashtags: [String!]
+  mentions: [String!]
+  publishedAt: DateTime
+  createdAt: DateTime!
+}
 ```
 
 ---
@@ -421,6 +483,19 @@ type Invoice {
   tdsAmount: Money
   netAmount: Money!
   createdAt: DateTime!
+}
+
+# Token Purchase (Billing)
+type TokenPurchase {
+  id: ID!
+  purchaseType: String!
+  tokenQuantity: Int!
+  amountPaise: Int!
+  currency: String!
+  razorpayOrderId: String
+  status: String!
+  createdAt: DateTime!
+  completedAt: DateTime
 }
 ```
 
@@ -517,6 +592,16 @@ type Query {
   activityLogs(agencyId: ID!, entityType: String, entityId: ID): [ActivityLog!]!
   notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
   agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
+  
+  # Social Media Analytics Queries
+  creatorSocialProfile(creatorId: ID!, platform: String!): CreatorSocialProfile
+  creatorSocialProfiles(creatorId: ID!): [CreatorSocialProfile!]!
+  creatorSocialPosts(creatorId: ID!, platform: String!, limit: Int): [CreatorSocialPost!]!
+  socialDataJob(jobId: ID!): SocialDataJob
+  socialDataJobs(creatorId: ID!): [SocialDataJob!]!
+  
+  # Token Purchases
+  tokenPurchases(agencyId: ID!): [TokenPurchase!]!
 }
 ```
 
@@ -800,6 +885,7 @@ type Mutation {
 type Mutation {
   fetchPreCampaignAnalytics(
     campaignCreatorId: ID!
+    platform: String!
   ): CreatorAnalyticsSnapshot!
   
   recordPostMetrics(
@@ -813,13 +899,22 @@ type Mutation {
     shares: Int
     source: String!
   ): PostMetricsSnapshot!
+  
+  # Trigger social data fetch (background, token-gated)
+  # Creates a job and fires async worker. Returns job for polling.
+  triggerSocialFetch(
+    creatorId: ID!
+    platform: String!
+    jobType: String!
+  ): SocialDataJob!
 }
 ```
 
 **Rules:**
 - Role must be Admin / Account Manager / Operator
-- Agency token balance > 0 for pre-campaign analytics
+- Agency token balance > 0 for pre-campaign analytics and social fetches
 - Token is deducted before API call
+- `triggerSocialFetch` creates a background job; status can be polled via `socialDataJob` query
 
 ---
 

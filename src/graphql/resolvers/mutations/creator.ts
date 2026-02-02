@@ -15,8 +15,11 @@ import {
   Permission,
   hasAgencyPermission,
 } from '@/lib/rbac';
-import { validationError, notFoundError, forbiddenError } from '../../errors';
+import { validationError, notFoundError, forbiddenError, insufficientTokensError } from '../../errors';
 import { logActivity } from '@/lib/audit';
+
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
+const APP_URL = process.env.NEXT_PUBLIC_URL || process.env.VERCEL_URL || 'http://localhost:3000';
 
 /**
  * Add a creator to the agency roster
@@ -85,7 +88,66 @@ export async function addCreator(
     actorType: 'user',
     afterState: creator,
   });
-  
+
+  // Auto-trigger social data fetch if handles are present and agency has tokens
+  try {
+    const { data: agencyData } = await supabaseAdmin
+      .from('agencies')
+      .select('token_balance')
+      .eq('id', agencyId)
+      .single();
+
+    if (agencyData) {
+      let remainingTokens = agencyData.token_balance;
+      const baseUrl = APP_URL.startsWith('http') ? APP_URL : `https://${APP_URL}`;
+
+      const platformsToFetch: Array<{ platform: string; handle: string | null }> = [
+        { platform: 'instagram', handle: creator.instagram_handle },
+        { platform: 'youtube', handle: creator.youtube_handle },
+      ];
+
+      for (const { platform, handle } of platformsToFetch) {
+        if (handle && remainingTokens >= 1) {
+          // Deduct token
+          await supabaseAdmin
+            .from('agencies')
+            .update({ token_balance: remainingTokens - 1 })
+            .eq('id', agencyId);
+          remainingTokens -= 1;
+
+          // Create job
+          const { data: job } = await supabaseAdmin
+            .from('social_data_jobs')
+            .insert({
+              creator_id: creator.id,
+              agency_id: agencyId,
+              platform,
+              job_type: 'basic_scrape',
+              status: 'pending',
+              tokens_consumed: 1,
+              triggered_by: ctx.user!.id,
+            })
+            .select()
+            .single();
+
+          if (job) {
+            // Fire-and-forget
+            fetch(`${baseUrl}/api/social-fetch`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'x-internal-secret': INTERNAL_API_SECRET || '',
+              },
+              body: JSON.stringify({ jobId: job.id }),
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+  } catch {
+    // Auto-fetch is best-effort — silent failure
+  }
+
   return creator;
 }
 

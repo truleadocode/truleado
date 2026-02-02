@@ -538,7 +538,134 @@ RLS: agency members can SELECT; only agency admins can INSERT/UPDATE/DELETE.
 
 ---
 
-## 10. Hard Rules (Enforced by Design)
+## 9. Social Media Analytics (Migration 00015)
+
+### 9.1 social_data_jobs
+
+Background job tracking for social media data fetching (Instagram via Apify, YouTube via Data API v3).
+
+```sql
+CREATE TABLE social_data_jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram', 'youtube', 'tiktok')),
+  job_type TEXT NOT NULL CHECK (job_type IN ('basic_scrape', 'enriched_profile')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'completed', 'failed')) DEFAULT 'pending',
+  error_message TEXT,
+  tokens_consumed INTEGER DEFAULT 0,
+  triggered_by UUID REFERENCES users(id),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+### 9.2 creator_social_profiles
+
+Latest social profile data per creator per platform (upserted on fetch).
+
+```sql
+CREATE TABLE creator_social_profiles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram', 'youtube', 'tiktok')),
+  platform_username TEXT,
+  platform_display_name TEXT,
+  profile_pic_url TEXT,
+  bio TEXT,
+  followers_count INTEGER,
+  following_count INTEGER,
+  posts_count INTEGER,
+  is_verified BOOLEAN DEFAULT false,
+  is_business_account BOOLEAN,
+  external_url TEXT,
+  subscribers_count INTEGER,  -- YouTube-specific
+  total_views BIGINT,         -- YouTube-specific
+  channel_id TEXT,            -- YouTube-specific
+  avg_likes NUMERIC(12,2),
+  avg_comments NUMERIC(12,2),
+  avg_views NUMERIC(12,2),
+  engagement_rate NUMERIC(8,4),
+  raw_profile_data JSONB,
+  raw_posts_data JSONB,
+  last_fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_job_id UUID REFERENCES social_data_jobs(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (creator_id, platform)
+);
+```
+
+### 9.3 creator_social_posts
+
+Individual social posts/videos for analytics charts and visualization.
+
+```sql
+CREATE TABLE creator_social_posts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram', 'youtube', 'tiktok')),
+  platform_post_id TEXT NOT NULL,
+  post_type TEXT,
+  caption TEXT,
+  url TEXT,
+  thumbnail_url TEXT,
+  likes_count INTEGER DEFAULT 0,
+  comments_count INTEGER DEFAULT 0,
+  views_count INTEGER,
+  shares_count INTEGER,
+  saves_count INTEGER,
+  hashtags TEXT[],
+  mentions TEXT[],
+  published_at TIMESTAMPTZ,
+  raw_data JSONB,
+  last_fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (creator_id, platform, platform_post_id)
+);
+```
+
+---
+
+## 10. Token Purchases & Billing (Migration 00016)
+
+### 10.1 agencies.premium_token_balance
+
+Added column to track premium token balance separately from regular token balance.
+
+```sql
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS premium_token_balance INTEGER DEFAULT 0;
+```
+
+### 10.2 token_purchases
+
+Records for Razorpay token purchases (basic and premium tokens).
+
+```sql
+CREATE TABLE token_purchases (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  purchase_type TEXT NOT NULL CHECK (purchase_type IN ('basic', 'premium')),
+  token_quantity INTEGER NOT NULL CHECK (token_quantity > 0),
+  amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+  currency TEXT NOT NULL DEFAULT 'INR',
+  razorpay_order_id TEXT UNIQUE,
+  razorpay_payment_id TEXT,
+  razorpay_signature TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed')) DEFAULT 'pending',
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+---
+
+## 11. Hard Rules (Enforced by Design)
 
 - Authentication handled via Firebase
 - Identity handled via `users` + `auth_identities`
@@ -546,6 +673,8 @@ RLS: agency members can SELECT; only agency admins can INSERT/UPDATE/DELETE.
 - Campaign-scoped permissions
 - Analytics snapshots are immutable
 - Archived campaigns are read-only
+- Social data jobs are token-gated (consumes agency tokens)
+- Token purchases are processed via Razorpay
 
 ---
 

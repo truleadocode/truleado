@@ -5,15 +5,10 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
-  UserCircle,
   MoreHorizontal,
-  Mail,
-  Phone,
   Instagram,
   Youtube,
-  ExternalLink,
-  Megaphone,
-  StickyNote,
+  LayoutDashboard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -37,6 +32,10 @@ import {
 import { Header } from '@/components/layout/header'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
+import { useSocialFetch } from '@/hooks/use-social-fetch'
+import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
+import { InstagramTab } from '@/components/creators/instagram-tab'
+import { YouTubeTab } from '@/components/creators/youtube-tab'
 
 interface CampaignAssignment {
   id: string
@@ -67,6 +66,45 @@ interface Creator {
   campaignAssignments: CampaignAssignment[]
 }
 
+interface SocialProfile {
+  id: string
+  platform: string
+  platformUsername: string | null
+  platformDisplayName: string | null
+  profilePicUrl: string | null
+  bio: string | null
+  followersCount: number | null
+  followingCount: number | null
+  postsCount: number | null
+  isVerified: boolean | null
+  isBusinessAccount: boolean | null
+  externalUrl: string | null
+  subscribersCount: number | null
+  totalViews: string | null
+  channelId: string | null
+  avgLikes: number | null
+  avgComments: number | null
+  avgViews: number | null
+  engagementRate: number | null
+  lastFetchedAt: string
+}
+
+interface SocialPost {
+  id: string
+  platform: string
+  platformPostId: string
+  postType: string | null
+  caption: string | null
+  url: string | null
+  thumbnailUrl: string | null
+  likesCount: number | null
+  commentsCount: number | null
+  viewsCount: number | null
+  publishedAt: string | null
+}
+
+type Tab = 'dashboard' | 'instagram' | 'youtube'
+
 export default function CreatorDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -76,6 +114,13 @@ export default function CreatorDetailPage() {
   const [creator, setCreator] = useState<Creator | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+
+  // Social data state
+  const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>([])
+  const [instagramPosts, setInstagramPosts] = useState<SocialPost[]>([])
+  const [youtubePosts, setYoutubePosts] = useState<SocialPost[]>([])
+  const [socialLoading, setSocialLoading] = useState(false)
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false)
@@ -89,6 +134,51 @@ export default function CreatorDetailPage() {
     notes: '',
   })
   const [saving, setSaving] = useState(false)
+
+  const fetchSocialData = useCallback(async () => {
+    setSocialLoading(true)
+    try {
+      const profilesData = await graphqlRequest<{
+        creatorSocialProfiles: SocialProfile[]
+      }>(queries.creatorSocialProfiles, { creatorId })
+      setSocialProfiles(profilesData.creatorSocialProfiles || [])
+
+      // Fetch posts for each platform that has a profile
+      const profiles = profilesData.creatorSocialProfiles || []
+      const igProfile = profiles.find((p) => p.platform === 'instagram')
+      const ytProfile = profiles.find((p) => p.platform === 'youtube')
+
+      if (igProfile) {
+        const igData = await graphqlRequest<{
+          creatorSocialPosts: SocialPost[]
+        }>(queries.creatorSocialPosts, {
+          creatorId,
+          platform: 'instagram',
+          limit: 20,
+        })
+        setInstagramPosts(igData.creatorSocialPosts || [])
+      }
+
+      if (ytProfile) {
+        const ytData = await graphqlRequest<{
+          creatorSocialPosts: SocialPost[]
+        }>(queries.creatorSocialPosts, {
+          creatorId,
+          platform: 'youtube',
+          limit: 20,
+        })
+        setYoutubePosts(ytData.creatorSocialPosts || [])
+      }
+    } catch {
+      // Social data fetch is best-effort — don't block the page
+    } finally {
+      setSocialLoading(false)
+    }
+  }, [creatorId])
+
+  const { triggerFetch, isPollingPlatform } = useSocialFetch(creatorId, {
+    onComplete: fetchSocialData,
+  })
 
   const fetchCreator = useCallback(async () => {
     setLoading(true)
@@ -109,6 +199,29 @@ export default function CreatorDetailPage() {
   useEffect(() => {
     fetchCreator()
   }, [fetchCreator])
+
+  // Fetch social data once creator is loaded
+  useEffect(() => {
+    if (creator) {
+      fetchSocialData()
+    }
+  }, [creator, fetchSocialData])
+
+  const handleTriggerFetch = useCallback(
+    async (platform: string, jobType: string) => {
+      try {
+        await triggerFetch(platform, jobType)
+        toast({ title: 'Fetching data', description: `Social data fetch started for ${platform}` })
+      } catch (err) {
+        toast({
+          title: 'Fetch failed',
+          description: err instanceof Error ? err.message : 'Failed to trigger social data fetch',
+          variant: 'destructive',
+        })
+      }
+    },
+    [triggerFetch, toast]
+  )
 
   const openEditDialog = () => {
     if (!creator) return
@@ -190,35 +303,6 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'INVITED': return 'bg-yellow-100 text-yellow-800'
-      case 'ACCEPTED': return 'bg-green-100 text-green-800'
-      case 'DECLINED': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getCampaignStatusColor = (status: string) => {
-    switch (status) {
-      case 'DRAFT': return 'bg-gray-100 text-gray-800'
-      case 'ACTIVE': return 'bg-blue-100 text-blue-800'
-      case 'IN_REVIEW': return 'bg-yellow-100 text-yellow-800'
-      case 'APPROVED': return 'bg-green-100 text-green-800'
-      case 'COMPLETED': return 'bg-purple-100 text-purple-800'
-      case 'ARCHIVED': return 'bg-gray-100 text-gray-600'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   if (loading) {
     return (
       <>
@@ -256,6 +340,13 @@ export default function CreatorDetailPage() {
     )
   }
 
+  const hasInstagram = !!creator.instagramHandle
+  const hasYouTube = !!creator.youtubeHandle
+  const hasSocialTabs = hasInstagram || hasYouTube
+
+  const igProfile = socialProfiles.find((p) => p.platform === 'instagram') || null
+  const ytProfile = socialProfiles.find((p) => p.platform === 'youtube') || null
+
   return (
     <>
       <Header title={creator.displayName} subtitle="Creator Profile" />
@@ -289,150 +380,72 @@ export default function CreatorDetailPage() {
           </DropdownMenu>
         </div>
 
-        {/* Creator Info Card */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-6">
-              <div className="h-20 w-20 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-                <UserCircle className="h-10 w-10 text-purple-500" />
-              </div>
-              <div className="flex-1 space-y-4">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold">{creator.displayName}</h2>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${creator.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {creator.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Added {formatDate(creator.createdAt)}
-                  </p>
-                </div>
+        {/* Tab Bar */}
+        {hasSocialTabs && (
+          <div className="flex items-center gap-1 border-b pb-px">
+            <Button
+              variant={activeTab === 'dashboard' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('dashboard')}
+              className="gap-2"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Button>
+            {hasInstagram && (
+              <Button
+                variant={activeTab === 'instagram' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('instagram')}
+                className="gap-2"
+              >
+                <Instagram className="h-4 w-4" />
+                Instagram
+              </Button>
+            )}
+            {hasYouTube && (
+              <Button
+                variant={activeTab === 'youtube' ? 'secondary' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('youtube')}
+                className="gap-2"
+              >
+                <Youtube className="h-4 w-4" />
+                YouTube
+              </Button>
+            )}
+          </div>
+        )}
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {creator.email && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <a href={`mailto:${creator.email}`} className="text-primary hover:underline">
-                        {creator.email}
-                      </a>
-                    </div>
-                  )}
-                  {creator.phone && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span>{creator.phone}</span>
-                    </div>
-                  )}
-                  {creator.instagramHandle && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Instagram className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`https://instagram.com/${creator.instagramHandle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        @{creator.instagramHandle}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
-                  {creator.youtubeHandle && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Youtube className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={`https://youtube.com/@${creator.youtubeHandle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        {creator.youtubeHandle}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
-                  {creator.tiktokHandle && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="h-4 w-4 text-muted-foreground flex items-center justify-center text-xs font-bold">TT</span>
-                      <a
-                        href={`https://tiktok.com/@${creator.tiktokHandle}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary hover:underline flex items-center gap-1"
-                      >
-                        @{creator.tiktokHandle}
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </div>
-                  )}
-                </div>
+        {/* Tab Content */}
+        {activeTab === 'dashboard' && (
+          <SocialDashboardTab creator={creator} profiles={socialProfiles} />
+        )}
 
-                {creator.notes && (
-                  <div className="pt-3 border-t">
-                    <div className="flex items-start gap-2 text-sm">
-                      <StickyNote className="h-4 w-4 text-muted-foreground mt-0.5" />
-                      <p className="text-muted-foreground whitespace-pre-wrap">{creator.notes}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {activeTab === 'instagram' && hasInstagram && (
+          <InstagramTab
+            profile={igProfile}
+            posts={instagramPosts}
+            loading={socialLoading}
+            onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
+            fetching={isPollingPlatform('instagram')}
+          />
+        )}
 
-        {/* Campaign Assignments */}
-        <div>
-          <h2 className="text-lg font-semibold mb-4">Campaign Assignments</h2>
-          {creator.campaignAssignments.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-8">
-                <Megaphone className="h-10 w-10 text-muted-foreground mb-3" />
-                <h3 className="font-medium">No campaign assignments</h3>
-                <p className="text-sm text-muted-foreground text-center mt-1">
-                  This creator hasn&apos;t been assigned to any campaigns yet.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {creator.campaignAssignments.map((assignment) => (
-                <Link key={assignment.id} href={`/dashboard/campaigns/${assignment.campaign.id}`}>
-                  <Card className="hover:shadow-sm transition-shadow cursor-pointer">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0">
-                            <Megaphone className="h-5 w-5 text-blue-500" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{assignment.campaign.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getStatusColor(assignment.status)}`}>
-                                {assignment.status}
-                              </span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${getCampaignStatusColor(assignment.campaign.status)}`}>
-                                {assignment.campaign.status.replace('_', ' ')}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right text-sm text-muted-foreground">
-                          {assignment.rateAmount && (
-                            <p className="font-medium text-foreground">
-                              {assignment.rateCurrency || 'INR'} {assignment.rateAmount.toLocaleString()}
-                            </p>
-                          )}
-                          <p>{formatDate(assignment.createdAt)}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+        {activeTab === 'youtube' && hasYouTube && (
+          <YouTubeTab
+            profile={ytProfile}
+            posts={youtubePosts}
+            loading={socialLoading}
+            onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
+            fetching={isPollingPlatform('youtube')}
+          />
+        )}
+
+        {/* Fallback: if no social tabs, show dashboard content directly */}
+        {!hasSocialTabs && (
+          <SocialDashboardTab creator={creator} profiles={[]} />
+        )}
       </div>
 
       {/* Edit Dialog */}

@@ -45,7 +45,7 @@ import {
   removeCreatorFromCampaign,
   updateCampaignCreator,
 } from './creator';
-import { fetchPreCampaignAnalytics } from './analytics';
+import { fetchPreCampaignAnalytics, triggerSocialFetch } from './analytics';
 import { createPayment, markPaymentPaid } from './payment';
 import { markNotificationRead, markAllNotificationsRead } from './notification';
 import { saveAgencyEmailConfig } from './agency-email-config';
@@ -107,6 +107,7 @@ export const mutationResolvers = {
   
   // Analytics
   fetchPreCampaignAnalytics,
+  triggerSocialFetch,
   
   // Payments
   createPayment,

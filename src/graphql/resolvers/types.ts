@@ -79,6 +79,7 @@ export const typeResolvers = {
     // Field mappings for snake_case to camelCase
     agencyCode: (parent: { agency_code: string | null }) => parent.agency_code,
     tokenBalance: (parent: { token_balance: number }) => parent.token_balance ?? 0,
+    premiumTokenBalance: (parent: { premium_token_balance: number }) => parent.premium_token_balance ?? 0,
     billingEmail: (parent: { billing_email: string | null }) => parent.billing_email,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     clients: async (parent: WithId) => {
@@ -725,6 +726,60 @@ export const typeResolvers = {
     entityId: (parent: { entity_id: string | null }) => parent.entity_id,
     isRead: (parent: { is_read: boolean }) => parent.is_read,
     readAt: (parent: { read_at: string | null }) => parent.read_at,
+  },
+
+  SocialDataJob: {
+    creatorId: (parent: { creator_id: string }) => parent.creator_id,
+    jobType: (parent: { job_type: string }) => parent.job_type,
+    errorMessage: (parent: { error_message: string | null }) => parent.error_message,
+    tokensConsumed: (parent: { tokens_consumed: number }) => parent.tokens_consumed,
+    startedAt: (parent: { started_at: string | null }) => parent.started_at,
+    completedAt: (parent: { completed_at: string | null }) => parent.completed_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+  },
+
+  CreatorSocialProfile: {
+    creatorId: (parent: { creator_id: string }) => parent.creator_id,
+    platformUsername: (parent: { platform_username: string | null }) => parent.platform_username,
+    platformDisplayName: (parent: { platform_display_name: string | null }) => parent.platform_display_name,
+    profilePicUrl: (parent: { profile_pic_url: string | null }) => parent.profile_pic_url,
+    followersCount: (parent: { followers_count: number | null }) => parent.followers_count,
+    followingCount: (parent: { following_count: number | null }) => parent.following_count,
+    postsCount: (parent: { posts_count: number | null }) => parent.posts_count,
+    isVerified: (parent: { is_verified: boolean | null }) => parent.is_verified,
+    isBusinessAccount: (parent: { is_business_account: boolean | null }) => parent.is_business_account,
+    externalUrl: (parent: { external_url: string | null }) => parent.external_url,
+    subscribersCount: (parent: { subscribers_count: number | null }) => parent.subscribers_count,
+    totalViews: (parent: { total_views: number | null }) => parent.total_views?.toString() ?? null,
+    channelId: (parent: { channel_id: string | null }) => parent.channel_id,
+    avgLikes: (parent: { avg_likes: number | null }) => parent.avg_likes,
+    avgComments: (parent: { avg_comments: number | null }) => parent.avg_comments,
+    avgViews: (parent: { avg_views: number | null }) => parent.avg_views,
+    engagementRate: (parent: { engagement_rate: number | null }) => parent.engagement_rate,
+    lastFetchedAt: (parent: { last_fetched_at: string }) => parent.last_fetched_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+  },
+
+  CreatorSocialPost: {
+    platformPostId: (parent: { platform_post_id: string }) => parent.platform_post_id,
+    postType: (parent: { post_type: string | null }) => parent.post_type,
+    thumbnailUrl: (parent: { thumbnail_url: string | null }) => parent.thumbnail_url,
+    likesCount: (parent: { likes_count: number | null }) => parent.likes_count,
+    commentsCount: (parent: { comments_count: number | null }) => parent.comments_count,
+    viewsCount: (parent: { views_count: number | null }) => parent.views_count,
+    sharesCount: (parent: { shares_count: number | null }) => parent.shares_count,
+    savesCount: (parent: { saves_count: number | null }) => parent.saves_count,
+    publishedAt: (parent: { published_at: string | null }) => parent.published_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+  },
+
+  TokenPurchase: {
+    purchaseType: (parent: { purchase_type: string }) => parent.purchase_type,
+    tokenQuantity: (parent: { token_quantity: number }) => parent.token_quantity,
+    amountPaise: (parent: { amount_paise: number }) => parent.amount_paise,
+    razorpayOrderId: (parent: { razorpay_order_id: string | null }) => parent.razorpay_order_id,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    completedAt: (parent: { completed_at: string | null }) => parent.completed_at,
   },
 
   AgencyEmailConfig: {
