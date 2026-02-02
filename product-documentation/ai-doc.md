@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP) and **creator portal** (future phase).
+**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
 
 ---
 
@@ -57,6 +57,17 @@
    - **UI**: `/dashboard/creators` (list), `/dashboard/creators/new` (add), `/dashboard/creators/[id]` (detail), `/dashboard/creators/[id]/edit` (edit). `AssignCreatorDialog` component for campaign assignment. Enhanced creators section on campaign detail page.  
    - **Permissions**: `MANAGE_CREATOR_ROSTER` (Agency Admin, Account Manager), `VIEW_CREATOR_ROSTER` (all agency roles), `INVITE_CREATOR` (Agency Admin, Account Manager, Operator).  
    - **Docs**: `product-documentation/GRAPHQL_API_CONTRACT.md` §9.
+
+7. **Social Media Analytics & Token Purchases (implemented)**  
+   - **Social Analytics Integration**: Background job system for fetching Instagram (via Apify) and YouTube (via Data API v3) analytics. Stores creator social profiles and individual posts for visualization.  
+   - **DB**: Migrations `00015_social_analytics.sql` (social_data_jobs, creator_social_profiles, creator_social_posts) and `00016_token_purchases.sql` (token_purchases, agencies.premium_token_balance).  
+   - **GraphQL**: Mutation `triggerSocialFetch(creatorId, platform, jobType)` creates background job. Queries `creatorSocialProfile`, `creatorSocialProfiles`, `creatorSocialPosts`, `socialDataJob`, `socialDataJobs`, `tokenPurchases`. Types `SocialDataJob`, `CreatorSocialProfile`, `CreatorSocialPost`, `TokenPurchase`.  
+   - **UI**: Creator detail page includes social analytics tabs (Instagram, YouTube) with charts and post visualization. Billing settings page (`/dashboard/settings/billing`) for token purchases via Razorpay.  
+   - **API Routes**: `/api/social-fetch` (background job trigger), `/api/razorpay/create-order`, `/api/razorpay/verify-payment`.  
+   - **Components**: `src/components/creators/social-dashboard-tab.tsx`, `instagram-tab.tsx`, `youtube-tab.tsx`, `social-post-chart.tsx`, `social-fetch-button.tsx`.  
+   - **Libraries**: `apify-client` (Instagram scraping), `razorpay` (payments), `recharts` (visualization).  
+   - **Token System**: Separate `premium_token_balance` for social analytics; regular `tokenBalance` for other features. Token purchases processed via Razorpay (basic/premium types).  
+   - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §9-10, `GRAPHQL_API_CONTRACT.md` §4.9, §10.
 
 **If you are a new agent:**  
 - Skim **§1–§6** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
@@ -165,6 +176,8 @@ These Supabase migrations exist and should be applied in order:
 11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
 12. `00013_agency_email_config.sql` – **agency_email_config** table (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped; agency admin for insert/update/delete. Used for Novu per-agency SMTP.
 13. `00014_project_users_rbac.sql` – **project_users** table (project_id, user_id, created_at); RLS for agency-scoped access. Operators assigned to projects see all campaigns under that project. Primary assignment path for operators; campaign_users is for overrides only.
+14. `00015_social_analytics.sql` – **social_data_jobs**, **creator_social_profiles**, **creator_social_posts** tables for background social media data fetching (Instagram via Apify, YouTube via Data API v3). Tracks jobs, stores profiles and posts for analytics visualization.
+15. `00016_token_purchases.sql` – **token_purchases** table for Razorpay payment tracking. Adds `premium_token_balance` column to `agencies` table. Supports basic and premium token purchase types.
 
 **Manual actions required in Supabase:**
 
@@ -355,7 +368,7 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
 
 When a new AI (or engineer) picks this up:
 
-1. **Re-run migrations** (or verify applied) in order `00001` → `00014` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`, `00014_project_users_rbac.sql`).
+1. **Re-run migrations** (or verify applied) in order `00001` → `00016` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`, `00014_project_users_rbac.sql`, `00015_social_analytics.sql`, `00016_token_purchases.sql`).
 2. **Ensure buckets exist** in Supabase: `campaign-attachments`, `deliverables`, with appropriate RLS.
 3. **Skim these files first**:
    - `product-documentation/MASTER_PRD.md`
@@ -404,13 +417,14 @@ When a new AI (or engineer) picks this up:
      - `src/graphql/resolvers/types.ts` (Creator, CampaignCreator resolvers)
      - `src/lib/graphql/client.ts` (creator queries and mutations)
      - `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx` (enhanced creators section)
-   - **Creator Module**:
-     - `src/app/(dashboard)/dashboard/creators/**` (list, detail, add, edit pages)
-     - `src/components/creators/AssignCreatorDialog.tsx` (campaign assignment dialog)
-     - `src/graphql/resolvers/mutations/creator.ts` (all creator mutations)
-     - `src/graphql/resolvers/types.ts` (Creator, CampaignCreator resolvers)
-     - `src/lib/graphql/client.ts` (creator queries and mutations)
-     - `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx` (enhanced creators section)
+   - **Social Analytics & Billing**:
+     - `src/app/api/social-fetch/route.ts` (background job trigger)
+     - `src/app/api/razorpay/**` (payment creation and verification)
+     - `src/app/(dashboard)/dashboard/settings/billing/page.tsx` (token purchase UI)
+     - `src/components/creators/social-*.tsx` (social analytics components)
+     - `src/lib/social/apify.ts`, `youtube.ts` (social data fetching)
+     - `src/hooks/use-social-fetch.ts` (social fetch hook)
+     - `supabase/migrations/00015_social_analytics.sql`, `00016_token_purchases.sql`
 
 This should provide enough context for a new agent to continue seamlessly from where the last session left off.
 
