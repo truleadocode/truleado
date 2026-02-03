@@ -101,6 +101,7 @@ When adding new features:
 
 ### February 2026
 - **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
+- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
 
 ### January 2026
 - Initial documentation created from canonical source documents

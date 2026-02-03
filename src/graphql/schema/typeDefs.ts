@@ -295,6 +295,8 @@ export const typeDefs = gql`
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
     isActive: Boolean!
     campaignAssignments: [CampaignCreator!]!
@@ -759,6 +761,8 @@ export const typeDefs = gql`
       instagramHandle: String
       youtubeHandle: String
       tiktokHandle: String
+      facebookHandle: String
+      linkedinHandle: String
       notes: String
     ): Creator!
     
@@ -789,6 +793,8 @@ export const typeDefs = gql`
       instagramHandle: String
       youtubeHandle: String
       tiktokHandle: String
+      facebookHandle: String
+      linkedinHandle: String
       notes: String
     ): Creator!
 

@@ -351,9 +351,13 @@ CREATE TABLE creators (
   agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
   display_name TEXT NOT NULL,
   email TEXT,
+  phone TEXT,
   instagram_handle TEXT,
   youtube_handle TEXT,
   tiktok_handle TEXT,
+  facebook_handle TEXT,
+  linkedin_handle TEXT,
+  notes TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

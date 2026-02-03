@@ -27,6 +27,8 @@ export default function NewCreatorPage() {
     instagramHandle: '',
     youtubeHandle: '',
     tiktokHandle: '',
+    facebookHandle: '',
+    linkedinHandle: '',
     notes: '',
   })
 
@@ -59,6 +61,8 @@ export default function NewCreatorPage() {
           instagramHandle: form.instagramHandle.trim() || null,
           youtubeHandle: form.youtubeHandle.trim() || null,
           tiktokHandle: form.tiktokHandle.trim() || null,
+          facebookHandle: form.facebookHandle.trim() || null,
+          linkedinHandle: form.linkedinHandle.trim() || null,
           notes: form.notes.trim() || null,
         }
       )
@@ -188,6 +192,28 @@ export default function NewCreatorPage() {
                       placeholder="username (without @)"
                       value={form.tiktokHandle}
                       onChange={(e) => updateField('tiktokHandle', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="facebookHandle" className="text-sm font-normal text-muted-foreground">
+                      Facebook
+                    </Label>
+                    <Input
+                      id="facebookHandle"
+                      placeholder="page or profile name"
+                      value={form.facebookHandle}
+                      onChange={(e) => updateField('facebookHandle', e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="linkedinHandle" className="text-sm font-normal text-muted-foreground">
+                      LinkedIn
+                    </Label>
+                    <Input
+                      id="linkedinHandle"
+                      placeholder="profile or company handle"
+                      value={form.linkedinHandle}
+                      onChange={(e) => updateField('linkedinHandle', e.target.value)}
                     />
                   </div>
                 </div>

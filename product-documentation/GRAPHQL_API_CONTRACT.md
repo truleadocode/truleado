@@ -351,11 +351,16 @@ type Creator {
   agency: Agency!
   displayName: String!
   email: String
+  phone: String
   instagramHandle: String
   youtubeHandle: String
   tiktokHandle: String
+  facebookHandle: String
+  linkedinHandle: String
+  notes: String
   isActive: Boolean!
   createdAt: DateTime!
+  updatedAt: DateTime!
 }
 ```
 
@@ -814,6 +819,8 @@ type Mutation {
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
   ): Creator!
   
@@ -826,6 +833,8 @@ type Mutation {
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
   ): Creator!
   

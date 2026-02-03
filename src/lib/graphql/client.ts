@@ -477,6 +477,8 @@ export const queries = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         createdAt
@@ -494,6 +496,8 @@ export const queries = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         createdAt
@@ -1062,8 +1066,8 @@ export const mutations = {
 
   // Creator mutations
   addCreator: `
-    mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
-      addCreator(agencyId: $agencyId, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+    mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $facebookHandle: String, $linkedinHandle: String, $notes: String) {
+      addCreator(agencyId: $agencyId, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, facebookHandle: $facebookHandle, linkedinHandle: $linkedinHandle, notes: $notes) {
         id
         displayName
         email
@@ -1074,8 +1078,8 @@ export const mutations = {
   `,
 
   updateCreator: `
-    mutation UpdateCreator($id: ID!, $displayName: String, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
-      updateCreator(id: $id, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+    mutation UpdateCreator($id: ID!, $displayName: String, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $facebookHandle: String, $linkedinHandle: String, $notes: String) {
+      updateCreator(id: $id, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, facebookHandle: $facebookHandle, linkedinHandle: $linkedinHandle, notes: $notes) {
         id
         displayName
         email
@@ -1083,6 +1087,8 @@ export const mutations = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         updatedAt

@@ -1,19 +1,23 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
   MoreHorizontal,
   Instagram,
   Youtube,
+  Facebook,
+  Linkedin,
+  Music2,
   LayoutDashboard,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,6 +63,8 @@ interface Creator {
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
+  facebookHandle: string | null
+  linkedinHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string
@@ -103,11 +109,10 @@ interface SocialPost {
   publishedAt: string | null
 }
 
-type Tab = 'dashboard' | 'instagram' | 'youtube'
+type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'facebook' | 'linkedin'
 
 export default function CreatorDetailPage() {
   const params = useParams()
-  const router = useRouter()
   const { toast } = useToast()
   const creatorId = params.id as string
 
@@ -131,9 +136,12 @@ export default function CreatorDetailPage() {
     instagramHandle: '',
     youtubeHandle: '',
     tiktokHandle: '',
+    facebookHandle: '',
+    linkedinHandle: '',
     notes: '',
   })
   const [saving, setSaving] = useState(false)
+  const [deactivateOpen, setDeactivateOpen] = useState(false)
 
   const fetchSocialData = useCallback(async () => {
     setSocialLoading(true)
@@ -232,6 +240,8 @@ export default function CreatorDetailPage() {
       instagramHandle: creator.instagramHandle || '',
       youtubeHandle: creator.youtubeHandle || '',
       tiktokHandle: creator.tiktokHandle || '',
+      facebookHandle: creator.facebookHandle || '',
+      linkedinHandle: creator.linkedinHandle || '',
       notes: creator.notes || '',
     })
     setEditOpen(true)
@@ -253,6 +263,8 @@ export default function CreatorDetailPage() {
         instagramHandle: editForm.instagramHandle.trim() || null,
         youtubeHandle: editForm.youtubeHandle.trim() || null,
         tiktokHandle: editForm.tiktokHandle.trim() || null,
+        facebookHandle: editForm.facebookHandle.trim() || null,
+        linkedinHandle: editForm.linkedinHandle.trim() || null,
         notes: editForm.notes.trim() || null,
       })
       toast({ title: 'Creator updated' })
@@ -269,35 +281,32 @@ export default function CreatorDetailPage() {
     }
   }
 
-  const handleToggleActive = async () => {
+  const handleDeactivate = async () => {
     if (!creator) return
     try {
-      if (creator.isActive) {
-        await graphqlRequest(mutations.deactivateCreator, { id: creatorId })
-        toast({ title: 'Creator deactivated' })
-      } else {
-        await graphqlRequest(mutations.activateCreator, { id: creatorId })
-        toast({ title: 'Creator activated' })
-      }
+      await graphqlRequest(mutations.deactivateCreator, { id: creatorId })
+      toast({ title: 'Creator deactivated' })
+      setDeactivateOpen(false)
       fetchCreator()
     } catch (err) {
       toast({
         title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to update creator',
+        description: err instanceof Error ? err.message : 'Failed to deactivate creator',
         variant: 'destructive',
       })
     }
   }
 
-  const handleDelete = async () => {
+  const handleActivate = async () => {
+    if (!creator) return
     try {
-      await graphqlRequest(mutations.deleteCreator, { id: creatorId })
-      toast({ title: 'Creator deleted' })
-      router.push('/dashboard/creators')
+      await graphqlRequest(mutations.activateCreator, { id: creatorId })
+      toast({ title: 'Creator activated' })
+      fetchCreator()
     } catch (err) {
       toast({
-        title: 'Cannot delete creator',
-        description: err instanceof Error ? err.message : 'Failed to delete creator',
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to activate creator',
         variant: 'destructive',
       })
     }
@@ -342,7 +351,10 @@ export default function CreatorDetailPage() {
 
   const hasInstagram = !!creator.instagramHandle
   const hasYouTube = !!creator.youtubeHandle
-  const hasSocialTabs = hasInstagram || hasYouTube
+  const hasTikTok = !!creator.tiktokHandle
+  const hasFacebook = !!creator.facebookHandle
+  const hasLinkedIn = !!creator.linkedinHandle
+  const hasSocialTabs = hasInstagram || hasYouTube || hasTikTok || hasFacebook || hasLinkedIn
 
   const igProfile = socialProfiles.find((p) => p.platform === 'instagram') || null
   const ytProfile = socialProfiles.find((p) => p.platform === 'youtube') || null
@@ -361,23 +373,31 @@ export default function CreatorDetailPage() {
             Back to Creator Roster
           </Link>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={openEditDialog}>Edit</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleToggleActive}>
-                {creator.isActive ? 'Deactivate' : 'Activate'}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex items-center gap-3">
+            {!creator.isActive && (
+              <Badge variant="secondary">Inactive</Badge>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openEditDialog}>Edit</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {creator.isActive ? (
+                  <DropdownMenuItem onClick={() => setDeactivateOpen(true)}>
+                    Deactivate
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={handleActivate}>
+                    Activate
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
         {/* Tab Bar */}
@@ -414,6 +434,42 @@ export default function CreatorDetailPage() {
                 YouTube
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              className="gap-2 opacity-60"
+            >
+              <Music2 className="h-4 w-4" />
+              TikTok
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
+                Coming Soon
+              </Badge>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              className="gap-2 opacity-60"
+            >
+              <Facebook className="h-4 w-4" />
+              Facebook
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
+                Coming Soon
+              </Badge>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              className="gap-2 opacity-60"
+            >
+              <Linkedin className="h-4 w-4" />
+              LinkedIn
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
+                Coming Soon
+              </Badge>
+            </Button>
           </div>
         )}
 
@@ -510,6 +566,24 @@ export default function CreatorDetailPage() {
                 onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-facebook">Facebook</Label>
+                <Input
+                  id="edit-facebook"
+                  value={editForm.facebookHandle}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-linkedin">LinkedIn</Label>
+                <Input
+                  id="edit-linkedin"
+                  value={editForm.linkedinHandle}
+                  onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
+                />
+              </div>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="edit-notes">Notes</Label>
               <textarea
@@ -524,6 +598,24 @@ export default function CreatorDetailPage() {
             <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveEdit} disabled={saving}>
               {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Confirmation */}
+      <Dialog open={deactivateOpen} onOpenChange={setDeactivateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Deactivate Creator?</DialogTitle>
+            <DialogDescription>
+              This will remove the creator from active use. You can reactivate later from this page.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeactivateOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeactivate}>
+              Deactivate
             </Button>
           </DialogFooter>
         </DialogContent>

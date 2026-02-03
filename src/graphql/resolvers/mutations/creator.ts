@@ -21,6 +21,13 @@ import { logActivity } from '@/lib/audit';
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
 const APP_URL = process.env.NEXT_PUBLIC_URL || process.env.VERCEL_URL || 'http://localhost:3000';
 
+function normalizeHandle(value?: string) {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+}
+
 /**
  * Add a creator to the agency roster
  */
@@ -34,6 +41,8 @@ export async function addCreator(
     instagramHandle,
     youtubeHandle,
     tiktokHandle,
+    facebookHandle,
+    linkedinHandle,
     notes,
   }: {
     agencyId: string;
@@ -43,6 +52,8 @@ export async function addCreator(
     instagramHandle?: string;
     youtubeHandle?: string;
     tiktokHandle?: string;
+    facebookHandle?: string;
+    linkedinHandle?: string;
     notes?: string;
   },
   ctx: GraphQLContext
@@ -65,9 +76,11 @@ export async function addCreator(
       display_name: displayName.trim(),
       email: email?.trim() || null,
       phone: phone?.trim() || null,
-      instagram_handle: instagramHandle?.trim() || null,
-      youtube_handle: youtubeHandle?.trim() || null,
-      tiktok_handle: tiktokHandle?.trim() || null,
+      instagram_handle: normalizeHandle(instagramHandle),
+      youtube_handle: normalizeHandle(youtubeHandle),
+      tiktok_handle: normalizeHandle(tiktokHandle),
+      facebook_handle: normalizeHandle(facebookHandle),
+      linkedin_handle: normalizeHandle(linkedinHandle),
       notes: notes?.trim() || null,
       is_active: true,
     })
@@ -442,6 +455,8 @@ export async function updateCreator(
     instagramHandle,
     youtubeHandle,
     tiktokHandle,
+    facebookHandle,
+    linkedinHandle,
     notes,
   }: {
     id: string;
@@ -451,6 +466,8 @@ export async function updateCreator(
     instagramHandle?: string;
     youtubeHandle?: string;
     tiktokHandle?: string;
+    facebookHandle?: string;
+    linkedinHandle?: string;
     notes?: string;
   },
   ctx: GraphQLContext
@@ -481,9 +498,11 @@ export async function updateCreator(
   if (displayName !== undefined) updates.display_name = displayName.trim();
   if (email !== undefined) updates.email = email.trim() || null;
   if (phone !== undefined) updates.phone = phone.trim() || null;
-  if (instagramHandle !== undefined) updates.instagram_handle = instagramHandle.trim() || null;
-  if (youtubeHandle !== undefined) updates.youtube_handle = youtubeHandle.trim() || null;
-  if (tiktokHandle !== undefined) updates.tiktok_handle = tiktokHandle.trim() || null;
+  if (instagramHandle !== undefined) updates.instagram_handle = normalizeHandle(instagramHandle);
+  if (youtubeHandle !== undefined) updates.youtube_handle = normalizeHandle(youtubeHandle);
+  if (tiktokHandle !== undefined) updates.tiktok_handle = normalizeHandle(tiktokHandle);
+  if (facebookHandle !== undefined) updates.facebook_handle = normalizeHandle(facebookHandle);
+  if (linkedinHandle !== undefined) updates.linkedin_handle = normalizeHandle(linkedinHandle);
   if (notes !== undefined) updates.notes = notes.trim() || null;
 
   if (Object.keys(updates).length === 0) {

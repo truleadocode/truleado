@@ -57,6 +57,8 @@ interface Creator {
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
+  facebookHandle: string | null
+  linkedinHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string

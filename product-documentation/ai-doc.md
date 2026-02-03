@@ -56,6 +56,7 @@
    - **GraphQL**: Mutations `addCreator`, `updateCreator`, `deactivateCreator`, `activateCreator`, `deleteCreator`, `inviteCreatorToCampaign`, `acceptCampaignInvite`, `declineCampaignInvite`, `removeCreatorFromCampaign`, `updateCampaignCreator`. Queries `creators(agencyId)`, `creator(id)`.  
    - **UI**: `/dashboard/creators` (list), `/dashboard/creators/new` (add), `/dashboard/creators/[id]` (detail), `/dashboard/creators/[id]/edit` (edit). `AssignCreatorDialog` component for campaign assignment. Enhanced creators section on campaign detail page.  
    - **Permissions**: `MANAGE_CREATOR_ROSTER` (Agency Admin, Account Manager), `VIEW_CREATOR_ROSTER` (all agency roles), `INVITE_CREATOR` (Agency Admin, Account Manager, Operator).  
+   - **Profile editing**: Creator edit modal supports Instagram, YouTube, TikTok, Facebook, and LinkedIn handles. “Remove” is deactivation-only; detail page shows disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn.  
    - **Docs**: `product-documentation/GRAPHQL_API_CONTRACT.md` §9.
 
 7. **Social Media Analytics & Token Purchases (implemented)**  
