@@ -12,6 +12,12 @@ import {
   Linkedin,
   Music2,
   LayoutDashboard,
+  UserCircle,
+  AtSign,
+  Mail,
+  Phone,
+  StickyNote,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -506,99 +512,172 @@ export default function CreatorDetailPage() {
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Edit Creator</DialogTitle>
-            <DialogDescription>Update the creator&apos;s information</DialogDescription>
+            <div className="px-6 pt-6 pb-5 bg-gradient-to-br from-purple-600/10 via-pink-600/10 to-transparent border-b">
+              <div className="flex items-start gap-4">
+                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-sm">
+                  <Sparkles className="h-6 w-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <DialogTitle className="text-xl tracking-tight">Edit Creator Profile</DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Update identity, contact info, and social handles. Handles can be entered with or without <span className="font-medium">@</span>.
+                  </DialogDescription>
+                </div>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-displayName">Display Name *</Label>
-              <Input
-                id="edit-displayName"
-                value={editForm.displayName}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Email</Label>
-                <Input
-                  id="edit-email"
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                />
+          <div className="px-6 py-6 space-y-6">
+            <div className="rounded-xl border bg-card p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
+                <UserCircle className="h-4 w-4" />
+                Identity
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-phone">Phone</Label>
-                <Input
-                  id="edit-phone"
-                  type="tel"
-                  value={editForm.phone}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-instagram">Instagram</Label>
-                <Input
-                  id="edit-instagram"
-                  value={editForm.instagramHandle}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-youtube">YouTube</Label>
-                <Input
-                  id="edit-youtube"
-                  value={editForm.youtubeHandle}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-displayName">Display Name *</Label>
+                  <div className="relative">
+                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-displayName"
+                      className="pl-9"
+                      value={editForm.displayName}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-notes">Notes</Label>
+                  <div className="relative">
+                    <StickyNote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <textarea
+                      id="edit-notes"
+                      className="flex min-h-[42px] w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-tiktok">TikTok</Label>
-              <Input
-                id="edit-tiktok"
-                value={editForm.tiktokHandle}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-facebook">Facebook</Label>
-                <Input
-                  id="edit-facebook"
-                  value={editForm.facebookHandle}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
-                />
+
+            <div className="rounded-xl border bg-card p-4">
+              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
+                <Mail className="h-4 w-4" />
+                Contact
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-linkedin">LinkedIn</Label>
-                <Input
-                  id="edit-linkedin"
-                  value={editForm.linkedinHandle}
-                  onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      className="pl-9"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Phone</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-phone"
+                      type="tel"
+                      className="pl-9"
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-notes">Notes</Label>
-              <textarea
-                id="edit-notes"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                value={editForm.notes}
-                onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
-              />
+
+            <div className="rounded-xl border bg-card p-4">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <AtSign className="h-4 w-4" />
+                  Social Handles
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Instagram + TikTok prefer usernames, YouTube can be channel name.
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-instagram">Instagram</Label>
+                  <div className="relative">
+                    <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-instagram"
+                      className="pl-9"
+                      value={editForm.instagramHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-youtube">YouTube</Label>
+                  <div className="relative">
+                    <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-youtube"
+                      className="pl-9"
+                      value={editForm.youtubeHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-tiktok">TikTok</Label>
+                  <div className="relative">
+                    <Music2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-tiktok"
+                      className="pl-9"
+                      value={editForm.tiktokHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-facebook">Facebook</Label>
+                  <div className="relative">
+                    <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-facebook"
+                      className="pl-9"
+                      value={editForm.facebookHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="edit-linkedin">LinkedIn</Label>
+                  <div className="relative">
+                    <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="edit-linkedin"
+                      className="pl-9"
+                      value={editForm.linkedinHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
+            <div className="w-full px-6 pb-6 flex items-center justify-between">
+              <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+              <Button onClick={handleSaveEdit} disabled={saving} className="shadow-sm">
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
