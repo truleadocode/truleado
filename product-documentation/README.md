@@ -18,7 +18,6 @@ This folder contains the canonical documents that define Truleado. Any implement
 | [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
 | [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Jan 2026 |
-| [Notification Service Implementation](./notification-service-implementation.md) | Novu setup, agency SMTP, Inbox, workflows, triggers | Jan 2026 |
 
 ---
 
@@ -99,6 +98,9 @@ When adding new features:
 ---
 
 ## Changelog
+
+### February 2026
+- **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
 
 ### January 2026
 - Initial documentation created from canonical source documents

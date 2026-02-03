@@ -86,6 +86,16 @@ External Services
   - Invoices
   - Reports
 
+### External Media Embedding (Instagram CDN)
+
+Instagram/Facebook CDN images may be served with restrictive headers (e.g. `Cross-Origin-Resource-Policy: same-origin`) which can block rendering when embedded directly in the browser from Truleado (e.g. `localhost`).
+
+**Rule**: When rendering external social images in the UI (profile pictures, post thumbnails), the app must use a same-origin proxy endpoint.
+
+- API route: `GET /api/image-proxy?url=<https-url>`
+- Security: allowlist known Instagram/Facebook CDN host patterns; deny non-HTTPS; no cookies; stream bytes back with an `image/*` content-type.
+
+
 ---
 
 ## 4. Authentication & Identity Model

@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
+**Last updated:** 2026-02-03. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
 
 ---
 
@@ -65,6 +65,7 @@
    - **UI**: Creator detail page includes social analytics tabs (Instagram, YouTube) with charts and post visualization. Billing settings page (`/dashboard/settings/billing`) for token purchases via Razorpay.  
    - **API Routes**: `/api/social-fetch` (background job trigger), `/api/razorpay/create-order`, `/api/razorpay/verify-payment`.  
    - **Components**: `src/components/creators/social-dashboard-tab.tsx`, `instagram-tab.tsx`, `youtube-tab.tsx`, `social-post-chart.tsx`, `social-fetch-button.tsx`.  
+   - **Instagram images**: Some Instagram/Facebook CDN images can be blocked by the browser when embedded cross-origin (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`). The UI uses a same-origin proxy: `GET /api/image-proxy?url=...` (see `src/app/api/image-proxy/route.ts`) and the Instagram tab routes `profilePicUrl` and post `thumbnailUrl` through it.
    - **Libraries**: `apify-client` (Instagram scraping), `razorpay` (payments), `recharts` (visualization).  
    - **Token System**: Separate `premium_token_balance` for social analytics; regular `tokenBalance` for other features. Token purchases processed via Razorpay (basic/premium types).  
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §9-10, `GRAPHQL_API_CONTRACT.md` §4.9, §10.
@@ -431,4 +432,3 @@ This should provide enough context for a new agent to continue seamlessly from w
 ## 9. Resolved / Historical
 
 - **Create Contact “non-empty query” (fixed)**: The Client detail Contacts tab used `queries.createContact` / `updateContact` / `deleteContact` instead of the mutations. GraphQL returned “operations must contain a non-empty query”. Fixed by switching to `mutations.createContact`, `mutations.updateContact`, `mutations.deleteContact` in `src/app/(dashboard)/dashboard/clients/[id]/page.tsx`. Create Client was never broken; the reported issue referred to contact CRUD. 
-
