@@ -26,6 +26,9 @@ export interface Database {
           billing_email: string | null;
           status: 'active' | 'suspended';
           token_balance: number;
+          currency_code: string | null;
+          timezone: string | null;
+          language_code: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -35,6 +38,9 @@ export interface Database {
           billing_email?: string | null;
           status?: 'active' | 'suspended';
           token_balance?: number;
+          currency_code?: string | null;
+          timezone?: string | null;
+          language_code?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -44,6 +50,9 @@ export interface Database {
           billing_email?: string | null;
           status?: 'active' | 'suspended';
           token_balance?: number;
+          currency_code?: string | null;
+          timezone?: string | null;
+          language_code?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -442,6 +451,38 @@ export interface Database {
           tiktok_handle?: string | null;
           notes?: string | null;
           is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      creator_rates: {
+        Row: {
+          id: string;
+          creator_id: string;
+          platform: string;
+          deliverable_type: string;
+          rate_amount: number;
+          rate_currency: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          creator_id: string;
+          platform: string;
+          deliverable_type: string;
+          rate_amount: number;
+          rate_currency?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          creator_id?: string;
+          platform?: string;
+          deliverable_type?: string;
+          rate_amount?: number;
+          rate_currency?: string;
           created_at?: string;
           updated_at?: string;
         };

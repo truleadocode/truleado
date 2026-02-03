@@ -25,6 +25,9 @@ CREATE TABLE agencies (
   agency_code TEXT UNIQUE,
   billing_email TEXT,
   token_balance INTEGER DEFAULT 0,
+  currency_code TEXT DEFAULT 'USD',
+  timezone TEXT DEFAULT 'UTC',
+  language_code TEXT DEFAULT 'en',
   status TEXT CHECK (status IN ('active','suspended')) DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -366,14 +369,35 @@ CREATE TABLE creators (
 
 ---
 
-### 6.2 campaign_creators
+### 6.2 creator_rates
+
+> Stores agency-defined creator pricing by platform + deliverable type (and optional retainer via `flat_rate`).
+
+```sql
+CREATE TABLE creator_rates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL,
+  deliverable_type TEXT NOT NULL,
+  rate_amount NUMERIC(10, 2) NOT NULL,
+  rate_currency TEXT NOT NULL DEFAULT 'USD',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+> **Flat Rate (retainer)**: Represented as `platform = 'flat_rate'` and `deliverable_type = 'flat_rate'`.
+
+---
+
+### 6.3 campaign_creators
 
 ```sql
 CREATE TABLE campaign_creators (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
   creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
-  status TEXT CHECK (status IN ('invited','accepted','removed')) DEFAULT 'invited',
+  status TEXT CHECK (status IN ('invited','accepted','declined','removed')) DEFAULT 'invited',
   rate_amount DECIMAL(10,2),
   rate_currency TEXT DEFAULT 'INR',
   notes TEXT,

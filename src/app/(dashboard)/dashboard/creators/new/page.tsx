@@ -12,6 +12,7 @@ import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
+import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
 
 export default function NewCreatorPage() {
   const router = useRouter()
@@ -31,6 +32,7 @@ export default function NewCreatorPage() {
     linkedinHandle: '',
     notes: '',
   })
+  const [rates, setRates] = useState<CreatorRateDraft[]>([])
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -51,6 +53,15 @@ export default function NewCreatorPage() {
     setError(null)
 
     try {
+      const preparedRates = rates
+        .map((rate) => ({
+          platform: rate.platform,
+          deliverableType: rate.deliverableType,
+          rateAmount: Number.parseFloat(rate.rateAmount),
+          rateCurrency: currentAgency.currencyCode || 'USD',
+        }))
+        .filter((rate) => Number.isFinite(rate.rateAmount) && rate.rateAmount > 0)
+
       const data = await graphqlRequest<{ addCreator: { id: string } }>(
         mutations.addCreator,
         {
@@ -64,6 +75,7 @@ export default function NewCreatorPage() {
           facebookHandle: form.facebookHandle.trim() || null,
           linkedinHandle: form.linkedinHandle.trim() || null,
           notes: form.notes.trim() || null,
+          rates: preparedRates.length ? preparedRates : null,
         }
       )
       toast({ title: 'Creator added successfully' })
@@ -217,6 +229,15 @@ export default function NewCreatorPage() {
                     />
                   </div>
                 </div>
+              </div>
+
+              <div className="space-y-4">
+                <Label className="text-base font-medium">Rates</Label>
+                <CreatorRatesForm
+                  rates={rates}
+                  onChange={setRates}
+                  currencyCode={currentAgency?.currencyCode || 'USD'}
+                />
               </div>
 
               <div className="space-y-2">

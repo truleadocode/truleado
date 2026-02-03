@@ -18,6 +18,7 @@ import {
   Phone,
   StickyNote,
   Sparkles,
+  ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +47,8 @@ import { useSocialFetch } from '@/hooks/use-social-fetch'
 import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
 import { InstagramTab } from '@/components/creators/instagram-tab'
 import { YouTubeTab } from '@/components/creators/youtube-tab'
+import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
+import { useAuth } from '@/contexts/auth-context'
 
 function proxiedImageSrc(url: string) {
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
@@ -88,6 +91,16 @@ interface CampaignAssignment {
   createdAt: string
 }
 
+interface CreatorRate {
+  id: string
+  platform: string
+  deliverableType: string
+  rateAmount: number
+  rateCurrency: string
+  createdAt: string
+  updatedAt: string
+}
+
 interface Creator {
   id: string
   displayName: string
@@ -103,6 +116,7 @@ interface Creator {
   createdAt: string
   updatedAt: string
   campaignAssignments: CampaignAssignment[]
+  rates: CreatorRate[]
 }
 
 interface SocialProfile {
@@ -147,6 +161,7 @@ type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'facebook' | 'link
 export default function CreatorDetailPage() {
   const params = useParams()
   const { toast } = useToast()
+  const { currentAgency } = useAuth()
   const creatorId = params.id as string
 
   const [creator, setCreator] = useState<Creator | null>(null)
@@ -173,8 +188,54 @@ export default function CreatorDetailPage() {
     linkedinHandle: '',
     notes: '',
   })
+  const [editRates, setEditRates] = useState<CreatorRateDraft[]>([])
+  const [editTab, setEditTab] = useState<'profile' | 'rates'>('profile')
   const [saving, setSaving] = useState(false)
   const [deactivateOpen, setDeactivateOpen] = useState(false)
+
+  const avgRatesByPlatform = (() => {
+    const rows = (creator?.rates || []).filter((rate) => rate.platform !== 'flat_rate')
+    const buckets = new Map<string, { total: number; count: number; currency: string }>()
+    rows.forEach((rate) => {
+      const amount =
+        typeof rate.rateAmount === 'number'
+          ? rate.rateAmount
+          : Number.parseFloat(String(rate.rateAmount))
+      if (!Number.isFinite(amount)) return
+      const current = buckets.get(rate.platform) || { total: 0, count: 0, currency: rate.rateCurrency }
+      buckets.set(rate.platform, {
+        total: current.total + amount,
+        count: current.count + 1,
+        currency: current.currency || rate.rateCurrency,
+      })
+    })
+    return Array.from(buckets.entries()).map(([platform, data]) => ({
+      platform,
+      average: data.count > 0 ? data.total / data.count : 0,
+      currency: data.currency,
+    }))
+  })()
+
+  const platformLabels: Record<string, string> = {
+    instagram: 'Instagram',
+    youtube: 'YouTube',
+    tiktok: 'TikTok',
+    x: 'X',
+    blog: 'Blog',
+  }
+
+  const formatMoney = (value: number, currency?: string) => {
+    if (!Number.isFinite(value)) return '—'
+    try {
+      return new Intl.NumberFormat(currentAgency?.languageCode || 'en-US', {
+        style: 'currency',
+        currency: currency || 'USD',
+        maximumFractionDigits: 0,
+      }).format(value)
+    } catch {
+      return `${currency || 'USD'} ${value.toFixed(0)}`
+    }
+  }
 
   const fetchSocialData = useCallback(async () => {
     setSocialLoading(true)
@@ -277,6 +338,14 @@ export default function CreatorDetailPage() {
       linkedinHandle: creator.linkedinHandle || '',
       notes: creator.notes || '',
     })
+    setEditRates(
+      (creator.rates || []).map((rate) => ({
+        platform: rate.platform,
+        deliverableType: rate.deliverableType,
+        rateAmount: rate.rateAmount?.toString() ?? '',
+      }))
+    )
+    setEditTab('profile')
     setEditOpen(true)
   }
 
@@ -288,6 +357,15 @@ export default function CreatorDetailPage() {
 
     setSaving(true)
     try {
+      const preparedRates = editRates
+        .map((rate) => ({
+          platform: rate.platform,
+          deliverableType: rate.deliverableType,
+          rateAmount: Number.parseFloat(rate.rateAmount),
+          rateCurrency: currentAgency?.currencyCode || 'USD',
+        }))
+        .filter((rate) => Number.isFinite(rate.rateAmount) && rate.rateAmount > 0)
+
       await graphqlRequest(mutations.updateCreator, {
         id: creatorId,
         displayName: editForm.displayName.trim(),
@@ -299,6 +377,7 @@ export default function CreatorDetailPage() {
         facebookHandle: editForm.facebookHandle.trim() || null,
         linkedinHandle: editForm.linkedinHandle.trim() || null,
         notes: editForm.notes.trim() || null,
+        rates: preparedRates,
       })
       toast({ title: 'Creator updated' })
       setEditOpen(false)
@@ -397,10 +476,46 @@ export default function CreatorDetailPage() {
       <Header title={creator.displayName} subtitle="Creator Profile" />
 
       <div className="p-6 space-y-6">
-        {/* Creator Summary (always at top, above tabs) */}
+        <div className="flex items-center justify-between">
+          <Link
+            href="/dashboard/creators"
+            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Creator Roster
+          </Link>
+
+          <div className="flex items-center gap-3">
+            {!creator.isActive && (
+              <Badge variant="secondary">Inactive</Badge>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openEditDialog}>Edit</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {creator.isActive ? (
+                  <DropdownMenuItem onClick={() => setDeactivateOpen(true)}>
+                    Deactivate
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={handleActivate}>
+                    Activate
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {/* Creator Summary (above tabs, below actions) */}
         <Card>
           <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
               <div className="h-20 w-20 rounded-xl bg-muted flex items-center justify-center shrink-0 overflow-hidden">
                 {(() => {
                   const raw = igProfile?.profilePicUrl || ytProfile?.profilePicUrl || null
@@ -496,45 +611,28 @@ export default function CreatorDetailPage() {
                   </div>
                 )}
               </div>
+
+              <div className="w-full lg:w-64 xl:w-72">
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Average Engagement Rate
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {avgRatesByPlatform.length > 0 ? (
+                      avgRatesByPlatform.map((item) => (
+                        <span key={item.platform} className="text-xs font-medium rounded bg-muted px-2 py-1">
+                          {platformLabels[item.platform] || item.platform}: {formatMoney(item.average, item.currency)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm font-medium">—</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
-
-        <div className="flex items-center justify-between">
-          <Link
-            href="/dashboard/creators"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Creator Roster
-          </Link>
-
-          <div className="flex items-center gap-3">
-            {!creator.isActive && (
-              <Badge variant="secondary">Inactive</Badge>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={openEditDialog}>Edit</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {creator.isActive ? (
-                  <DropdownMenuItem onClick={() => setDeactivateOpen(true)}>
-                    Deactivate
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem onClick={handleActivate}>
-                    Activate
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
 
         {/* Tab Bar */}
         {hasSocialTabs && (
@@ -659,147 +757,184 @@ export default function CreatorDetailPage() {
             </div>
           </DialogHeader>
           <div className="px-6 py-6 space-y-6">
-            <div className="rounded-xl border bg-card p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
-                <UserCircle className="h-4 w-4" />
-                Identity
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-displayName">Display Name *</Label>
-                  <div className="relative">
-                    <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-displayName"
-                      className="pl-9"
-                      value={editForm.displayName}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-notes">Notes</Label>
-                  <div className="relative">
-                    <StickyNote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <textarea
-                      id="edit-notes"
-                      className="flex min-h-[42px] w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                      value={editForm.notes}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-center gap-2 border-b pb-3">
+              <Button
+                type="button"
+                variant={editTab === 'profile' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setEditTab('profile')}
+              >
+                Profile
+              </Button>
+              <Button
+                type="button"
+                variant={editTab === 'rates' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setEditTab('rates')}
+              >
+                Rates
+              </Button>
             </div>
 
-            <div className="rounded-xl border bg-card p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
-                <Mail className="h-4 w-4" />
-                Contact
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-email"
-                      type="email"
-                      className="pl-9"
-                      value={editForm.email}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                    />
+            {editTab === 'profile' && (
+              <>
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
+                    <UserCircle className="h-4 w-4" />
+                    Identity
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-displayName">Display Name *</Label>
+                      <div className="relative">
+                        <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-displayName"
+                          className="pl-9"
+                          value={editForm.displayName}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-notes">Notes</Label>
+                      <div className="relative">
+                        <StickyNote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <textarea
+                          id="edit-notes"
+                          className="flex min-h-[42px] w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                          value={editForm.notes}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-phone">Phone</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-phone"
-                      type="tel"
-                      className="pl-9"
-                      value={editForm.phone}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
 
-            <div className="rounded-xl border bg-card p-4">
-              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
+                    <Mail className="h-4 w-4" />
+                    Contact
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-email">Email</Label>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-email"
+                          type="email"
+                          className="pl-9"
+                          value={editForm.email}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-phone">Phone</Label>
+                      <div className="relative">
+                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-phone"
+                          type="tel"
+                          className="pl-9"
+                          value={editForm.phone}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border bg-card p-4">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                      <AtSign className="h-4 w-4" />
+                      Social Handles
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      Instagram + TikTok prefer usernames, YouTube can be channel name.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-instagram">Instagram</Label>
+                      <div className="relative">
+                        <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-instagram"
+                          className="pl-9"
+                          value={editForm.instagramHandle}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-youtube">YouTube</Label>
+                      <div className="relative">
+                        <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-youtube"
+                          className="pl-9"
+                          value={editForm.youtubeHandle}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-tiktok">TikTok</Label>
+                      <div className="relative">
+                        <Music2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-tiktok"
+                          className="pl-9"
+                          value={editForm.tiktokHandle}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-facebook">Facebook</Label>
+                      <div className="relative">
+                        <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-facebook"
+                          className="pl-9"
+                          value={editForm.facebookHandle}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="edit-linkedin">LinkedIn</Label>
+                      <div className="relative">
+                        <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-linkedin"
+                          className="pl-9"
+                          value={editForm.linkedinHandle}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {editTab === 'rates' && (
+              <div className="rounded-xl border bg-card p-4 space-y-3">
                 <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <AtSign className="h-4 w-4" />
-                  Social Handles
+                  <LayoutDashboard className="h-4 w-4" />
+                  Rates
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  Instagram + TikTok prefer usernames, YouTube can be channel name.
-                </span>
+                <CreatorRatesForm
+                  rates={editRates}
+                  onChange={setEditRates}
+                  currencyCode={currentAgency?.currencyCode || 'USD'}
+                />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-instagram">Instagram</Label>
-                  <div className="relative">
-                    <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-instagram"
-                      className="pl-9"
-                      value={editForm.instagramHandle}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-youtube">YouTube</Label>
-                  <div className="relative">
-                    <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-youtube"
-                      className="pl-9"
-                      value={editForm.youtubeHandle}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-tiktok">TikTok</Label>
-                  <div className="relative">
-                    <Music2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-tiktok"
-                      className="pl-9"
-                      value={editForm.tiktokHandle}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-facebook">Facebook</Label>
-                  <div className="relative">
-                    <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-facebook"
-                      className="pl-9"
-                      value={editForm.facebookHandle}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="edit-linkedin">LinkedIn</Label>
-                  <div className="relative">
-                    <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="edit-linkedin"
-                      className="pl-9"
-                      value={editForm.linkedinHandle}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
           <DialogFooter>
             <div className="w-full px-6 pb-6 flex items-center justify-between">

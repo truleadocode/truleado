@@ -258,6 +258,22 @@ Draft → Active → Content In Review → Approved → Completed → Archived
 - Submit content URLs
 - Track payment status
 
+### Creator Rates & Retainers
+
+Agencies need a consistent way to store and reference creator pricing independent of campaigns.
+
+- Agencies can set **rates per platform + deliverable type** (e.g., Instagram Post, YouTube Video).
+- Agencies can also set a **Flat Rate (retainer)** for creators on monthly/ongoing retainers.
+- Rates are used for internal planning and quoting; campaign assignments may still override rates with campaign-specific pricing.
+- Creator profile shows a compact view of **average rate per platform** under the label **“Average Engagement Rate”**.
+
+### Agency Locale Defaults
+
+Truleado supports global agencies and must format pricing and time consistently:
+
+- Agency Admin configures default `currency`, `timezone`, and `language`.
+- These defaults are applied to money/date formatting across the product (including creator rates).
+
 ---
 
 ## 11. Analytics Model (Foundational)

@@ -44,6 +44,7 @@ export async function addCreator(
     facebookHandle,
     linkedinHandle,
     notes,
+    rates,
   }: {
     agencyId: string;
     displayName: string;
@@ -55,6 +56,12 @@ export async function addCreator(
     facebookHandle?: string;
     linkedinHandle?: string;
     notes?: string;
+    rates?: Array<{
+      platform: string;
+      deliverableType: string;
+      rateAmount: number;
+      rateCurrency?: string | null;
+    }>;
   },
   ctx: GraphQLContext
 ) {
@@ -89,6 +96,45 @@ export async function addCreator(
   
   if (error || !creator) {
     throw new Error('Failed to add creator');
+  }
+
+  if (rates) {
+    const { data: agencyLocale } = await supabaseAdmin
+      .from('agencies')
+      .select('currency_code')
+      .eq('id', agencyId)
+      .single();
+    const fallbackCurrency = agencyLocale?.currency_code || 'USD';
+
+    const normalizedRates = rates
+      .filter((rate) => rate && typeof rate.rateAmount === 'number')
+      .map((rate) => {
+        const platform = typeof rate.platform === 'string' ? rate.platform.trim() : ''
+        const deliverableType =
+          typeof rate.deliverableType === 'string' ? rate.deliverableType.trim() : ''
+        const rateCurrency =
+          typeof rate.rateCurrency === 'string'
+            ? rate.rateCurrency.trim()
+            : fallbackCurrency
+        return {
+          creator_id: creator.id,
+          platform,
+          deliverable_type: deliverableType,
+          rate_amount: rate.rateAmount,
+          rate_currency: rateCurrency,
+        }
+      })
+      .filter((rate) => rate.platform && rate.deliverable_type && rate.rate_amount > 0);
+
+    if (normalizedRates.length > 0) {
+      const { error: rateError } = await supabaseAdmin
+        .from('creator_rates')
+        .insert(normalizedRates);
+
+      if (rateError) {
+        throw new Error('Failed to save creator rates');
+      }
+    }
   }
   
   // Log activity
@@ -458,6 +504,7 @@ export async function updateCreator(
     facebookHandle,
     linkedinHandle,
     notes,
+    rates,
   }: {
     id: string;
     displayName?: string;
@@ -469,6 +516,12 @@ export async function updateCreator(
     facebookHandle?: string;
     linkedinHandle?: string;
     notes?: string;
+    rates?: Array<{
+      platform: string;
+      deliverableType: string;
+      rateAmount: number;
+      rateCurrency?: string | null;
+    }>;
   },
   ctx: GraphQLContext
 ) {
@@ -493,31 +546,84 @@ export async function updateCreator(
     throw validationError('Creator name must be at least 2 characters', 'displayName');
   }
 
+  const normalizeOptional = (value?: string | null) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || null;
+    }
+    return null;
+  };
+
   // Build update object from provided fields
   const updates: Record<string, unknown> = {};
-  if (displayName !== undefined) updates.display_name = displayName.trim();
-  if (email !== undefined) updates.email = email.trim() || null;
-  if (phone !== undefined) updates.phone = phone.trim() || null;
-  if (instagramHandle !== undefined) updates.instagram_handle = normalizeHandle(instagramHandle);
-  if (youtubeHandle !== undefined) updates.youtube_handle = normalizeHandle(youtubeHandle);
-  if (tiktokHandle !== undefined) updates.tiktok_handle = normalizeHandle(tiktokHandle);
-  if (facebookHandle !== undefined) updates.facebook_handle = normalizeHandle(facebookHandle);
-  if (linkedinHandle !== undefined) updates.linkedin_handle = normalizeHandle(linkedinHandle);
-  if (notes !== undefined) updates.notes = notes.trim() || null;
+  if (displayName !== undefined) updates.display_name = normalizeOptional(displayName);
+  if (email !== undefined) updates.email = normalizeOptional(email);
+  if (phone !== undefined) updates.phone = normalizeOptional(phone);
+  if (instagramHandle !== undefined) updates.instagram_handle = normalizeHandle(instagramHandle ?? undefined);
+  if (youtubeHandle !== undefined) updates.youtube_handle = normalizeHandle(youtubeHandle ?? undefined);
+  if (tiktokHandle !== undefined) updates.tiktok_handle = normalizeHandle(tiktokHandle ?? undefined);
+  if (facebookHandle !== undefined) updates.facebook_handle = normalizeHandle(facebookHandle ?? undefined);
+  if (linkedinHandle !== undefined) updates.linkedin_handle = normalizeHandle(linkedinHandle ?? undefined);
+  if (notes !== undefined) updates.notes = normalizeOptional(notes);
 
-  if (Object.keys(updates).length === 0) {
-    return existing;
+  let updated = existing;
+
+  if (Object.keys(updates).length > 0) {
+    const { data, error } = await supabaseAdmin
+      .from('creators')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !data) {
+      throw new Error('Failed to update creator');
+    }
+    updated = data;
   }
 
-  const { data: updated, error } = await supabaseAdmin
-    .from('creators')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
+  if (rates) {
+    const { data: agencyLocale } = await supabaseAdmin
+      .from('agencies')
+      .select('currency_code')
+      .eq('id', existing.agency_id)
+      .single();
+    const fallbackCurrency = agencyLocale?.currency_code || 'USD';
 
-  if (error || !updated) {
-    throw new Error('Failed to update creator');
+    await supabaseAdmin
+      .from('creator_rates')
+      .delete()
+      .eq('creator_id', id);
+
+    const normalizedRates = rates
+      .filter((rate) => rate && typeof rate.rateAmount === 'number')
+      .map((rate) => {
+        const platform = typeof rate.platform === 'string' ? rate.platform.trim() : ''
+        const deliverableType =
+          typeof rate.deliverableType === 'string' ? rate.deliverableType.trim() : ''
+        const rateCurrency =
+          typeof rate.rateCurrency === 'string'
+            ? rate.rateCurrency.trim()
+            : fallbackCurrency
+        return {
+          creator_id: id,
+          platform,
+          deliverable_type: deliverableType,
+          rate_amount: rate.rateAmount,
+          rate_currency: rateCurrency,
+        }
+      })
+      .filter((rate) => rate.platform && rate.deliverable_type && rate.rate_amount > 0);
+
+    if (normalizedRates.length > 0) {
+      const { error: rateError } = await supabaseAdmin
+        .from('creator_rates')
+        .insert(normalizedRates);
+
+      if (rateError) {
+        throw new Error('Failed to save creator rates');
+      }
+    }
   }
 
   await logActivity({

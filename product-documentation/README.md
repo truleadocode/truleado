@@ -66,7 +66,7 @@ Campaign Permission
 - [x] Campaign engine with state machine
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
 - [x] **Notifications (Phase 4/5)**: Novu in-app Inbox + email; agency SMTP at Settings → Notifications; workflows `approval-requested`, `approval-approved`, `approval-rejected`; sample script `scripts/trigger-sample-notification.js`
-- [ ] Creator roster
+- [x] Creator roster (incl. rates + social analytics tabs)
 - [ ] Audit logs
 
 ### Excluded (Post-MVP)
@@ -102,6 +102,8 @@ When adding new features:
 ### February 2026
 - **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
 - **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
+- **Agency locale settings** — Added agency-level locale defaults (currency, timezone, language) and a Settings page at `/dashboard/settings/locale`.
+- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled “Average Engagement Rate”.
 
 ### January 2026
 - Initial documentation created from canonical source documents

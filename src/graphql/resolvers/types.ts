@@ -81,6 +81,9 @@ export const typeResolvers = {
     tokenBalance: (parent: { token_balance: number }) => parent.token_balance ?? 0,
     premiumTokenBalance: (parent: { premium_token_balance: number }) => parent.premium_token_balance ?? 0,
     billingEmail: (parent: { billing_email: string | null }) => parent.billing_email,
+    currencyCode: (parent: { currency_code: string | null }) => parent.currency_code ?? 'USD',
+    timezone: (parent: { timezone: string | null }) => parent.timezone ?? 'UTC',
+    languageCode: (parent: { language_code: string | null }) => parent.language_code ?? 'en',
     createdAt: (parent: { created_at: string }) => parent.created_at,
     clients: async (parent: WithId) => {
       const { data } = await supabaseAdmin
@@ -547,6 +550,14 @@ export const typeResolvers = {
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    rates: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('creator_rates')
+        .select('*')
+        .eq('creator_id', parent.id)
+        .order('created_at', { ascending: true });
+      return data || [];
+    },
     campaignAssignments: async (parent: WithId) => {
       const { data } = await supabaseAdmin
         .from('campaign_creators')
@@ -556,6 +567,14 @@ export const typeResolvers = {
         .order('created_at', { ascending: false });
       return data || [];
     },
+  },
+
+  CreatorRate: {
+    deliverableType: (parent: { deliverable_type: string }) => parent.deliverable_type,
+    rateAmount: (parent: { rate_amount: number }) => parent.rate_amount,
+    rateCurrency: (parent: { rate_currency: string }) => parent.rate_currency,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
   },
 
   CampaignCreator: {
