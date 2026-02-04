@@ -12,12 +12,12 @@ This folder contains the canonical documents that define Truleado. Any implement
 
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
-| [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Jan 2026 |
-| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Jan 2026 |
-| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Jan 2026 |
-| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
+| [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Feb 2026 |
+| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 |
+| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 |
+| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
-| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Jan 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Feb 2026 |
 
 ---
 
@@ -100,10 +100,14 @@ When adding new features:
 ## Changelog
 
 ### February 2026
+- **Contact form dialog redesign** — Extracted shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) with premium tabbed UI (Details + Phone & Address tabs), gradient header, icon-prefixed inputs. Used on both `/dashboard/contacts` and `/dashboard/clients/[id]`.
+- **Creator summary above tabs** — Creator detail page now shows a summary card at the top with profile pic (Instagram > YouTube > initials), display name, platform handles, and status. Removed duplicate info from Dashboard tab.
+- **Multi-phone contacts with country picker** — Added `phone`, `office_phone`, `home_phone` fields to contacts (migration `00020`); `PhoneInput` component with country code picker using `libphonenumber-js`.
+- **Dev script fix** — Fixed `NODE_ENV=production` conflict by explicitly setting `NODE_ENV=development` in the dev script.
 - **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
-- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
+- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled "Coming Soon" tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
 - **Agency locale settings** — Added agency-level locale defaults (currency, timezone, language) and a Settings page at `/dashboard/settings/locale`.
-- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled “Average Engagement Rate”.
+- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled "Average Engagement Rate".
 
 ### January 2026
 - Initial documentation created from canonical source documents

@@ -11,8 +11,6 @@ import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, mutations, queries } from '@/lib/graphql/client'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
-import { Label } from '@/components/ui/label'
-import { PhoneInput } from '@/components/ui/phone-input'
 import {
   Dialog,
   DialogContent,
@@ -22,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
+import { ContactFormDialog, type ContactFormData } from '@/components/contacts/contact-form-dialog'
 
 interface ContactRow {
   id: string
@@ -63,7 +62,8 @@ export default function ContactsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<ContactFormData>({
+    clientId: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -76,7 +76,7 @@ export default function ContactsPage() {
     notes: '',
     isClientApprover: false,
   })
-  const [createForm, setCreateForm] = useState({
+  const [createForm, setCreateForm] = useState<ContactFormData>({
     clientId: '',
     firstName: '',
     lastName: '',
@@ -178,6 +178,7 @@ export default function ContactsPage() {
   const openEditContact = (c: ContactRow) => {
     setEditingContact(c)
     setEditForm({
+      clientId: c.client.id,
       firstName: c.firstName,
       lastName: c.lastName,
       email: c.email ?? '',
@@ -652,275 +653,27 @@ export default function ContactsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!editingContact} onOpenChange={(open) => !open && setEditingContact(null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="text-xl">Edit Contact</DialogTitle>
-            <DialogDescription>Update contact details and notes.</DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Profile
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="edit-first-name">First name</Label>
-                <Input
-                  id="edit-first-name"
-                  value={editForm.firstName}
-                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-last-name">Last name</Label>
-                <Input
-                  id="edit-last-name"
-                  value={editForm.lastName}
-                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                />
-              </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-email">Email</Label>
-              <Input
-                id="edit-email"
-                type="email"
-                value={editForm.email}
-                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-phone">Primary phone</Label>
-              <PhoneInput
-                id="edit-phone"
-                value={editForm.phone}
-                onChange={(value) => setEditForm({ ...editForm, phone: value })}
-                placeholder="Primary number"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-mobile">Mobile</Label>
-              <PhoneInput
-                id="edit-mobile"
-                value={editForm.mobile}
-                onChange={(value) => setEditForm({ ...editForm, mobile: value })}
-                placeholder="Mobile number"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-office">Office</Label>
-              <PhoneInput
-                id="edit-office"
-                value={editForm.officePhone}
-                onChange={(value) => setEditForm({ ...editForm, officePhone: value })}
-                placeholder="Office number"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-home">Home</Label>
-              <PhoneInput
-                id="edit-home"
-                value={editForm.homePhone}
-                onChange={(value) => setEditForm({ ...editForm, homePhone: value })}
-                placeholder="Home number"
-              />
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="edit-address">Address</Label>
-                <Input
-                  id="edit-address"
-                  value={editForm.address}
-                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-department">Department</Label>
-                <Input
-                  id="edit-department"
-                  value={editForm.department}
-                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-approver">Client approver</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="edit-approver"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={editForm.isClientApprover}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, isClientApprover: e.target.checked })
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">Can approve deliverables</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border bg-muted/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Notes
-            </div>
-            <textarea
-              id="edit-notes"
-              className="min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={editForm.notes}
-              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingContact(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveContact} loading={saving}>
-              Save changes
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ContactFormDialog
+        open={!!editingContact}
+        onOpenChange={(open) => !open && setEditingContact(null)}
+        mode="edit"
+        form={editForm}
+        onFormChange={(f) => setEditForm(f)}
+        onSubmit={handleSaveContact}
+        saving={saving}
+      />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader className="space-y-2">
-            <DialogTitle className="text-xl">Add Contact</DialogTitle>
-            <DialogDescription>Create a new client contact.</DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border bg-muted/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Profile
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="create-client">Client</Label>
-                <select
-                  id="create-client"
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  value={createForm.clientId}
-                  onChange={(e) => setCreateForm({ ...createForm, clientId: e.target.value })}
-                >
-                  <option value="">Select a client</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-first-name">First name</Label>
-                <Input
-                  id="create-first-name"
-                  value={createForm.firstName}
-                  onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-last-name">Last name</Label>
-                <Input
-                  id="create-last-name"
-                  value={createForm.lastName}
-                  onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-email">Email</Label>
-                <Input
-                  id="create-email"
-                  type="email"
-                  value={createForm.email}
-                  onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-phone">Primary phone</Label>
-                <PhoneInput
-                  id="create-phone"
-                  value={createForm.phone}
-                  onChange={(value) => setCreateForm({ ...createForm, phone: value })}
-                  placeholder="Primary number"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-mobile">Mobile</Label>
-                <PhoneInput
-                  id="create-mobile"
-                  value={createForm.mobile}
-                  onChange={(value) => setCreateForm({ ...createForm, mobile: value })}
-                  placeholder="Mobile number"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-office">Office</Label>
-                <PhoneInput
-                  id="create-office"
-                  value={createForm.officePhone}
-                  onChange={(value) => setCreateForm({ ...createForm, officePhone: value })}
-                  placeholder="Office number"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-home">Home</Label>
-                <PhoneInput
-                  id="create-home"
-                  value={createForm.homePhone}
-                  onChange={(value) => setCreateForm({ ...createForm, homePhone: value })}
-                  placeholder="Home number"
-                />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="create-address">Address</Label>
-                <Input
-                  id="create-address"
-                  value={createForm.address}
-                  onChange={(e) => setCreateForm({ ...createForm, address: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-department">Department</Label>
-                <Input
-                  id="create-department"
-                  value={createForm.department}
-                  onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-approver">Client approver</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="create-approver"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input"
-                    checked={createForm.isClientApprover}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, isClientApprover: e.target.checked })
-                    }
-                  />
-                  <span className="text-sm text-muted-foreground">Can approve deliverables</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border bg-muted/10 p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
-              Notes
-            </div>
-            <textarea
-              id="create-notes"
-              className="min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={createForm.notes}
-              onChange={(e) => setCreateForm({ ...createForm, notes: e.target.value })}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateContact} loading={saving}>
-              Create contact
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ContactFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        mode="create"
+        form={createForm}
+        onFormChange={(f) => setCreateForm(f)}
+        onSubmit={handleCreateContact}
+        saving={saving}
+        clients={clients}
+        showClientSelector
+      />
 
       <Dialog open={!!deleteContact} onOpenChange={(open) => !open && setDeleteContact(null)}>
         <DialogContent className="sm:max-w-md">
