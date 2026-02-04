@@ -387,7 +387,21 @@ Attached at:
 
 ---
 
-## 10.3 Campaign Detail – Campaign Performance (Placeholder)
+## 10.3 Deliverable Tracking (Published URLs)
+
+- Tracking is available **only after a deliverable reaches APPROVED** status.
+- Users can store **1–10 published URLs** per deliverable. URLs are **immutable** once saved.
+- Data model:
+  - `deliverable_tracking_records` (one per deliverable; stores campaign/project/client context and who started tracking)
+  - `deliverable_tracking_urls` (ordered list of URLs)
+- UI:
+  - Deliverable detail page: “Start Tracking” button + confirmation modal.
+  - Campaign detail page: “Start Tracking” button inline on each approved deliverable card.
+  - Tracked deliverables display a **Tracking** status badge (display-only; underlying deliverable status remains APPROVED).
+
+---
+
+## 10.4 Campaign Detail – Campaign Performance (Placeholder)
 
 - On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign Performance** section is rendered at the bottom.
 - Purpose: placeholder for future campaign-level social media analytics.

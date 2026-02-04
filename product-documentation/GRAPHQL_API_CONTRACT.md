@@ -320,6 +320,7 @@ type Deliverable {
   dueDate: DateTime
   versions: [DeliverableVersion!]!
   approvals: [Approval!]!
+  trackingRecord: DeliverableTrackingRecord
   createdAt: DateTime!
 }
 
@@ -344,6 +345,25 @@ type DeliverableVersionCaptionAudit {
   newCaption: String
   changedAt: DateTime!
   changedBy: User!
+}
+
+type DeliverableTrackingRecord {
+  id: ID!
+  deliverable: Deliverable!
+  campaign: Campaign!
+  project: Project!
+  client: Client!
+  deliverableName: String!
+  urls: [DeliverableTrackingUrl!]!
+  startedBy: User!
+  createdAt: DateTime!
+}
+
+type DeliverableTrackingUrl {
+  id: ID!
+  url: String!
+  displayOrder: Int!
+  createdAt: DateTime!
 }
 ```
 
@@ -845,6 +865,11 @@ type Mutation {
   ): DeliverableVersion!
 
   deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
+
+  startDeliverableTracking(
+    deliverableId: ID!
+    urls: [String!]!
+  ): DeliverableTrackingRecord!
 }
 ```
 

@@ -254,6 +254,26 @@ export const typeDefs = gql`
     status: DeliverableStatus!
     versions: [DeliverableVersion!]!
     approvals: [Approval!]!
+    trackingRecord: DeliverableTrackingRecord
+    createdAt: DateTime!
+  }
+
+  type DeliverableTrackingRecord {
+    id: ID!
+    deliverable: Deliverable!
+    campaign: Campaign!
+    project: Project!
+    client: Client!
+    deliverableName: String!
+    urls: [DeliverableTrackingUrl!]!
+    startedBy: User!
+    createdAt: DateTime!
+  }
+
+  type DeliverableTrackingUrl {
+    id: ID!
+    url: String!
+    displayOrder: Int!
     createdAt: DateTime!
   }
 
@@ -758,6 +778,12 @@ export const typeDefs = gql`
       mimeType: String
       caption: String
     ): DeliverableVersion!
+
+    # Start tracking an approved deliverable by saving published URLs (immutable)
+    startDeliverableTracking(
+      deliverableId: ID!
+      urls: [String!]!
+    ): DeliverableTrackingRecord!
     
     # Submit deliverable for review
     submitDeliverableForReview(deliverableId: ID!): Deliverable!

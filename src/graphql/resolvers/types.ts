@@ -454,6 +454,72 @@ export const typeResolvers = {
         .order('decided_at', { ascending: false });
       return data || [];
     },
+    trackingRecord: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('deliverable_tracking_records')
+        .select('*')
+        .eq('deliverable_id', parent.id)
+        .maybeSingle();
+      return data ?? null;
+    },
+  },
+
+  DeliverableTrackingRecord: {
+    deliverableName: (parent: { deliverable_name: string }) => parent.deliverable_name,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    deliverable: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('deliverables')
+        .select('*')
+        .eq('id', parent.deliverable_id)
+        .single();
+      return data;
+    },
+    campaign: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+    project: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', parent.project_id)
+        .single();
+      return data;
+    },
+    client: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('clients')
+        .select('*')
+        .eq('id', parent.client_id)
+        .single();
+      return data;
+    },
+    startedBy: async (parent: UserRow) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.started_by)
+        .single();
+      return data;
+    },
+    urls: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('deliverable_tracking_urls')
+        .select('*')
+        .eq('tracking_record_id', parent.id)
+        .order('display_order', { ascending: true });
+      return data || [];
+    },
+  },
+
+  DeliverableTrackingUrl: {
+    displayOrder: (parent: { display_order: number }) => parent.display_order,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
   },
 
   DeliverableVersion: {

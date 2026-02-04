@@ -33,6 +33,7 @@ import {
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
 } from './deliverable';
+import { startDeliverableTracking } from './deliverable-tracking';
 import {
   addCreator,
   updateCreator,
@@ -93,6 +94,7 @@ export const mutationResolvers = {
   rejectDeliverable,
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
+  startDeliverableTracking,
   
   // Creators
   addCreator,
