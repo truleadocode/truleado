@@ -5,7 +5,7 @@
  */
 
 import { createUser, ensureClientUser } from './user';
-import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole } from './agency';
+import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole, updateAgencyLocale } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
 import {
@@ -57,6 +57,7 @@ export const mutationResolvers = {
   // Agency & Client
   createAgency,
   joinAgencyByCode,
+  updateAgencyLocale,
   createClient,
   createContact,
   updateContact,

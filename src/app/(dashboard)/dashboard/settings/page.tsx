@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from 'react'
-import { Building2, Users, CreditCard, Bell, Shield, Palette, Copy, Check } from 'lucide-react'
+import { Building2, Users, CreditCard, Bell, Shield, Palette, Copy, Check, Globe } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -55,6 +55,7 @@ export default function SettingsPage() {
 
   const isAgencyAdmin = currentAgency?.role?.toLowerCase() === 'agency_admin'
   const agencyCode = currentAgency?.agencyCode
+
 
   const handleCopyCode = async () => {
     if (!agencyCode) return
@@ -116,6 +117,21 @@ export default function SettingsPage() {
               </Card>
             </Link>
           ))}
+          <Link href="/dashboard/settings/locale">
+            <Card className="h-full hover:shadow-md transition-shadow cursor-pointer">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Globe className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle className="text-base">Locale Settings</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <CardDescription>Currency, timezone, and language defaults</CardDescription>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
     </>

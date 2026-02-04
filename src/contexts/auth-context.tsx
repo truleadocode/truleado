@@ -22,6 +22,9 @@ interface Agency {
   id: string
   name: string
   agencyCode?: string | null
+  currencyCode?: string | null
+  timezone?: string | null
+  languageCode?: string | null
   role: string
 }
 
@@ -85,6 +88,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
                     id
                     name
                     agencyCode
+                    currencyCode
+                    timezone
+                    languageCode
                   }
                   role
                 }
@@ -112,10 +118,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: userData.name,
         })
 
-        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string; agencyCode?: string | null }; role: string }) => ({
+        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string; agencyCode?: string | null; currencyCode?: string | null; timezone?: string | null; languageCode?: string | null }; role: string }) => ({
           id: membership.agency.id,
           name: membership.agency.name,
           agencyCode: membership.agency.agencyCode,
+          currencyCode: membership.agency.currencyCode,
+          timezone: membership.agency.timezone,
+          languageCode: membership.agency.languageCode,
           role: membership.role,
         })) || []
 

@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2026-01-30. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
+**Last updated:** 2026-02-03. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
 
 ---
 
@@ -56,6 +56,7 @@
    - **GraphQL**: Mutations `addCreator`, `updateCreator`, `deactivateCreator`, `activateCreator`, `deleteCreator`, `inviteCreatorToCampaign`, `acceptCampaignInvite`, `declineCampaignInvite`, `removeCreatorFromCampaign`, `updateCampaignCreator`. Queries `creators(agencyId)`, `creator(id)`.  
    - **UI**: `/dashboard/creators` (list), `/dashboard/creators/new` (add), `/dashboard/creators/[id]` (detail), `/dashboard/creators/[id]/edit` (edit). `AssignCreatorDialog` component for campaign assignment. Enhanced creators section on campaign detail page.  
    - **Permissions**: `MANAGE_CREATOR_ROSTER` (Agency Admin, Account Manager), `VIEW_CREATOR_ROSTER` (all agency roles), `INVITE_CREATOR` (Agency Admin, Account Manager, Operator).  
+   - **Profile editing**: Creator edit modal supports Instagram, YouTube, TikTok, Facebook, and LinkedIn handles. “Remove” is deactivation-only; detail page shows disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn.  
    - **Docs**: `product-documentation/GRAPHQL_API_CONTRACT.md` §9.
 
 7. **Social Media Analytics & Token Purchases (implemented)**  
@@ -65,6 +66,7 @@
    - **UI**: Creator detail page includes social analytics tabs (Instagram, YouTube) with charts and post visualization. Billing settings page (`/dashboard/settings/billing`) for token purchases via Razorpay.  
    - **API Routes**: `/api/social-fetch` (background job trigger), `/api/razorpay/create-order`, `/api/razorpay/verify-payment`.  
    - **Components**: `src/components/creators/social-dashboard-tab.tsx`, `instagram-tab.tsx`, `youtube-tab.tsx`, `social-post-chart.tsx`, `social-fetch-button.tsx`.  
+   - **Instagram images**: Some Instagram/Facebook CDN images can be blocked by the browser when embedded cross-origin (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`). The UI uses a same-origin proxy: `GET /api/image-proxy?url=...` (see `src/app/api/image-proxy/route.ts`) and the Instagram tab routes `profilePicUrl` and post `thumbnailUrl` through it.
    - **Libraries**: `apify-client` (Instagram scraping), `razorpay` (payments), `recharts` (visualization).  
    - **Token System**: Separate `premium_token_balance` for social analytics; regular `tokenBalance` for other features. Token purchases processed via Razorpay (basic/premium types).  
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §9-10, `GRAPHQL_API_CONTRACT.md` §4.9, §10.
@@ -178,6 +180,8 @@ These Supabase migrations exist and should be applied in order:
 13. `00014_project_users_rbac.sql` – **project_users** table (project_id, user_id, created_at); RLS for agency-scoped access. Operators assigned to projects see all campaigns under that project. Primary assignment path for operators; campaign_users is for overrides only.
 14. `00015_social_analytics.sql` – **social_data_jobs**, **creator_social_profiles**, **creator_social_posts** tables for background social media data fetching (Instagram via Apify, YouTube via Data API v3). Tracks jobs, stores profiles and posts for analytics visualization.
 15. `00016_token_purchases.sql` – **token_purchases** table for Razorpay payment tracking. Adds `premium_token_balance` column to `agencies` table. Supports basic and premium token purchase types.
+16. `00018_agency_locale.sql` – Adds agency locale defaults: `currency_code`, `timezone`, `language_code`.
+17. `00019_creator_rates.sql` – Adds `creator_rates` table for creator pricing by platform + deliverable type (and optional flat rate retainer).
 
 **Manual actions required in Supabase:**
 
@@ -207,6 +211,20 @@ These Supabase migrations exist and should be applied in order:
 ### 5.2 Client Management
 
 - List & create clients for an agency; assign Account Manager; archive clients (soft-archive). GraphQL + UI wired and working.
+
+### 5.2.2 Agency Locale Settings (Implemented)
+
+- **DB**: `agencies.currency_code`, `agencies.timezone`, `agencies.language_code` (migration `00018_agency_locale.sql`).
+- **GraphQL**: `Agency.currencyCode`, `Agency.timezone`, `Agency.languageCode`; mutation `updateAgencyLocale(agencyId, input)`.
+- **UI**: Settings → **Locale Settings** (`/dashboard/settings/locale`) for currency/timezone/language (agency admin only).
+
+### 5.3 Creator Rates (Implemented)
+
+- **DB**: `creator_rates` table (migration `00019_creator_rates.sql`) for per-platform deliverable pricing.
+- **Flat Rate**: Represented as `platform = 'flat_rate'`, `deliverable_type = 'flat_rate'`.
+- **GraphQL**: `Creator.rates`, `CreatorRate` type, `CreatorRateInput`; `addCreator(..., rates)` and `updateCreator(..., rates)` accept full list replacement.
+- **UI**: Rates section on creator creation and Rates tab inside creator edit modal.
+- **Summary**: Creator profile shows average rate per platform under label **“Average Engagement Rate”**.
 
 ### 5.2.1 Phase 3 — Client & Contacts (Implemented)
 
@@ -431,4 +449,3 @@ This should provide enough context for a new agent to continue seamlessly from w
 ## 9. Resolved / Historical
 
 - **Create Contact “non-empty query” (fixed)**: The Client detail Contacts tab used `queries.createContact` / `updateContact` / `deleteContact` instead of the mutations. GraphQL returned “operations must contain a non-empty query”. Fixed by switching to `mutations.createContact`, `mutations.updateContact`, `mutations.deleteContact` in `src/app/(dashboard)/dashboard/clients/[id]/page.tsx`. Create Client was never broken; the reported issue referred to contact CRUD. 
-

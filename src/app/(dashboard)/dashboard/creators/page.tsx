@@ -27,6 +27,8 @@ interface Creator {
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
+  facebookHandle: string | null
+  linkedinHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string
@@ -72,7 +74,9 @@ export default function CreatorsPage() {
       (creator.email && creator.email.toLowerCase().includes(query)) ||
       (creator.instagramHandle && creator.instagramHandle.toLowerCase().includes(query)) ||
       (creator.youtubeHandle && creator.youtubeHandle.toLowerCase().includes(query)) ||
-      (creator.tiktokHandle && creator.tiktokHandle.toLowerCase().includes(query))
+      (creator.tiktokHandle && creator.tiktokHandle.toLowerCase().includes(query)) ||
+      (creator.facebookHandle && creator.facebookHandle.toLowerCase().includes(query)) ||
+      (creator.linkedinHandle && creator.linkedinHandle.toLowerCase().includes(query))
     )
   })
 
@@ -90,20 +94,6 @@ export default function CreatorsPage() {
       toast({
         title: 'Error',
         description: err instanceof Error ? err.message : 'Failed to update creator',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDelete = async (creator: Creator) => {
-    try {
-      await graphqlRequest(mutations.deleteCreator, { id: creator.id })
-      toast({ title: 'Creator deleted' })
-      fetchCreators()
-    } catch (err) {
-      toast({
-        title: 'Cannot delete creator',
-        description: err instanceof Error ? err.message : 'Failed to delete creator',
         variant: 'destructive',
       })
     }
@@ -256,6 +246,16 @@ export default function CreatorsPage() {
                                 TT: @{creator.tiktokHandle}
                               </span>
                             )}
+                            {creator.facebookHandle && (
+                              <span className="text-xs text-muted-foreground">
+                                FB: {creator.facebookHandle}
+                              </span>
+                            )}
+                            {creator.linkedinHandle && (
+                              <span className="text-xs text-muted-foreground">
+                                IN: {creator.linkedinHandle}
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -285,17 +285,6 @@ export default function CreatorsPage() {
                           }}>
                             {creator.isActive ? 'Deactivate' : 'Activate'}
                           </DropdownMenuItem>
-                          {!creator.isActive && (
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                handleDelete(creator)
-                              }}
-                            >
-                              Delete
-                            </DropdownMenuItem>
-                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>

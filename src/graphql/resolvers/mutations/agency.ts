@@ -144,6 +144,67 @@ export async function joinAgencyByCode(
 }
 
 /**
+ * Update agency locale settings (currency, timezone, language).
+ * Agency Admin only.
+ */
+export async function updateAgencyLocale(
+  _: unknown,
+  {
+    agencyId,
+    input,
+  }: {
+    agencyId: string;
+    input: { currencyCode: string; timezone: string; languageCode: string };
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN]);
+
+  const currencyCode = input.currencyCode?.trim().toUpperCase();
+  const timezone = input.timezone?.trim();
+  const languageCode = input.languageCode?.trim();
+
+  if (!currencyCode || currencyCode.length < 3) {
+    throw validationError('Currency is required', 'currencyCode');
+  }
+  if (!timezone) {
+    throw validationError('Timezone is required', 'timezone');
+  }
+  if (!languageCode) {
+    throw validationError('Language is required', 'languageCode');
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('agencies')
+    .update({
+      currency_code: currencyCode,
+      timezone,
+      language_code: languageCode,
+    })
+    .eq('id', agencyId)
+    .select('*')
+    .single();
+
+  if (error || !updated) {
+    throw new Error('Failed to update agency locale');
+  }
+
+  await logActivity({
+    agencyId,
+    entityType: 'agency',
+    entityId: agencyId,
+    action: 'updated',
+    actorId: user.id,
+    actorType: 'user',
+    beforeState: null,
+    afterState: updated,
+    metadata: { updatedFields: ['currency_code', 'timezone', 'language_code'] },
+  });
+
+  return updated;
+}
+
+/**
  * Create a client under an agency.
  * Account Manager can omit accountManagerId to become owner.
  * Agency Admin may create clients for any Account Manager.

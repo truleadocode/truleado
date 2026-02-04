@@ -86,6 +86,60 @@ External Services
   - Invoices
   - Reports
 
+### External Media Embedding (Instagram CDN)
+
+Instagram/Facebook CDN images may be served with restrictive headers (e.g. `Cross-Origin-Resource-Policy: same-origin`) which can block rendering when embedded directly in the browser from Truleado (e.g. `localhost`).
+
+**Rule**: When rendering external social images in the UI (profile pictures, post thumbnails), the app must use a same-origin proxy endpoint.
+
+- API route: `GET /api/image-proxy?url=<https-url>`
+- Security: allowlist known Instagram/Facebook CDN host patterns; deny non-HTTPS; no cookies; stream bytes back with an `image/*` content-type.
+
+---
+
+## 3.1 Locale Defaults (Agency)
+
+Truleado is a multi-tenant product. Locale defaults are configured **per agency** and used throughout the UI for:
+
+- Currency formatting (creator rates, campaign creator rates, billing)
+- Date/time formatting (timestamps, schedules)
+- Language preferences (future: i18n)
+
+**Data model (agencies):**
+- `currency_code` (ISO 4217, e.g. `USD`)
+- `timezone` (IANA timezone, e.g. `America/New_York`)
+- `language_code` (BCP-47 tag, e.g. `en`, `en-US`)
+
+**GraphQL:**
+- `Agency.currencyCode`, `Agency.timezone`, `Agency.languageCode`
+- Mutation: `updateAgencyLocale(agencyId, input: AgencyLocaleInput!)` (agency admin only)
+
+**UI:**
+- Settings card on `/dashboard/settings` links to `/dashboard/settings/locale`
+- Locale Settings page allows editing currency/timezone/language (agency admin only)
+
+---
+
+## 3.2 Creator Rates (Roster Pricing)
+
+Creators can have agency-defined pricing that is independent of campaign assignments.
+
+**Data model:**
+- Table `creator_rates` stores `(creator_id, platform, deliverable_type, rate_amount, rate_currency)`.
+- Flat retainer is represented as `platform = 'flat_rate'` and `deliverable_type = 'flat_rate'`.
+
+**GraphQL:**
+- `Creator.rates: [CreatorRate!]!`
+- Inputs: `CreatorRateInput`
+- Mutations: `addCreator(..., rates)` and `updateCreator(..., rates)` accept a full list replacement for rates.
+
+**UI:**
+- Create Creator page includes a Rates section
+- Edit Creator modal includes a Rates tab
+- The UI prevents duplicate platform+deliverable types within the rate list
+- Creator profile summary shows average rate per platform under the label **“Average Engagement Rate”**
+
+
 ---
 
 ## 4. Authentication & Identity Model

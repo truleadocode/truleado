@@ -125,6 +125,9 @@ export const typeDefs = gql`
     status: String!
     tokenBalance: Int!
     premiumTokenBalance: Int!
+    currencyCode: String!
+    timezone: String!
+    languageCode: String!
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -295,9 +298,22 @@ export const typeDefs = gql`
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
     isActive: Boolean!
+    rates: [CreatorRate!]!
     campaignAssignments: [CampaignCreator!]!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  type CreatorRate {
+    id: ID!
+    platform: String!
+    deliverableType: String!
+    rateAmount: Money!
+    rateCurrency: String!
     createdAt: DateTime!
     updatedAt: DateTime!
   }
@@ -507,6 +523,19 @@ export const typeDefs = gql`
     fromName: String
   }
 
+  input AgencyLocaleInput {
+    currencyCode: String!
+    timezone: String!
+    languageCode: String!
+  }
+
+  input CreatorRateInput {
+    platform: String!
+    deliverableType: String!
+    rateAmount: Money!
+    rateCurrency: String
+  }
+
   # =============================================================================
   # QUERY ROOT
   # =============================================================================
@@ -639,6 +668,9 @@ export const typeDefs = gql`
     deleteContact(id: ID!): Boolean!
     # Save agency email (SMTP) config; agency_admin only. Creates/updates Novu integration.
     saveAgencyEmailConfig(agencyId: ID!, input: AgencyEmailConfigInput!): AgencyEmailConfig!
+
+    # Update agency locale settings; agency_admin only.
+    updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
     
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
@@ -759,7 +791,10 @@ export const typeDefs = gql`
       instagramHandle: String
       youtubeHandle: String
       tiktokHandle: String
+      facebookHandle: String
+      linkedinHandle: String
       notes: String
+      rates: [CreatorRateInput!]
     ): Creator!
     
     # Invite a creator to a campaign
@@ -789,7 +824,10 @@ export const typeDefs = gql`
       instagramHandle: String
       youtubeHandle: String
       tiktokHandle: String
+      facebookHandle: String
+      linkedinHandle: String
       notes: String
+      rates: [CreatorRateInput!]
     ): Creator!
 
     # Deactivate a creator (soft delete - keeps history)

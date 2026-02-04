@@ -283,6 +283,9 @@ export const queries = {
     query GetAgencyUsers($agencyId: ID!) {
       agency(id: $agencyId) {
         id
+        currencyCode
+        timezone
+        languageCode
         users {
           id
           role
@@ -293,6 +296,18 @@ export const queries = {
             email
           }
         }
+      }
+    }
+  `,
+
+  agencyLocale: `
+    query GetAgencyLocale($agencyId: ID!) {
+      agency(id: $agencyId) {
+        id
+        name
+        currencyCode
+        timezone
+        languageCode
       }
     }
   `,
@@ -477,6 +492,8 @@ export const queries = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         createdAt
@@ -494,10 +511,21 @@ export const queries = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         createdAt
         updatedAt
+        rates {
+          id
+          platform
+          deliverableType
+          rateAmount
+          rateCurrency
+          createdAt
+          updatedAt
+        }
         campaignAssignments {
           id
           status
@@ -1060,10 +1088,22 @@ export const mutations = {
     }
   `,
 
+  updateAgencyLocale: `
+    mutation UpdateAgencyLocale($agencyId: ID!, $input: AgencyLocaleInput!) {
+      updateAgencyLocale(agencyId: $agencyId, input: $input) {
+        id
+        name
+        currencyCode
+        timezone
+        languageCode
+      }
+    }
+  `,
+
   // Creator mutations
   addCreator: `
-    mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
-      addCreator(agencyId: $agencyId, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+    mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $facebookHandle: String, $linkedinHandle: String, $notes: String, $rates: [CreatorRateInput!]) {
+      addCreator(agencyId: $agencyId, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, facebookHandle: $facebookHandle, linkedinHandle: $linkedinHandle, notes: $notes, rates: $rates) {
         id
         displayName
         email
@@ -1074,8 +1114,8 @@ export const mutations = {
   `,
 
   updateCreator: `
-    mutation UpdateCreator($id: ID!, $displayName: String, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $notes: String) {
-      updateCreator(id: $id, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, notes: $notes) {
+    mutation UpdateCreator($id: ID!, $displayName: String, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $facebookHandle: String, $linkedinHandle: String, $notes: String, $rates: [CreatorRateInput!]) {
+      updateCreator(id: $id, displayName: $displayName, email: $email, phone: $phone, instagramHandle: $instagramHandle, youtubeHandle: $youtubeHandle, tiktokHandle: $tiktokHandle, facebookHandle: $facebookHandle, linkedinHandle: $linkedinHandle, notes: $notes, rates: $rates) {
         id
         displayName
         email
@@ -1083,6 +1123,8 @@ export const mutations = {
         instagramHandle
         youtubeHandle
         tiktokHandle
+        facebookHandle
+        linkedinHandle
         notes
         isActive
         updatedAt

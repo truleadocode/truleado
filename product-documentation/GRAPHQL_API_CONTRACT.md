@@ -134,6 +134,9 @@ type Agency {
   billingEmail: String
   tokenBalance: Int!
   premiumTokenBalance: Int!
+  currencyCode: String!    # ISO 4217 (e.g. USD)
+  timezone: String!        # IANA timezone (e.g. America/New_York)
+  languageCode: String!    # BCP-47 (e.g. en, en-US)
   clients: [Client!]!
   users: [AgencyMembership!]!
   createdAt: DateTime!
@@ -142,6 +145,23 @@ type Agency {
 
 > **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.  
 > **premiumTokenBalance**: Separate token balance for premium features (social analytics, enriched profiles). Added in migration 00016.
+> **currencyCode/timezone/languageCode**: Agency locale defaults used for formatting money and dates/times across the UI.
+
+---
+
+### 4.2.1 Creator Rates
+
+```graphql
+type CreatorRate {
+  id: ID!
+  platform: String!
+  deliverableType: String!
+  rateAmount: Money!
+  rateCurrency: String!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+```
 
 ---
 
@@ -351,11 +371,17 @@ type Creator {
   agency: Agency!
   displayName: String!
   email: String
+  phone: String
   instagramHandle: String
   youtubeHandle: String
   tiktokHandle: String
+  facebookHandle: String
+  linkedinHandle: String
+  notes: String
   isActive: Boolean!
+  rates: [CreatorRate!]!
   createdAt: DateTime!
+  updatedAt: DateTime!
 }
 ```
 
@@ -552,6 +578,19 @@ input AgencyEmailConfigInput {
   fromEmail: String!
   fromName: String
 }
+
+input AgencyLocaleInput {
+  currencyCode: String!
+  timezone: String!
+  languageCode: String!
+}
+
+input CreatorRateInput {
+  platform: String!
+  deliverableType: String!
+  rateAmount: Money!
+  rateCurrency: String
+}
 ```
 
 ---
@@ -637,6 +676,8 @@ type Mutation {
   createAgency(name: String!, billingEmail: String): Agency!
   
   joinAgencyByCode(agencyCode: String!): Agency!
+
+  updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
   
   createClient(
     agencyId: ID!
@@ -677,6 +718,7 @@ type Mutation {
 ```
 
 - **joinAgencyByCode**: User must be authenticated and must not already belong to an agency (one agency per user for now). Looks up agency by `agencyCode`, inserts `agency_users` (role `operator`), returns the agency.
+- **updateAgencyLocale**: Agency Admin only. Updates `currencyCode`, `timezone`, and `languageCode` on the agency for consistent formatting and scheduling defaults.
 
 ---
 
@@ -814,7 +856,10 @@ type Mutation {
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
+    rates: [CreatorRateInput!]
   ): Creator!
   
   # Update a creator in the agency roster
@@ -826,7 +871,10 @@ type Mutation {
     instagramHandle: String
     youtubeHandle: String
     tiktokHandle: String
+    facebookHandle: String
+    linkedinHandle: String
     notes: String
+    rates: [CreatorRateInput!]
   ): Creator!
   
   # Deactivate a creator (soft delete - keeps history)

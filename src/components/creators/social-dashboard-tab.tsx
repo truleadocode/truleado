@@ -2,18 +2,10 @@
 
 import {
   Users,
-  TrendingUp,
-  BarChart3,
   Instagram,
   Youtube,
   Globe,
   ImageIcon,
-  Film,
-  UserCircle,
-  Mail,
-  Phone,
-  ExternalLink,
-  StickyNote,
   Megaphone,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -49,6 +41,16 @@ interface CampaignAssignment {
   createdAt: string
 }
 
+interface CreatorRate {
+  id: string
+  platform: string
+  deliverableType: string
+  rateAmount: number
+  rateCurrency: string
+  createdAt: string
+  updatedAt: string
+}
+
 interface Creator {
   id: string
   displayName: string
@@ -57,10 +59,13 @@ interface Creator {
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
+  facebookHandle: string | null
+  linkedinHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string
   campaignAssignments: CampaignAssignment[]
+  rates: CreatorRate[]
 }
 
 interface SocialDashboardTabProps {
@@ -115,20 +120,13 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
     (igProfile?.followersCount || 0) + (ytProfile?.subscribersCount || 0)
   const totalPosts =
     (igProfile?.postsCount || 0) + (ytProfile?.postsCount || 0)
-  const avgEngagement = (() => {
-    const rates = profiles
-      .map((p) => p.engagementRate)
-      .filter((r): r is number => r != null)
-    if (rates.length === 0) return null
-    return rates.reduce((a, b) => a + b, 0) / rates.length
-  })()
   const platformsConnected = profiles.length
 
   return (
     <div className="space-y-6">
       {/* Aggregated summary cards */}
       {profiles.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-3">
@@ -152,22 +150,6 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
                 <div>
                   <p className="text-2xl font-bold">{formatNumber(totalPosts)}</p>
                   <p className="text-xs text-muted-foreground">Total Posts / Videos</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-lg bg-green-500/10 flex items-center justify-center">
-                  <TrendingUp className="h-5 w-5 text-green-500" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">
-                    {avgEngagement != null ? `${avgEngagement.toFixed(2)}%` : '—'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Avg Engagement</p>
                 </div>
               </div>
             </CardContent>
@@ -259,74 +241,6 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
           )}
         </div>
       )}
-
-      {/* Creator Info Card (moved from original page) */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div className="h-20 w-20 rounded-xl bg-purple-500/10 flex items-center justify-center shrink-0">
-              <UserCircle className="h-10 w-10 text-purple-500" />
-            </div>
-            <div className="flex-1 space-y-4">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-semibold">{creator.displayName}</h2>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${creator.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                    {creator.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Added {formatDate(creator.createdAt)}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {creator.email && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <a href={`mailto:${creator.email}`} className="text-primary hover:underline">
-                      {creator.email}
-                    </a>
-                  </div>
-                )}
-                {creator.phone && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <span>{creator.phone}</span>
-                  </div>
-                )}
-                {creator.instagramHandle && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Instagram className="h-4 w-4 text-muted-foreground" />
-                    <a href={`https://instagram.com/${creator.instagramHandle}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
-                      @{creator.instagramHandle}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
-                {creator.youtubeHandle && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <Youtube className="h-4 w-4 text-muted-foreground" />
-                    <a href={`https://youtube.com/@${creator.youtubeHandle}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
-                      {creator.youtubeHandle}
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </div>
-                )}
-              </div>
-
-              {creator.notes && (
-                <div className="pt-3 border-t">
-                  <div className="flex items-start gap-2 text-sm">
-                    <StickyNote className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <p className="text-muted-foreground whitespace-pre-wrap">{creator.notes}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Campaign Assignments */}
       <div>

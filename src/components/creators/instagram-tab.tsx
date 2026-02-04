@@ -14,6 +14,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { SocialPostChart } from './social-post-chart'
 import { SocialFetchButton } from './social-fetch-button'
 
+function proxiedImageSrc(url: string) {
+  return `/api/image-proxy?url=${encodeURIComponent(url)}`
+}
+
 interface SocialProfile {
   id: string
   platform: string
@@ -164,7 +168,7 @@ export function InstagramTab({
           <div className="flex flex-col sm:flex-row gap-6">
             {profile.profilePicUrl ? (
               <img
-                src={profile.profilePicUrl}
+                src={proxiedImageSrc(profile.profilePicUrl)}
                 alt={profile.platformUsername || 'Profile'}
                 className="h-20 w-20 rounded-full object-cover shrink-0"
               />
@@ -286,7 +290,7 @@ export function InstagramTab({
                   {post.thumbnailUrl ? (
                     <div className="aspect-square bg-muted relative">
                       <img
-                        src={post.thumbnailUrl}
+                        src={proxiedImageSrc(post.thumbnailUrl)}
                         alt={post.caption?.slice(0, 40) || 'Post'}
                         className="w-full h-full object-cover"
                       />
