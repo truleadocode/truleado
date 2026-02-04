@@ -30,6 +30,7 @@ interface UserRow {
   campaign_creator_id?: string;
   deliverable_version_id?: string;
   actor_id?: string;
+  started_by?: string;
 }
 
 export const typeResolvers = {
