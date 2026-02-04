@@ -49,22 +49,32 @@
 
 3. **Client login portal (magic link)**  
    - **Routes**: `/client` (dashboard placeholder), `/client/login`, `/client/verify`. Layout: `src/app/client/layout.tsx`.  
-   - **Auth**: Firebase **Email Link** (passwordless). User enters email on `/client/login`; we validate via `POST /api/client-auth/request-magic-link` (contact `is_client_approver` by email), then `sendSignInLinkToEmail`. Email stored in `localStorage`; user opens link → `/client/verify` → `signInWithEmailLink` → `ensureClientUser` → redirect `/client`.  
+   - **Auth**: Firebase **Email Link** (passwordless). User enters email on `/client/login`; we validate via `POST /api/client-auth/request-magic-link` (contact `is_client_approver` by email). Server generates Firebase email-link (Admin SDK) and sends via **Novu** (`src/lib/novu/server.ts`, `sendClientMagicLinkEmail`). Email stored in `localStorage`; user opens link → `/client/verify` → `signInWithEmailLink` → `ensureClientUser` → redirect `/client`.  
    - **Backend**: `ensureClientUser` mutation creates `users` + `auth_identities` (provider `firebase_email_link`), links `contacts.user_id`; idempotent. `User.contact` added; `me` fetches `contact { id }` for redirect logic.  
    - **Auth context**: `contact` in state; redirect rules: if `agencies.length === 0` and `contact` exists → `/client` (login, root, onboarding, `ProtectedRoute`).  
    - **Dev-only**: `POST /api/client-auth/dev-magic-link` (localhost) returns the sign-in link so it can be displayed/copied when SMTP is not configured.  
+   - **Delivery mode**: `NEXT_PUBLIC_CLIENT_MAGIC_LINK_MODE` env var: `novu` (always send via Novu), `dev` (always return link), `auto` (default: dev on localhost/127.0.0.1; Novu elsewhere). `NOVU_CLIENT_MAGIC_LINK_WORKFLOW_ID` for Novu workflow identifier.  
    - **“Email already in use”**: If the email has an existing Firebase account (e.g. agency email/password), verify page shows “Use agency sign-in” and links to `/login`.
 
 4. **Deliverables** — Delete version, caption audit, preview, approval workflow; notifications now trigger from deliverable mutations.
 
-5. **Project-level RBAC for operators (implemented)**  
+5. **Deliverable Tracking (implemented)**
+   - **Purpose**: Track published URLs for approved deliverables. Once a deliverable reaches `APPROVED` status, users can start tracking by saving 1–10 immutable URLs.
+   - **DB**: Migration `00021_deliverable_tracking.sql` — `deliverable_tracking_records` (one per deliverable; stores campaign/project/client context, deliverable name, started_by) and `deliverable_tracking_urls` (ordered list of URLs with display_order). Both tables are immutable (insert-only).
+   - **GraphQL**: Mutation `startDeliverableTracking(deliverableId, urls)` validates deliverable is APPROVED, creates tracking record and URLs. Type `DeliverableTrackingRecord` with nested `urls: [DeliverableTrackingUrl!]!`. `Deliverable.trackingRecord` field.
+   - **UI**: "Start Tracking" button on deliverable detail page (`/dashboard/deliverables/[id]`) and inline on approved deliverable cards in campaign detail page (`/dashboard/campaigns/[id]`). Tracked deliverables display a "Tracking" status badge (display-only; underlying status remains APPROVED).
+   - **Permissions**: Requires `VIEW_DELIVERABLE` permission. Roles: Agency Admin, Account Manager, Operator, Internal Approver.
+   - **Resolver**: `src/graphql/resolvers/mutations/deliverable-tracking.ts` (`startDeliverableTracking`).
+   - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §5.4-5.5, `GRAPHQL_API_CONTRACT.md` §4.6, `MASTER_PRD.md` §3.3, `TECHNICAL_LLD.md` §10.3.
+
+6. **Project-level RBAC for operators (implemented)**  
    - **DB**: Migration `00014_project_users_rbac.sql` — `project_users` table (project_id, user_id, created_at); RLS policies for agency-scoped access. Operators assigned to projects see **all campaigns under that project**. This is the **primary assignment path** for operators; campaign_users is for overrides only (approvers, viewers, exceptions).  
    - **GraphQL**: `Project.projectUsers` field; mutations `addProjectUser(projectId, userId)` and `removeProjectUser(projectUserId)`. Permissions: Agency Admin or Account Manager for the project's client. User must be an active agency member.  
    - **RBAC**: Updated authorization logic in `src/lib/rbac/authorize.ts` to check project-level assignment. Resolution order: Campaign Assignment (override) → Project Assignment (primary for operators) → Client Ownership → Agency Role → DENY.  
    - **UI**: Team settings page at `/dashboard/settings/team` shows agency users and roles. Project detail page allows assigning operators to projects (Agency Admin or Account Manager only).  
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §3.1, `GRAPHQL_API_CONTRACT.md` §4.4, `TECHNICAL_LLD.md` §6.2, `MASTER_PRD.md` §4.3.
 
-6. **Creator Module (implemented)**
+7. **Creator Module (implemented)**
    - **Creator Roster Management**: Full CRUD for creators (add, edit, deactivate, activate, delete). Creator list page with search, filter by platform, and creator cards. Creator detail page shows campaigns, analytics, and payments. **Creator summary card** displayed above tabs (profile pic from Instagram > YouTube > initials, display name, platforms, status).
    - **Campaign Creator Assignment**: Assign creators to campaigns with rate and notes. Update campaign creator details. Status management (invited/accepted/declined/removed).  
    - **GraphQL**: Mutations `addCreator`, `updateCreator`, `deactivateCreator`, `activateCreator`, `deleteCreator`, `inviteCreatorToCampaign`, `acceptCampaignInvite`, `declineCampaignInvite`, `removeCreatorFromCampaign`, `updateCampaignCreator`. Queries `creators(agencyId)`, `creator(id)`.  
@@ -73,7 +83,7 @@
    - **Profile editing**: Creator edit modal supports Instagram, YouTube, TikTok, Facebook, and LinkedIn handles. “Remove” is deactivation-only; detail page shows disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn.  
    - **Docs**: `product-documentation/GRAPHQL_API_CONTRACT.md` §9.
 
-7. **Social Media Analytics & Token Purchases (implemented)**  
+8. **Social Media Analytics & Token Purchases (implemented)**  
    - **Social Analytics Integration**: Background job system for fetching Instagram (via Apify) and YouTube (via Data API v3) analytics. Stores creator social profiles and individual posts for visualization.  
    - **DB**: Migrations `00015_social_analytics.sql` (social_data_jobs, creator_social_profiles, creator_social_posts) and `00016_token_purchases.sql` (token_purchases, agencies.premium_token_balance).  
    - **GraphQL**: Mutation `triggerSocialFetch(creatorId, platform, jobType)` creates background job. Queries `creatorSocialProfile`, `creatorSocialProfiles`, `creatorSocialPosts`, `socialDataJob`, `socialDataJobs`, `tokenPurchases`. Types `SocialDataJob`, `CreatorSocialProfile`, `CreatorSocialPost`, `TokenPurchase`.  
@@ -86,10 +96,11 @@
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §9-10, `GRAPHQL_API_CONTRACT.md` §4.9, §10.
 
 **If you are a new agent:**  
-- Skim **§1–§6** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
+- Skim **§1–§8** and the docs in **§8**. Use **§8** to locate schema, resolvers, and UI files.  
 - Notifications: `src/lib/novu/*`, `src/graphql/resolvers/mutations/agency-email-config.ts`, deliverable.ts (trigger calls), `src/app/(dashboard)/dashboard/settings/notifications/page.tsx`, header Inbox.  
 - Client portal: `src/app/client/*`, `src/app/api/client-auth/*`, `ensureClientUser`, `User.contact`.  
 - Creators: `src/app/(dashboard)/dashboard/creators/**`, `src/graphql/resolvers/mutations/creator.ts`, `src/components/creators/*`.
+- Deliverable tracking: `src/graphql/resolvers/mutations/deliverable-tracking.ts`, `src/app/(dashboard)/dashboard/deliverables/[id]/page.tsx`, `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx`.
 
 ---
 

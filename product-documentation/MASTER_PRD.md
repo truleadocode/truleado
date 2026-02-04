@@ -226,6 +226,8 @@ Draft → Active → Content In Review → Approved → Completed → Archived
   - Hashtags in captions are **highlighted** as badges in the UI.
   - Rejections and re-uploads create new versions, preserving history.
 - Final approved deliverables are immutable (no new versions allowed after approval).
+- Once a deliverable is fully approved, users can **start tracking** by saving published URL(s) (1–10). URLs are **immutable** after saving.
+- Tracked deliverables display a **Tracking** status badge, and tracking can be started from either the deliverable page or the campaign deliverables list.
 
 ---
 

@@ -327,7 +327,52 @@ CREATE TABLE approvals (
 
 ---
 
-### 5.4 campaign_attachments
+### 5.4 deliverable_tracking_records
+
+```sql
+CREATE TABLE deliverable_tracking_records (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deliverable_id UUID NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  deliverable_name TEXT NOT NULL,
+  started_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (deliverable_id)
+);
+
+CREATE UNIQUE INDEX idx_deliverable_tracking_records_deliverable_id
+  ON deliverable_tracking_records(deliverable_id);
+CREATE INDEX idx_deliverable_tracking_records_campaign_id
+  ON deliverable_tracking_records(campaign_id);
+```
+
+> **Rule**: Immutable. No UPDATE or DELETE; insert only once per deliverable.
+
+---
+
+### 5.5 deliverable_tracking_urls
+
+```sql
+CREATE TABLE deliverable_tracking_urls (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tracking_record_id UUID NOT NULL REFERENCES deliverable_tracking_records(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  display_order INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (tracking_record_id, display_order)
+);
+
+CREATE INDEX idx_deliverable_tracking_urls_tracking_record_id
+  ON deliverable_tracking_urls(tracking_record_id);
+```
+
+> **Rule**: Immutable. No UPDATE or DELETE; insert only.
+
+---
+
+### 5.6 campaign_attachments
 
 ```sql
 CREATE TABLE campaign_attachments (

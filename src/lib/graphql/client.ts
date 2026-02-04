@@ -427,6 +427,21 @@ export const queries = {
             email
           }
         }
+        trackingRecord {
+          id
+          deliverableName
+          createdAt
+          startedBy {
+            id
+            name
+          }
+          urls {
+            id
+            url
+            displayOrder
+            createdAt
+          }
+        }
       }
     }
   `,
@@ -583,6 +598,10 @@ export const queries = {
           id
           title
           status
+          trackingRecord {
+            id
+            createdAt
+          }
           deliverableType
           dueDate
           versions {
@@ -1084,6 +1103,24 @@ export const mutations = {
   deleteDeliverableVersion: `
     mutation DeleteDeliverableVersion($deliverableVersionId: ID!) {
       deleteDeliverableVersion(deliverableVersionId: $deliverableVersionId)
+    }
+  `,
+
+  startDeliverableTracking: `
+    mutation StartDeliverableTracking($deliverableId: ID!, $urls: [String!]!) {
+      startDeliverableTracking(deliverableId: $deliverableId, urls: $urls) {
+        id
+        urls {
+          id
+          url
+          displayOrder
+        }
+        startedBy {
+          id
+          name
+        }
+        createdAt
+      }
     }
   `,
 

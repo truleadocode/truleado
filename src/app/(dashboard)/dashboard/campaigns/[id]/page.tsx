@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   ArrowLeft,
+  Activity,
   Megaphone,
   Building2,
   Briefcase,
@@ -76,6 +77,10 @@ interface Deliverable {
   id: string
   title: string
   status: string
+  trackingRecord?: {
+    id: string
+    createdAt: string
+  } | null
   deliverableType: string
   dueDate: string | null
   versions: DeliverableVersion[]
@@ -197,6 +202,13 @@ export default function CampaignDetailPage() {
   const [loadingAgencyUsers, setLoadingAgencyUsers] = useState(false)
   const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
   const [savingApprovers, setSavingApprovers] = useState(false)
+  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false)
+  const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false)
+  const [trackingUrls, setTrackingUrls] = useState<string[]>([''])
+  const [urlErrors, setUrlErrors] = useState<string[]>([])
+  const [validatedUrls, setValidatedUrls] = useState<string[]>([])
+  const [savingTracking, setSavingTracking] = useState(false)
+  const [trackingDeliverable, setTrackingDeliverable] = useState<Deliverable | null>(null)
 
   // Assign creator dialog
   const [assignCreatorOpen, setAssignCreatorOpen] = useState(false)
@@ -518,12 +530,111 @@ export default function CampaignDetailPage() {
       SUBMITTED: 'bg-blue-100 text-blue-700',
       INTERNAL_REVIEW: 'bg-yellow-100 text-yellow-700',
       CLIENT_REVIEW: 'bg-orange-100 text-orange-700',
+      TRACKING: 'bg-indigo-100 text-indigo-700',
       REJECTED: 'bg-red-100 text-red-700',
     }
     return colors[status.toUpperCase()] || 'bg-gray-100 text-gray-700'
   }
 
+  const getDeliverableDisplayStatus = (deliverable: Deliverable) =>
+    deliverable.trackingRecord ? 'TRACKING' : deliverable.status
+
   const isArchived = campaign?.status.toLowerCase() === 'archived'
+
+  const addUrlField = () => {
+    if (trackingUrls.length >= 10) return
+    setTrackingUrls((prev) => [...prev, ''])
+    setUrlErrors((prev) => [...prev, ''])
+  }
+
+  const removeUrlField = (index: number) => {
+    setTrackingUrls((prev) => prev.filter((_, i) => i !== index))
+    setUrlErrors((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const updateUrl = (index: number, value: string) => {
+    setTrackingUrls((prev) => {
+      const next = [...prev]
+      next[index] = value
+      return next
+    })
+    setUrlErrors((prev) => {
+      const next = [...prev]
+      next[index] = ''
+      return next
+    })
+  }
+
+  const validateUrl = (url: string): string | null => {
+    if (!url.trim()) return 'URL is required'
+    try {
+      const urlObj = new URL(url)
+      if (!urlObj.protocol.startsWith('http')) {
+        return 'URL must start with http:// or https://'
+      }
+      return null
+    } catch {
+      return 'Invalid URL format'
+    }
+  }
+
+  const openTrackingForDeliverable = (deliverable: Deliverable) => {
+    setTrackingDeliverable(deliverable)
+    setTrackingUrls([''])
+    setUrlErrors([])
+    setValidatedUrls([])
+    setTrackingDialogOpen(true)
+  }
+
+  const handleValidateUrls = () => {
+    const trimmedUrls = trackingUrls.map((url) => url.trim())
+    const errors = trimmedUrls.map((url, index) => {
+      if (!url) {
+        return index === 0 ? 'URL is required' : ''
+      }
+      return validateUrl(url) ?? ''
+    })
+    const hasErrors = errors.some((errorMessage) => errorMessage)
+    if (hasErrors) {
+      setUrlErrors(errors)
+      return
+    }
+    const nonEmptyUrls = trimmedUrls.filter((url, index) => index === 0 || url.length > 0)
+    if (nonEmptyUrls.length === 0) {
+      setUrlErrors(['URL is required'])
+      return
+    }
+    setValidatedUrls(nonEmptyUrls)
+    setUrlErrors([])
+    setTrackingDialogOpen(false)
+    setConfirmationDialogOpen(true)
+  }
+
+  const handleStartTracking = async () => {
+    if (!trackingDeliverable || validatedUrls.length === 0) return
+    setSavingTracking(true)
+    try {
+      await graphqlRequest(mutations.startDeliverableTracking, {
+        deliverableId: trackingDeliverable.id,
+        urls: validatedUrls,
+      })
+      toast({ title: 'Tracking started' })
+      setConfirmationDialogOpen(false)
+      setTrackingUrls([''])
+      setValidatedUrls([])
+      setUrlErrors([])
+      setTrackingDeliverable(null)
+      await fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Failed to start tracking',
+        description: err instanceof Error ? err.message : 'Unable to start tracking',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingTracking(false)
+    }
+  }
 
   // Assign Creator handlers
   const openAssignCreator = async () => {
@@ -1004,7 +1115,7 @@ export default function CampaignDetailPage() {
                   <Link key={deliverable.id} href={`/dashboard/deliverables/${deliverable.id}`}>
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                       <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <FileCheck className="h-5 w-5 text-muted-foreground" />
                             <div>
@@ -1014,9 +1125,31 @@ export default function CampaignDetailPage() {
                               </p>
                             </div>
                           </div>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(deliverable.status)}`}>
-                            {getDeliverableStatusLabel(deliverable.status)}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            {deliverable.status === 'APPROVED' && !deliverable.trackingRecord && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  openTrackingForDeliverable(deliverable)
+                                }}
+                              >
+                                <Activity className="mr-2 h-4 w-4" />
+                                Start Tracking
+                              </Button>
+                            )}
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                getDeliverableDisplayStatus(deliverable)
+                              )}`}
+                            >
+                              {getDeliverableDisplayStatus(deliverable) === 'TRACKING'
+                                ? 'Tracking'
+                                : getDeliverableStatusLabel(deliverable.status)}
+                            </span>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1335,6 +1468,137 @@ export default function CampaignDetailPage() {
             </Button>
             <Button onClick={handleSaveDates} disabled={saving}>
               {saving ? 'Saving...' : 'Save Dates'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Start Tracking Dialog */}
+      <Dialog
+        open={trackingDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !confirmationDialogOpen) {
+            setTrackingUrls([''])
+            setUrlErrors([])
+            setValidatedUrls([])
+            setTrackingDeliverable(null)
+          }
+          setTrackingDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Start Tracking Deliverable</DialogTitle>
+            <DialogDescription>
+              {trackingDeliverable
+                ? `Add the published URL(s) for "${trackingDeliverable.title}". URLs cannot be changed after saving.`
+                : 'Add the published URL(s). URLs cannot be changed after saving.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            {trackingUrls.map((url, index) => (
+              <div key={`tracking-url-${index}`} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={`tracking-url-${index}`}>
+                    URL {index + 1} {index === 0 && <span className="text-destructive">*</span>}
+                  </Label>
+                  {index > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeUrlField(index)}
+                      aria-label={`Remove URL ${index + 1}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <Input
+                  id={`tracking-url-${index}`}
+                  value={url}
+                  onChange={(e) => updateUrl(index, e.target.value)}
+                  placeholder="https://example.com/post"
+                  error={Boolean(urlErrors[index])}
+                />
+                {urlErrors[index] && (
+                  <p className="text-sm text-destructive">{urlErrors[index]}</p>
+                )}
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              onClick={addUrlField}
+              disabled={trackingUrls.length >= 10}
+              className="w-full"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Another URL
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTrackingDialogOpen(false)
+                setTrackingUrls([''])
+                setUrlErrors([])
+                setValidatedUrls([])
+                setTrackingDeliverable(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleValidateUrls}>Continue</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Tracking Dialog */}
+      <Dialog
+        open={confirmationDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && savingTracking) return
+          setConfirmationDialogOpen(open)
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Confirm Tracking URLs</DialogTitle>
+            <DialogDescription>
+              Review the URLs below. They cannot be changed after saving.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+              <AlertCircle className="h-5 w-5 mt-0.5" />
+              <p className="text-sm">
+                URLs are immutable once tracking starts. Please double-check for accuracy.
+              </p>
+            </div>
+            <Card className="border-amber-200 bg-amber-50/60">
+              <CardContent className="p-4 space-y-2">
+                {validatedUrls.map((url, index) => (
+                  <div key={`confirmed-url-${index}`} className="flex items-start gap-2 text-sm">
+                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
+                    <span className="break-all">{url}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmationDialogOpen(false)
+                setTrackingDialogOpen(true)
+              }}
+              disabled={savingTracking}
+            >
+              Go Back
+            </Button>
+            <Button onClick={handleStartTracking} disabled={savingTracking}>
+              {savingTracking ? 'Starting...' : 'Confirm & Start Tracking'}
             </Button>
           </DialogFooter>
         </DialogContent>
