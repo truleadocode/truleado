@@ -195,7 +195,10 @@ type Contact {
   firstName: String!
   lastName: String!
   email: String
+  phone: String
   mobile: String
+  officePhone: String
+  homePhone: String
   address: String
   department: String
   notes: String
@@ -693,11 +696,15 @@ type Mutation {
     firstName: String!
     lastName: String!
     email: String
+    phone: String
     mobile: String
+    officePhone: String
+    homePhone: String
     address: String
     department: String
     notes: String
     isClientApprover: Boolean
+    userId: ID
   ): Contact!
   
   updateContact(
@@ -705,7 +712,10 @@ type Mutation {
     firstName: String
     lastName: String
     email: String
+    phone: String
     mobile: String
+    officePhone: String
+    homePhone: String
     address: String
     department: String
     notes: String

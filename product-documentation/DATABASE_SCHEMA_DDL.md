@@ -142,7 +142,10 @@ CREATE TABLE contacts (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   email TEXT,
+  phone TEXT,
   mobile TEXT,
+  office_phone TEXT,
+  home_phone TEXT,
   address TEXT,
   department TEXT,
   notes TEXT,
@@ -154,7 +157,7 @@ CREATE TABLE contacts (
 );
 ```
 
-> **Phase 3**: People at a client (CRM). `is_client_approver`: can approve deliverables at client stage. `user_id`: link to Truleado user when they have an account. Client-level approval uses contacts with `is_client_approver` (and optionally `user_id`). Migration: `00012_phase3_contacts.sql`.
+> **Phase 3**: People at a client (CRM). `is_client_approver`: can approve deliverables at client stage. `user_id`: link to Truleado user when they have an account. Client-level approval uses contacts with `is_client_approver` (and optionally `user_id`). Migrations: `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql` (adds phone fields; resets legacy `mobile` values).
 
 ---
 

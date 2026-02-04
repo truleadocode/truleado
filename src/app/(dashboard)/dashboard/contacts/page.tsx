@@ -2,25 +2,42 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Users, Search, Building2, CheckCircle, Circle } from 'lucide-react'
+import { Users, Search, Building2, CheckCircle, Circle, Eye, Pencil, Trash2, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { graphqlRequest, mutations, queries } from '@/lib/graphql/client'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { useToast } from '@/hooks/use-toast'
+import { ContactFormDialog, type ContactFormData } from '@/components/contacts/contact-form-dialog'
 
 interface ContactRow {
   id: string
   firstName: string
   lastName: string
   email: string | null
+  phone: string | null
   mobile: string | null
+  officePhone: string | null
+  homePhone: string | null
+  address: string | null
   department: string | null
+  notes: string | null
   isClientApprover: boolean
   client: { id: string; name: string }
   createdAt: string
+  updatedAt: string
 }
 
 interface Client {
@@ -30,6 +47,7 @@ interface Client {
 
 export default function ContactsPage() {
   const { currentAgency } = useAuth()
+  const { toast } = useToast()
   const [contacts, setContacts] = useState<ContactRow[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +56,55 @@ export default function ContactsPage() {
   const [filterClientId, setFilterClientId] = useState<string>('')
   const [filterDepartment, setFilterDepartment] = useState('')
   const [filterApprover, setFilterApprover] = useState<boolean | null>(null)
+  const [viewContact, setViewContact] = useState<ContactRow | null>(null)
+  const [editingContact, setEditingContact] = useState<ContactRow | null>(null)
+  const [deleteContact, setDeleteContact] = useState<ContactRow | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [editForm, setEditForm] = useState<ContactFormData>({
+    clientId: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    mobile: '',
+    officePhone: '',
+    homePhone: '',
+    address: '',
+    department: '',
+    notes: '',
+    isClientApprover: false,
+  })
+  const [createForm, setCreateForm] = useState<ContactFormData>({
+    clientId: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    mobile: '',
+    officePhone: '',
+    homePhone: '',
+    address: '',
+    department: '',
+    notes: '',
+    isClientApprover: false,
+  })
+  const filterFields = [
+    'name',
+    'email',
+    'mobile',
+    'department',
+    'client',
+  ] as const
+  type FilterField = (typeof filterFields)[number]
+  const [activeFilterFields, setActiveFilterFields] = useState<FilterField[]>([
+    'name',
+    'email',
+    'mobile',
+    'department',
+    'client',
+  ])
 
   const fetchContacts = useCallback(async () => {
     if (!currentAgency?.id) return
@@ -82,14 +149,156 @@ export default function ContactsPage() {
     fetchContacts()
   }, [fetchContacts])
 
+  const normalize = (value: string) =>
+    value
+      .normalize('NFKD')
+      .replace(/\p{Diacritic}/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+
   const filteredContacts = contacts.filter((c) => {
-    const name = `${c.firstName} ${c.lastName}`.toLowerCase()
-    const email = (c.email ?? '').toLowerCase()
-    const dept = (c.department ?? '').toLowerCase()
-    const q = searchQuery.toLowerCase()
+    const q = normalize(searchQuery)
     if (!q) return true
-    return name.includes(q) || email.includes(q) || dept.includes(q)
+    const effectiveFields = activeFilterFields.length
+      ? activeFilterFields
+      : filterFields
+    const values: Record<FilterField, string> = {
+      name: normalize(`${c.firstName ?? ''} ${c.lastName ?? ''} ${c.lastName ?? ''} ${c.firstName ?? ''}`),
+      email: normalize(c.email ?? ''),
+      mobile: normalize(
+        `${c.phone ?? ''} ${c.mobile ?? ''} ${c.officePhone ?? ''} ${c.homePhone ?? ''}`
+      ),
+      department: normalize(c.department ?? ''),
+      client: normalize(c.client?.name ?? ''),
+    }
+    return effectiveFields.some((field) => values[field].includes(q))
   })
+
+  const openEditContact = (c: ContactRow) => {
+    setEditingContact(c)
+    setEditForm({
+      clientId: c.client.id,
+      firstName: c.firstName,
+      lastName: c.lastName,
+      email: c.email ?? '',
+      phone: c.phone ?? '',
+      mobile: c.mobile ?? '',
+      officePhone: c.officePhone ?? '',
+      homePhone: c.homePhone ?? '',
+      address: c.address ?? '',
+      department: c.department ?? '',
+      notes: c.notes ?? '',
+      isClientApprover: c.isClientApprover,
+    })
+  }
+
+  const openCreateContact = () => {
+    setCreateForm({
+      clientId: filterClientId || clients[0]?.id || '',
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      mobile: '',
+      officePhone: '',
+      homePhone: '',
+      address: '',
+      department: '',
+      notes: '',
+      isClientApprover: false,
+    })
+    setCreateOpen(true)
+  }
+
+  const handleCreateContact = async () => {
+    if (!createForm.clientId) {
+      toast({ title: 'Select a client first', variant: 'destructive' })
+      return
+    }
+    if (!createForm.firstName.trim() || !createForm.lastName.trim()) {
+      toast({ title: 'First and last name are required', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      await graphqlRequest(mutations.createContact, {
+        clientId: createForm.clientId,
+        firstName: createForm.firstName.trim(),
+        lastName: createForm.lastName.trim(),
+        email: createForm.email.trim() || null,
+        phone: createForm.phone.trim() || null,
+        mobile: createForm.mobile.trim() || null,
+        officePhone: createForm.officePhone.trim() || null,
+        homePhone: createForm.homePhone.trim() || null,
+        address: createForm.address.trim() || null,
+        department: createForm.department.trim() || null,
+        notes: createForm.notes.trim() || null,
+        isClientApprover: createForm.isClientApprover,
+      })
+      toast({ title: 'Contact added' })
+      setCreateOpen(false)
+      await fetchContacts()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to add contact', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveContact = async () => {
+    if (!editingContact) return
+    if (!editForm.firstName.trim() || !editForm.lastName.trim()) {
+      toast({ title: 'First and last name are required', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      await graphqlRequest(mutations.updateContact, {
+        id: editingContact.id,
+        firstName: editForm.firstName.trim(),
+        lastName: editForm.lastName.trim(),
+        email: editForm.email.trim() || null,
+        phone: editForm.phone.trim() || null,
+        mobile: editForm.mobile.trim() || null,
+        officePhone: editForm.officePhone.trim() || null,
+        homePhone: editForm.homePhone.trim() || null,
+        address: editForm.address.trim() || null,
+        department: editForm.department.trim() || null,
+        notes: editForm.notes.trim() || null,
+        isClientApprover: editForm.isClientApprover,
+      })
+      toast({ title: 'Contact updated' })
+      setEditingContact(null)
+      await fetchContacts()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to update contact', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteContact = async () => {
+    if (!deleteContact) return
+    setDeleting(true)
+    try {
+      await graphqlRequest(mutations.deleteContact, { id: deleteContact.id })
+      toast({ title: 'Contact deleted' })
+      setDeleteContact(null)
+      await fetchContacts()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to delete contact', variant: 'destructive' })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    })
 
   if (!currentAgency) {
     return (
@@ -112,15 +321,49 @@ export default function ContactsPage() {
       <div className="p-6 space-y-6">
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[200px] max-w-md">
+            <div className="relative flex-1 min-w-[240px] max-w-xl">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name, email, department..."
+                placeholder="Global search across selected fields..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">Search in:</span>
+              {filterFields.map((field) => {
+                const label =
+                  field === 'name'
+                    ? 'Name'
+                    : field === 'email'
+                      ? 'Email'
+                      : field === 'mobile'
+                        ? 'Phone'
+                        : field === 'department'
+                          ? 'Department'
+                          : 'Client'
+                const active = activeFilterFields.includes(field)
+                return (
+                  <Button
+                    key={field}
+                    variant={active ? 'secondary' : 'outline'}
+                    size="sm"
+                    onClick={() =>
+                      setActiveFilterFields((prev) =>
+                        prev.includes(field)
+                          ? prev.filter((f) => f !== field)
+                          : [...prev, field]
+                      )
+                    }
+                  >
+                    {label}
+                  </Button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
             <select
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={filterClientId}
@@ -155,6 +398,12 @@ export default function ContactsPage() {
               >
                 <Circle className="mr-1 h-4 w-4" />
                 Not approvers
+              </Button>
+            </div>
+            <div className="ml-auto">
+              <Button onClick={openCreateContact} disabled={clients.length === 0}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Contact
               </Button>
             </div>
           </div>
@@ -193,50 +442,260 @@ export default function ContactsPage() {
         ) : (
           <Card>
             <CardContent className="p-0">
-              <div className="divide-y">
-                {filteredContacts.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/dashboard/clients/${c.client.id}#contacts`}
-                    className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors"
-                  >
-                    <Avatar className="h-10 w-10 shrink-0">
-                      <AvatarFallback>
-                        {c.firstName[0]}
-                        {c.lastName[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {c.firstName} {c.lastName}
-                      </p>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {c.email || c.mobile || '—'}
-                        {c.department && ` · ${c.department}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Link
-                        href={`/dashboard/clients/${c.client.id}`}
-                        className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Building2 className="h-4 w-4" />
-                        {c.client.name}
-                      </Link>
-                      {c.isClientApprover && (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                          Approver
-                        </span>
-                      )}
-                    </div>
-                  </Link>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="min-w-[900px] w-full text-sm">
+                  <thead className="bg-muted/40 text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="px-4 py-3 font-medium">Contact</th>
+                      <th className="px-4 py-3 font-medium">Email</th>
+                      <th className="px-4 py-3 font-medium">Phone</th>
+                      <th className="px-4 py-3 font-medium">Department</th>
+                      <th className="px-4 py-3 font-medium">Client</th>
+                      <th className="px-4 py-3 font-medium">Approver</th>
+                      <th className="px-4 py-3 font-medium">Added</th>
+                      <th className="px-4 py-3 font-medium text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {filteredContacts.map((c) => (
+                      <tr key={c.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/dashboard/clients/${c.client.id}#contacts`}
+                            className="flex items-center gap-3"
+                          >
+                            <Avatar className="h-9 w-9 shrink-0">
+                              <AvatarFallback>
+                                {c.firstName[0]}
+                                {c.lastName[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <div className="font-medium truncate">
+                                {c.firstName} {c.lastName}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {c.email || c.phone || c.mobile || '—'}
+                              </div>
+                            </div>
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.email ? (
+                            <a
+                              className="text-foreground/80 hover:text-foreground"
+                              href={`mailto:${c.email}`}
+                            >
+                              {c.email}
+                            </a>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.phone ||
+                            c.mobile ||
+                            c.officePhone ||
+                            c.homePhone || (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.department ?? <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Link
+                            href={`/dashboard/clients/${c.client.id}`}
+                            className="inline-flex items-center gap-1 text-foreground/80 hover:text-foreground"
+                          >
+                            <Building2 className="h-4 w-4" />
+                            {c.client.name}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.isClientApprover ? (
+                            <Badge variant="hashtag">Approver</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">
+                          {formatDate(c.createdAt)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="View contact"
+                              onClick={() => setViewContact(c)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Edit contact"
+                              onClick={() => openEditContact(c)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Delete contact"
+                              className="text-destructive"
+                              onClick={() => setDeleteContact(c)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
         )}
       </div>
+
+      <Dialog open={!!viewContact} onOpenChange={(open) => !open && setViewContact(null)}>
+        <DialogContent className="sm:max-w-2xl">
+          {viewContact && (
+            <>
+              <DialogHeader className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback>
+                      {viewContact.firstName[0]}
+                      {viewContact.lastName[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <DialogTitle className="text-xl">
+                      {viewContact.firstName} {viewContact.lastName}
+                    </DialogTitle>
+                    <DialogDescription className="flex items-center gap-2">
+                      {viewContact.department || 'No department'}
+                      <span className="text-muted-foreground">·</span>
+                      {viewContact.client.name}
+                    </DialogDescription>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {viewContact.isClientApprover ? (
+                    <Badge variant="hashtag">Approver</Badge>
+                  ) : (
+                    <Badge variant="secondary">Standard contact</Badge>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    Last updated {formatDate(viewContact.updatedAt)}
+                  </span>
+                </div>
+              </DialogHeader>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Contact Info
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Email</span>
+                      <span>{viewContact.email || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Primary</span>
+                      <span>{viewContact.phone || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Mobile</span>
+                      <span>{viewContact.mobile || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Office</span>
+                      <span>{viewContact.officePhone || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Home</span>
+                      <span>{viewContact.homePhone || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Department</span>
+                      <span>{viewContact.department || '—'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Client</span>
+                      <span>{viewContact.client.name}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Address
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {viewContact.address || '—'}
+                  </div>
+                </div>
+                <div className="rounded-lg border bg-muted/20 p-4 space-y-3 sm:col-span-2">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    Notes
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap text-muted-foreground">
+                    {viewContact.notes || '—'}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <ContactFormDialog
+        open={!!editingContact}
+        onOpenChange={(open) => !open && setEditingContact(null)}
+        mode="edit"
+        form={editForm}
+        onFormChange={(f) => setEditForm(f)}
+        onSubmit={handleSaveContact}
+        saving={saving}
+      />
+
+      <ContactFormDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        mode="create"
+        form={createForm}
+        onFormChange={(f) => setCreateForm(f)}
+        onSubmit={handleCreateContact}
+        saving={saving}
+        clients={clients}
+        showClientSelector
+      />
+
+      <Dialog open={!!deleteContact} onOpenChange={(open) => !open && setDeleteContact(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="space-y-2">
+            <DialogTitle>Delete contact?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove {deleteContact?.firstName} {deleteContact?.lastName} from your contacts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-muted-foreground">
+            This action cannot be undone.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteContact(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteContact} loading={deleting}>
+              Delete contact
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

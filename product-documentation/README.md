@@ -12,12 +12,12 @@ This folder contains the canonical documents that define Truleado. Any implement
 
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
-| [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Jan 2026 |
-| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Jan 2026 |
-| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Jan 2026 |
-| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Jan 2026 |
+| [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Feb 2026 |
+| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 |
+| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 |
+| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
-| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Jan 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Feb 2026 |
 
 ---
 
@@ -60,7 +60,7 @@ Campaign Permission
 - [x] Agency dashboard
 - [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
 - [x] Client management
-- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries).
+- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries). Phone fields include `phone` (primary), `mobile`, `officePhone`, `homePhone`.
 - [x] **Client login portal**: Magic-link sign-in at `/client/login`; verify at `/client/verify`; dashboard placeholder at `/client`. `ensureClientUser` mutation; `User.contact`; auth redirect for contact-only users → `/client`. Dev-only `POST /api/client-auth/dev-magic-link` to display sign-in link when SMTP not configured.
 - [x] Project management
 - [x] Campaign engine with state machine
@@ -100,10 +100,14 @@ When adding new features:
 ## Changelog
 
 ### February 2026
+- **Contact form dialog redesign** — Extracted shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) with premium tabbed UI (Details + Phone & Address tabs), gradient header, icon-prefixed inputs. Used on both `/dashboard/contacts` and `/dashboard/clients/[id]`.
+- **Creator summary above tabs** — Creator detail page now shows a summary card at the top with profile pic (Instagram > YouTube > initials), display name, platform handles, and status. Removed duplicate info from Dashboard tab.
+- **Multi-phone contacts with country picker** — Added `phone`, `office_phone`, `home_phone` fields to contacts (migration `00020`); `PhoneInput` component with country code picker using `libphonenumber-js`.
+- **Dev script fix** — Fixed `NODE_ENV=production` conflict by explicitly setting `NODE_ENV=development` in the dev script.
 - **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
-- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled “Coming Soon” tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
+- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled "Coming Soon" tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
 - **Agency locale settings** — Added agency-level locale defaults (currency, timezone, language) and a Settings page at `/dashboard/settings/locale`.
-- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled “Average Engagement Rate”.
+- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled "Average Engagement Rate".
 
 ### January 2026
 - Initial documentation created from canonical source documents
@@ -124,7 +128,7 @@ When adding new features:
   - UI: deliverable status APPROVED shown as "Fully Approved"; campaign status APPROVED shown as "Review complete". Shared helpers in `src/lib/campaign-status.ts` (`getCampaignStatusLabel`, `getDeliverableStatusLabel`).
 - **Phase 2 — Approval System**: Project approvers, deliverable statuses (e.g. `pending_project_approval`, `client_review`), migration `00011_phase2_approval_system.sql`; campaign/project approvers, ApproverPicker, Create Campaign with approvers.
 - **Phase 3 — Client & Contacts**:
-  - Migration `00012_phase3_contacts.sql`: `contacts` table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access.
+  - Migrations `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql`: `contacts` table (client_id, first_name, last_name, email, phone, mobile, office_phone, home_phone, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access. `00020` resets legacy `mobile` values.
   - GraphQL: `Contact` type; `Client.contacts`, `Client.clientApprovers`; `approverUsers` now includes users from contacts (is_client_approver + user_id) and legacy client_users.
   - Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`.
   - Mutations: `createContact`, `updateContact`, `deleteContact`.

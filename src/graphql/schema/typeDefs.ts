@@ -162,7 +162,10 @@ export const typeDefs = gql`
     firstName: String!
     lastName: String!
     email: String
+    phone: String
     mobile: String
+    officePhone: String
+    homePhone: String
     address: String
     department: String
     notes: String
@@ -646,7 +649,10 @@ export const typeDefs = gql`
       firstName: String!
       lastName: String!
       email: String
+      phone: String
       mobile: String
+      officePhone: String
+      homePhone: String
       address: String
       department: String
       notes: String
@@ -658,7 +664,10 @@ export const typeDefs = gql`
       firstName: String
       lastName: String
       email: String
+      phone: String
       mobile: String
+      officePhone: String
+      homePhone: String
       address: String
       department: String
       notes: String

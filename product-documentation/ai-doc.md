@@ -2,7 +2,7 @@
 
 > **Purpose**: This file captures the current state of the Truleado codebase and product implementation so a new AI instance (or human) can safely resume work without re-deriving context.
 
-**Last updated:** 2026-02-03. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
+**Last updated:** 2026-02-04. Next session: **test email delivery** (Novu + agency SMTP), **test social analytics** (Apify + YouTube API), and **creator portal** (future phase).
 
 ---
 
@@ -22,7 +22,21 @@
 
 **What was done in recent sessions:**
 
-1. **Phase 4/5 — Notifications & Agency Email (implemented)**  
+1. **Contact Form Dialog Redesign (implemented)**
+   - Extracted shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) used on both `/dashboard/contacts` (Add/Edit) and `/dashboard/clients/[id]` (Add/Edit Contact).
+   - Premium UI matching creator edit modal pattern: gradient blue-cyan header with `UserPlus`/`UserCog` icon, two-tab layout (Details / Phone & Address), icon-prefixed inputs, rounded-xl bordered card sections with uppercase headers.
+   - Removed ~390 lines of inline dialog code from contacts page and client detail page, replaced with `<ContactFormDialog>` component usage.
+   - Props: `open`, `onOpenChange`, `mode` (create/edit), `form` (ContactFormData), `onFormChange`, `onSubmit`, `saving`, optional `clients` + `showClientSelector` for global contacts create.
+
+2. **Creator Summary Card Above Tabs (implemented)**
+   - Creator detail page (`/dashboard/creators/[id]`) now shows a summary card at the top (above tabs) with profile pic (Instagram > YouTube > initials), display name, platform handles, and active status.
+   - Removed duplicated creator info card from the Dashboard/Social tab.
+
+3. **Dev Script NODE_ENV Fix**
+   - Root cause: `NODE_ENV=production` set globally in shell caused PostCSS/Tailwind CSS failure (`Module parse failed: Unexpected character '@'`).
+   - Fix: Changed `package.json` dev script to `"dev": "NODE_ENV=development next dev"` to override the global env var. Does not affect Vercel deployments (Vercel never uses the `dev` script).
+
+4. **Phase 4/5 — Notifications & Agency Email (implemented)**
    - **Novu**: In-app Inbox in dashboard header (Novu React, dynamic import `ssr: false`); backend triggers via `@novu/node` using `NOVU_SECRET_KEY`. Subscriber ID = Truleado `user.id`; agency SMTP synced to Novu Custom SMTP per agency.  
    - **DB**: Migration `00013_agency_email_config.sql` — `agency_email_config` (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped, agency_admin for write.  
    - **GraphQL**: `agencyEmailConfig(agencyId)`, `saveAgencyEmailConfig(agencyId, input)` (agency_admin); types `AgencyEmailConfig`, `AgencyEmailConfigInput`.  
@@ -50,8 +64,8 @@
    - **UI**: Team settings page at `/dashboard/settings/team` shows agency users and roles. Project detail page allows assigning operators to projects (Agency Admin or Account Manager only).  
    - **Docs**: `product-documentation/DATABASE_SCHEMA_DDL.md` §3.1, `GRAPHQL_API_CONTRACT.md` §4.4, `TECHNICAL_LLD.md` §6.2, `MASTER_PRD.md` §4.3.
 
-6. **Creator Module (implemented)**  
-   - **Creator Roster Management**: Full CRUD for creators (add, edit, deactivate, activate, delete). Creator list page with search, filter by platform, and creator cards. Creator detail page shows campaigns, analytics, and payments.  
+6. **Creator Module (implemented)**
+   - **Creator Roster Management**: Full CRUD for creators (add, edit, deactivate, activate, delete). Creator list page with search, filter by platform, and creator cards. Creator detail page shows campaigns, analytics, and payments. **Creator summary card** displayed above tabs (profile pic from Instagram > YouTube > initials, display name, platforms, status).
    - **Campaign Creator Assignment**: Assign creators to campaigns with rate and notes. Update campaign creator details. Status management (invited/accepted/declined/removed).  
    - **GraphQL**: Mutations `addCreator`, `updateCreator`, `deactivateCreator`, `activateCreator`, `deleteCreator`, `inviteCreatorToCampaign`, `acceptCampaignInvite`, `declineCampaignInvite`, `removeCreatorFromCampaign`, `updateCampaignCreator`. Queries `creators(agencyId)`, `creator(id)`.  
    - **UI**: `/dashboard/creators` (list), `/dashboard/creators/new` (add), `/dashboard/creators/[id]` (detail), `/dashboard/creators/[id]/edit` (edit). `AssignCreatorDialog` component for campaign assignment. Enhanced creators section on campaign detail page.  
@@ -176,6 +190,7 @@ These Supabase migrations exist and should be applied in order:
 9. `00010_agency_code_for_join.sql` – adds `agency_code` to `agencies` (unique, generated on insert via trigger); used by `joinAgencyByCode`.
 10. `00011_phase2_approval_system.sql` – project_approvers table; deliverable status `pending_project_approval`; approval_level includes `project`; RLS for project_approvers.
 11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
+12. `00020_contacts_phone_fields.sql` – adds `phone`, `office_phone`, `home_phone` to contacts; resets legacy `mobile` values.
 12. `00013_agency_email_config.sql` – **agency_email_config** table (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped; agency admin for insert/update/delete. Used for Novu per-agency SMTP.
 13. `00014_project_users_rbac.sql` – **project_users** table (project_id, user_id, created_at); RLS for agency-scoped access. Operators assigned to projects see all campaigns under that project. Primary assignment path for operators; campaign_users is for overrides only.
 14. `00015_social_analytics.sql` – **social_data_jobs**, **creator_social_profiles**, **creator_social_posts** tables for background social media data fetching (Instagram via Apify, YouTube via Data API v3). Tracks jobs, stores profiles and posts for analytics visualization.
@@ -228,11 +243,12 @@ These Supabase migrations exist and should be applied in order:
 
 ### 5.2.1 Phase 3 — Client & Contacts (Implemented)
 
-- **contacts** table (migration `00012_phase3_contacts.sql`): belongs to Client; first_name, last_name, email, mobile, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped via client.
+- **contacts** table (migrations `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql`): belongs to Client; first_name, last_name, email, phone (primary), mobile, office_phone, home_phone, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped via client. `00020` resets legacy `mobile` values.
 - **Client approvers**: `Client.approverUsers` includes (1) users from contacts with `is_client_approver` and `user_id`, (2) legacy client_users approvers. `Client.contacts`, `Client.clientApprovers` for UI.
 - **GraphQL**: Type `Contact`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`. Resolvers: `queries.ts`, `mutations/contact.ts`, `types.ts`.
 - **Client page Contacts tab** (`/dashboard/clients/[id]`): Overview | Contacts; list, Add/Edit/Delete, toggle Client approver. **Contact CRUD uses `mutations.createContact`, `mutations.updateContact`, `mutations.deleteContact`** (not queries).
 - **Global Contacts** (`/dashboard/contacts`): filters (client, department, approver), search; sidebar "Contacts" link.
+- **Shared Contact Form Dialog**: `src/components/contacts/contact-form-dialog.tsx` — premium tabbed dialog (Details + Phone & Address) with gradient header, icon-prefixed inputs. Used in both contacts page and client detail page. Exports `ContactFormData` interface and `ContactFormDialog` component.
 
 ### 5.2.2 Client Portal (Magic Link) — Implemented
 
@@ -386,7 +402,7 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
 
 When a new AI (or engineer) picks this up:
 
-1. **Re-run migrations** (or verify applied) in order `00001` → `00016` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`, `00014_project_users_rbac.sql`, `00015_social_analytics.sql`, `00016_token_purchases.sql`).
+1. **Re-run migrations** (or verify applied) in order `00001` → `00020` (including `00012_phase3_contacts.sql`, `00013_agency_email_config.sql`, `00014_project_users_rbac.sql`, `00015_social_analytics.sql`, `00016_token_purchases.sql`, `00018_agency_locale.sql`, `00019_creator_rates.sql`, `00020_contacts_phone_fields.sql`).
 2. **Ensure buckets exist** in Supabase: `campaign-attachments`, `deliverables`, with appropriate RLS.
 3. **Skim these files first**:
    - `product-documentation/MASTER_PRD.md`
@@ -406,6 +422,7 @@ When a new AI (or engineer) picks this up:
    - Campaign UI:
      - `src/app/(dashboard)/dashboard/campaigns/**`
    - **Phase 3 (Contacts)**:
+     - `src/components/contacts/contact-form-dialog.tsx` (shared premium contact form dialog)
      - `src/app/(dashboard)/dashboard/clients/[id]/page.tsx` (Contacts tab)
      - `src/app/(dashboard)/dashboard/contacts/page.tsx` (Global Contacts)
      - `src/graphql/resolvers/mutations/contact.ts`

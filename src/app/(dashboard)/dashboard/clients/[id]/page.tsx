@@ -26,21 +26,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
 import { getCampaignStatusLabel } from '@/lib/campaign-status'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
+import { ContactFormDialog, type ContactFormData } from '@/components/contacts/contact-form-dialog'
 
 interface Project {
   id: string
@@ -58,8 +49,13 @@ interface Contact {
   firstName: string
   lastName: string
   email: string | null
+  phone: string | null
   mobile: string | null
+  officePhone: string | null
+  homePhone: string | null
   department: string | null
+  address?: string | null
+  notes?: string | null
   isClientApprover: boolean
   createdAt: string
 }
@@ -92,11 +88,15 @@ export default function ClientDetailPage() {
   const [tab, setTab] = useState<Tab>('overview')
   const [contactDialogOpen, setContactDialogOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [contactForm, setContactForm] = useState({
+  const [contactForm, setContactForm] = useState<ContactFormData>({
+    clientId: '',
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     mobile: '',
+    officePhone: '',
+    homePhone: '',
     address: '',
     department: '',
     notes: '',
@@ -125,10 +125,14 @@ export default function ClientDetailPage() {
   const openAddContact = () => {
     setEditingContact(null)
     setContactForm({
+      clientId: '',
       firstName: '',
       lastName: '',
       email: '',
+      phone: '',
       mobile: '',
+      officePhone: '',
+      homePhone: '',
       address: '',
       department: '',
       notes: '',
@@ -140,13 +144,17 @@ export default function ClientDetailPage() {
   const openEditContact = (c: Contact) => {
     setEditingContact(c)
     setContactForm({
+      clientId: '',
       firstName: c.firstName,
       lastName: c.lastName,
       email: c.email ?? '',
+      phone: c.phone ?? '',
       mobile: c.mobile ?? '',
-      address: '',
+      officePhone: c.officePhone ?? '',
+      homePhone: c.homePhone ?? '',
+      address: c.address ?? '',
       department: c.department ?? '',
-      notes: '',
+      notes: c.notes ?? '',
       isClientApprover: c.isClientApprover,
     })
     setContactDialogOpen(true)
@@ -165,7 +173,10 @@ export default function ClientDetailPage() {
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
           email: contactForm.email.trim() || null,
+          phone: contactForm.phone.trim() || null,
           mobile: contactForm.mobile.trim() || null,
+          officePhone: contactForm.officePhone.trim() || null,
+          homePhone: contactForm.homePhone.trim() || null,
           address: contactForm.address.trim() || null,
           department: contactForm.department.trim() || null,
           notes: contactForm.notes.trim() || null,
@@ -178,7 +189,10 @@ export default function ClientDetailPage() {
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
           email: contactForm.email.trim() || null,
+          phone: contactForm.phone.trim() || null,
           mobile: contactForm.mobile.trim() || null,
+          officePhone: contactForm.officePhone.trim() || null,
+          homePhone: contactForm.homePhone.trim() || null,
           address: contactForm.address.trim() || null,
           department: contactForm.department.trim() || null,
           notes: contactForm.notes.trim() || null,
@@ -509,7 +523,7 @@ export default function ClientDetailPage() {
                             {c.firstName} {c.lastName}
                           </p>
                           <p className="text-sm text-muted-foreground truncate">
-                            {c.email || c.mobile || '—'}
+                            {c.email || c.phone || c.mobile || '—'}
                             {c.department && ` · ${c.department}`}
                           </p>
                         </div>
@@ -553,102 +567,15 @@ export default function ClientDetailPage() {
         )}
 
         {/* Add/Edit Contact Dialog */}
-        <Dialog open={contactDialogOpen} onOpenChange={setContactDialogOpen}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>{editingContact ? 'Edit Contact' : 'Add Contact'}</DialogTitle>
-              <DialogDescription>
-                {editingContact ? 'Update contact details.' : 'Add a new contact for this client.'}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName">First name *</Label>
-                  <Input
-                    id="firstName"
-                    value={contactForm.firstName}
-                    onChange={(e) => setContactForm((f) => ({ ...f, firstName: e.target.value }))}
-                    placeholder="Jane"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="lastName">Last name *</Label>
-                  <Input
-                    id="lastName"
-                    value={contactForm.lastName}
-                    onChange={(e) => setContactForm((f) => ({ ...f, lastName: e.target.value }))}
-                    placeholder="Doe"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={contactForm.email}
-                  onChange={(e) => setContactForm((f) => ({ ...f, email: e.target.value }))}
-                  placeholder="jane@client.com"
-                />
-              </div>
-              <div>
-                <Label htmlFor="mobile">Mobile</Label>
-                <Input
-                  id="mobile"
-                  value={contactForm.mobile}
-                  onChange={(e) => setContactForm((f) => ({ ...f, mobile: e.target.value }))}
-                  placeholder="+1 234 567 8900"
-                />
-              </div>
-              <div>
-                <Label htmlFor="department">Department</Label>
-                <Input
-                  id="department"
-                  value={contactForm.department}
-                  onChange={(e) => setContactForm((f) => ({ ...f, department: e.target.value }))}
-                  placeholder="Marketing"
-                />
-              </div>
-              <div>
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={contactForm.address}
-                  onChange={(e) => setContactForm((f) => ({ ...f, address: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <Label htmlFor="notes">Notes</Label>
-                <Input
-                  id="notes"
-                  value={contactForm.notes}
-                  onChange={(e) => setContactForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="isClientApprover"
-                  checked={contactForm.isClientApprover}
-                  onChange={(e) => setContactForm((f) => ({ ...f, isClientApprover: e.target.checked }))}
-                  className="rounded border-input"
-                />
-                <Label htmlFor="isClientApprover">Client approver (can approve deliverables)</Label>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setContactDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={handleSaveContact} disabled={submitting}>
-                {editingContact ? 'Update' : 'Add'} Contact
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <ContactFormDialog
+          open={contactDialogOpen}
+          onOpenChange={setContactDialogOpen}
+          mode={editingContact ? 'edit' : 'create'}
+          form={contactForm}
+          onFormChange={(f) => setContactForm(f)}
+          onSubmit={handleSaveContact}
+          saving={submitting}
+        />
       </div>
     </>
   )

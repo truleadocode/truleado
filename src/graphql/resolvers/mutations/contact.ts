@@ -17,7 +17,10 @@ export async function createContact(
     firstName: string;
     lastName: string;
     email?: string;
+    phone?: string;
     mobile?: string;
+    officePhone?: string;
+    homePhone?: string;
     address?: string;
     department?: string;
     notes?: string;
@@ -42,7 +45,10 @@ export async function createContact(
       first_name: args.firstName.trim(),
       last_name: args.lastName.trim(),
       email: args.email?.trim() || null,
+      phone: args.phone?.trim() || null,
       mobile: args.mobile?.trim() || null,
+      office_phone: args.officePhone?.trim() || null,
+      home_phone: args.homePhone?.trim() || null,
       address: args.address?.trim() || null,
       department: args.department?.trim() || null,
       notes: args.notes?.trim() || null,
@@ -72,7 +78,10 @@ export async function updateContact(
     firstName?: string;
     lastName?: string;
     email?: string;
+    phone?: string;
     mobile?: string;
+    officePhone?: string;
+    homePhone?: string;
     address?: string;
     department?: string;
     notes?: string;
@@ -98,7 +107,10 @@ export async function updateContact(
   if (args.firstName !== undefined) updates.first_name = args.firstName.trim();
   if (args.lastName !== undefined) updates.last_name = args.lastName.trim();
   if (args.email !== undefined) updates.email = args.email?.trim() || null;
+  if (args.phone !== undefined) updates.phone = args.phone?.trim() || null;
   if (args.mobile !== undefined) updates.mobile = args.mobile?.trim() || null;
+  if (args.officePhone !== undefined) updates.office_phone = args.officePhone?.trim() || null;
+  if (args.homePhone !== undefined) updates.home_phone = args.homePhone?.trim() || null;
   if (args.address !== undefined) updates.address = args.address?.trim() || null;
   if (args.department !== undefined) updates.department = args.department?.trim() || null;
   if (args.notes !== undefined) updates.notes = args.notes?.trim() || null;
