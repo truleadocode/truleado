@@ -176,6 +176,7 @@ These Supabase migrations exist and should be applied in order:
 9. `00010_agency_code_for_join.sql` – adds `agency_code` to `agencies` (unique, generated on insert via trigger); used by `joinAgencyByCode`.
 10. `00011_phase2_approval_system.sql` – project_approvers table; deliverable status `pending_project_approval`; approval_level includes `project`; RLS for project_approvers.
 11. `00012_phase3_contacts.sql` – **contacts** table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access (agency admin or client account manager).
+12. `00020_contacts_phone_fields.sql` – adds `phone`, `office_phone`, `home_phone` to contacts; resets legacy `mobile` values.
 12. `00013_agency_email_config.sql` – **agency_email_config** table (agency_id, smtp_*, from_email, from_name, novu_integration_identifier); RLS agency-scoped; agency admin for insert/update/delete. Used for Novu per-agency SMTP.
 13. `00014_project_users_rbac.sql` – **project_users** table (project_id, user_id, created_at); RLS for agency-scoped access. Operators assigned to projects see all campaigns under that project. Primary assignment path for operators; campaign_users is for overrides only.
 14. `00015_social_analytics.sql` – **social_data_jobs**, **creator_social_profiles**, **creator_social_posts** tables for background social media data fetching (Instagram via Apify, YouTube via Data API v3). Tracks jobs, stores profiles and posts for analytics visualization.
@@ -228,7 +229,7 @@ These Supabase migrations exist and should be applied in order:
 
 ### 5.2.1 Phase 3 — Client & Contacts (Implemented)
 
-- **contacts** table (migration `00012_phase3_contacts.sql`): belongs to Client; first_name, last_name, email, mobile, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped via client.
+- **contacts** table (migrations `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql`): belongs to Client; first_name, last_name, email, phone (primary), mobile, office_phone, home_phone, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped via client. `00020` resets legacy `mobile` values.
 - **Client approvers**: `Client.approverUsers` includes (1) users from contacts with `is_client_approver` and `user_id`, (2) legacy client_users approvers. `Client.contacts`, `Client.clientApprovers` for UI.
 - **GraphQL**: Type `Contact`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`. Resolvers: `queries.ts`, `mutations/contact.ts`, `types.ts`.
 - **Client page Contacts tab** (`/dashboard/clients/[id]`): Overview | Contacts; list, Add/Edit/Delete, toggle Client approver. **Contact CRUD uses `mutations.createContact`, `mutations.updateContact`, `mutations.deleteContact`** (not queries).

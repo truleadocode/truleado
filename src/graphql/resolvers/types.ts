@@ -199,6 +199,8 @@ export const typeResolvers = {
     isClientApprover: (parent: { is_client_approver: boolean }) => parent.is_client_approver,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    officePhone: (parent: { office_phone: string | null }) => parent.office_phone,
+    homePhone: (parent: { home_phone: string | null }) => parent.home_phone,
     client: async (parent: UserRow) => {
       const { data } = await supabaseAdmin
         .from('clients')

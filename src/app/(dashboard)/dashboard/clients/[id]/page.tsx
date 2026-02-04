@@ -37,6 +37,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { PhoneInput } from '@/components/ui/phone-input'
 import { Header } from '@/components/layout/header'
 import { getCampaignStatusLabel } from '@/lib/campaign-status'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
@@ -58,8 +59,13 @@ interface Contact {
   firstName: string
   lastName: string
   email: string | null
+  phone: string | null
   mobile: string | null
+  officePhone: string | null
+  homePhone: string | null
   department: string | null
+  address?: string | null
+  notes?: string | null
   isClientApprover: boolean
   createdAt: string
 }
@@ -96,7 +102,10 @@ export default function ClientDetailPage() {
     firstName: '',
     lastName: '',
     email: '',
+    phone: '',
     mobile: '',
+    officePhone: '',
+    homePhone: '',
     address: '',
     department: '',
     notes: '',
@@ -128,7 +137,10 @@ export default function ClientDetailPage() {
       firstName: '',
       lastName: '',
       email: '',
+      phone: '',
       mobile: '',
+      officePhone: '',
+      homePhone: '',
       address: '',
       department: '',
       notes: '',
@@ -143,10 +155,13 @@ export default function ClientDetailPage() {
       firstName: c.firstName,
       lastName: c.lastName,
       email: c.email ?? '',
+      phone: c.phone ?? '',
       mobile: c.mobile ?? '',
-      address: '',
+      officePhone: c.officePhone ?? '',
+      homePhone: c.homePhone ?? '',
+      address: c.address ?? '',
       department: c.department ?? '',
-      notes: '',
+      notes: c.notes ?? '',
       isClientApprover: c.isClientApprover,
     })
     setContactDialogOpen(true)
@@ -165,7 +180,10 @@ export default function ClientDetailPage() {
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
           email: contactForm.email.trim() || null,
+          phone: contactForm.phone.trim() || null,
           mobile: contactForm.mobile.trim() || null,
+          officePhone: contactForm.officePhone.trim() || null,
+          homePhone: contactForm.homePhone.trim() || null,
           address: contactForm.address.trim() || null,
           department: contactForm.department.trim() || null,
           notes: contactForm.notes.trim() || null,
@@ -178,7 +196,10 @@ export default function ClientDetailPage() {
           firstName: contactForm.firstName.trim(),
           lastName: contactForm.lastName.trim(),
           email: contactForm.email.trim() || null,
+          phone: contactForm.phone.trim() || null,
           mobile: contactForm.mobile.trim() || null,
+          officePhone: contactForm.officePhone.trim() || null,
+          homePhone: contactForm.homePhone.trim() || null,
           address: contactForm.address.trim() || null,
           department: contactForm.department.trim() || null,
           notes: contactForm.notes.trim() || null,
@@ -509,7 +530,7 @@ export default function ClientDetailPage() {
                             {c.firstName} {c.lastName}
                           </p>
                           <p className="text-sm text-muted-foreground truncate">
-                            {c.email || c.mobile || '—'}
+                            {c.email || c.phone || c.mobile || '—'}
                             {c.department && ` · ${c.department}`}
                           </p>
                         </div>
@@ -592,14 +613,43 @@ export default function ClientDetailPage() {
                   placeholder="jane@client.com"
                 />
               </div>
-              <div>
-                <Label htmlFor="mobile">Mobile</Label>
-                <Input
-                  id="mobile"
-                  value={contactForm.mobile}
-                  onChange={(e) => setContactForm((f) => ({ ...f, mobile: e.target.value }))}
-                  placeholder="+1 234 567 8900"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="phone">Primary phone</Label>
+                  <PhoneInput
+                    id="phone"
+                    value={contactForm.phone}
+                    onChange={(value) => setContactForm((f) => ({ ...f, phone: value }))}
+                    placeholder="Primary number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="mobile">Mobile</Label>
+                  <PhoneInput
+                    id="mobile"
+                    value={contactForm.mobile}
+                    onChange={(value) => setContactForm((f) => ({ ...f, mobile: value }))}
+                    placeholder="Mobile number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="officePhone">Office</Label>
+                  <PhoneInput
+                    id="officePhone"
+                    value={contactForm.officePhone}
+                    onChange={(value) => setContactForm((f) => ({ ...f, officePhone: value }))}
+                    placeholder="Office number"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="homePhone">Home</Label>
+                  <PhoneInput
+                    id="homePhone"
+                    value={contactForm.homePhone}
+                    onChange={(value) => setContactForm((f) => ({ ...f, homePhone: value }))}
+                    placeholder="Home number"
+                  />
+                </div>
               </div>
               <div>
                 <Label htmlFor="department">Department</Label>
@@ -621,8 +671,9 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <Label htmlFor="notes">Notes</Label>
-                <Input
+                <textarea
                   id="notes"
+                  className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   value={contactForm.notes}
                   onChange={(e) => setContactForm((f) => ({ ...f, notes: e.target.value }))}
                   placeholder="Optional"

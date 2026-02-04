@@ -60,7 +60,7 @@ Campaign Permission
 - [x] Agency dashboard
 - [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
 - [x] Client management
-- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries).
+- [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries). Phone fields include `phone` (primary), `mobile`, `officePhone`, `homePhone`.
 - [x] **Client login portal**: Magic-link sign-in at `/client/login`; verify at `/client/verify`; dashboard placeholder at `/client`. `ensureClientUser` mutation; `User.contact`; auth redirect for contact-only users → `/client`. Dev-only `POST /api/client-auth/dev-magic-link` to display sign-in link when SMTP not configured.
 - [x] Project management
 - [x] Campaign engine with state machine
@@ -124,7 +124,7 @@ When adding new features:
   - UI: deliverable status APPROVED shown as "Fully Approved"; campaign status APPROVED shown as "Review complete". Shared helpers in `src/lib/campaign-status.ts` (`getCampaignStatusLabel`, `getDeliverableStatusLabel`).
 - **Phase 2 — Approval System**: Project approvers, deliverable statuses (e.g. `pending_project_approval`, `client_review`), migration `00011_phase2_approval_system.sql`; campaign/project approvers, ApproverPicker, Create Campaign with approvers.
 - **Phase 3 — Client & Contacts**:
-  - Migration `00012_phase3_contacts.sql`: `contacts` table (client_id, first_name, last_name, email, mobile, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access.
+  - Migrations `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql`: `contacts` table (client_id, first_name, last_name, email, phone, mobile, office_phone, home_phone, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access. `00020` resets legacy `mobile` values.
   - GraphQL: `Contact` type; `Client.contacts`, `Client.clientApprovers`; `approverUsers` now includes users from contacts (is_client_approver + user_id) and legacy client_users.
   - Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`.
   - Mutations: `createContact`, `updateContact`, `deleteContact`.

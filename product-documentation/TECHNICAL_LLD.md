@@ -264,7 +264,7 @@ Permission rules are defined in the **Permission Matrix (Canonical)**.
 
 ### 6.3 Phase 3: Client Contacts (Implemented)
 
-- **contacts** table: belongs to Client; fields first_name, last_name, email, mobile, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped (agency admin or client account manager). Migration: `00012_phase3_contacts.sql`.
+- **contacts** table: belongs to Client; fields first_name, last_name, email, phone (primary), mobile, office_phone, home_phone, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped (agency admin or client account manager). Migrations: `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql` (resets legacy `mobile` values).
 - **Client approvers**: Client-level approval uses (1) contacts with `is_client_approver` and optional `user_id` (Truleado user link), (2) legacy `client_users` with role approver. GraphQL: `Client.contacts`, `Client.clientApprovers`, `Client.approverUsers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`.
 - **UI**: Client detail page has Contacts tab (list, add/edit/delete, toggle approver); Global Contacts page at `/dashboard/contacts` (filters: client, department, approver). See `GRAPHQL_API_CONTRACT.md` and `ai-doc.md` §5.2.1.
 

@@ -174,8 +174,13 @@ export const queries = {
           firstName
           lastName
           email
+          phone
           mobile
+          officePhone
+          homePhone
+          address
           department
+          notes
           isClientApprover
           createdAt
         }
@@ -190,11 +195,17 @@ export const queries = {
         firstName
         lastName
         email
+        phone
         mobile
+        officePhone
+        homePhone
+        address
         department
+        notes
         isClientApprover
         client { id name }
         createdAt
+        updatedAt
       }
     }
   `,
@@ -763,13 +774,16 @@ export const mutations = {
   `,
 
   createContact: `
-    mutation CreateContact($clientId: ID!, $firstName: String!, $lastName: String!, $email: String, $mobile: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
-      createContact(clientId: $clientId, firstName: $firstName, lastName: $lastName, email: $email, mobile: $mobile, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+    mutation CreateContact($clientId: ID!, $firstName: String!, $lastName: String!, $email: String, $phone: String, $mobile: String, $officePhone: String, $homePhone: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
+      createContact(clientId: $clientId, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, mobile: $mobile, officePhone: $officePhone, homePhone: $homePhone, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
         id
         firstName
         lastName
         email
+        phone
         mobile
+        officePhone
+        homePhone
         department
         isClientApprover
         createdAt
@@ -778,13 +792,16 @@ export const mutations = {
   `,
 
   updateContact: `
-    mutation UpdateContact($id: ID!, $firstName: String, $lastName: String, $email: String, $mobile: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
-      updateContact(id: $id, firstName: $firstName, lastName: $lastName, email: $email, mobile: $mobile, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+    mutation UpdateContact($id: ID!, $firstName: String, $lastName: String, $email: String, $phone: String, $mobile: String, $officePhone: String, $homePhone: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
+      updateContact(id: $id, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, mobile: $mobile, officePhone: $officePhone, homePhone: $homePhone, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
         id
         firstName
         lastName
         email
+        phone
         mobile
+        officePhone
+        homePhone
         department
         isClientApprover
         updatedAt
