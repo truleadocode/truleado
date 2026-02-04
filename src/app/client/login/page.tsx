@@ -11,7 +11,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
-  sendClientSignInLink,
   CLIENT_MAGIC_LINK_EMAIL_KEY,
 } from '@/lib/firebase/client'
 
@@ -21,9 +20,15 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>
 
-const isDevMagicLink = () =>
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+const isDevMagicLink = () => {
+  const mode = process.env.NEXT_PUBLIC_CLIENT_MAGIC_LINK_MODE?.trim().toLowerCase()
+  if (mode === 'dev') return true
+  if (mode === 'novu') return false
+  return (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  )
+}
 
 export default function ClientLoginPage() {
   const [sent, setSent] = useState(false)
@@ -66,7 +71,7 @@ export default function ClientLoginPage() {
         const res = await fetch('/api/client-auth/request-magic-link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email, origin: window.location.origin }),
         })
         const json = await res.json().catch(() => ({}))
         if (!res.ok) {
@@ -74,7 +79,6 @@ export default function ClientLoginPage() {
           setIsSubmitting(false)
           return
         }
-        await sendClientSignInLink(email)
         window.localStorage.setItem(CLIENT_MAGIC_LINK_EMAIL_KEY, email)
       }
       setSent(true)

@@ -188,7 +188,7 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 **Flow**:
 
-1. **Request link** (`/client/login`): User enters email. Frontend calls `POST /api/client-auth/request-magic-link` (validates email belongs to a contact with `is_client_approver`). Then `sendSignInLinkToEmail` (Firebase) sends the sign-in link to that email. Email is stored in `localStorage` for the verify step.
+1. **Request link** (`/client/login`): User enters email. Frontend calls `POST /api/client-auth/request-magic-link` (validates email belongs to a contact with `is_client_approver`). Server generates the Firebase email-link (Admin SDK) and sends via **Novu**. Email is stored in `localStorage` for the verify step.
 2. **Verify** (`/client/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureClientUser` (GraphQL). Backend creates `users` + `auth_identities` (provider `firebase_email_link`) and links the contact via `contacts.user_id`; idempotent if already done. Redirect to `/client`.
 3. **Client dashboard** (`/client`): Placeholder today; will show deliverables for approval, campaigns/projects for their company.
 
@@ -196,8 +196,12 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 **API routes**:
 
-- `POST /api/client-auth/request-magic-link`: Body `{ email }`. Ensures a `contacts` row exists with that email (case-insensitive) and `is_client_approver = true`; returns `200 { ok: true }` or `404`. No email sent by this route; Firebase sends the actual magic-link email.
-- `POST /api/client-auth/dev-magic-link`: **Dev-only** (`NODE_ENV === 'development'`). Body `{ email, origin }`. Same contact check. Uses Firebase Admin `generateSignInWithEmailLink` to return `{ link }` so the app can display the link for copying when SMTP is not configured. Used by `/client/login` on localhost.
+- `POST /api/client-auth/request-magic-link`: Body `{ email, origin }`. Ensures a `contacts` row exists with that email (case-insensitive) and `is_client_approver = true`; generates a Firebase email-link server-side and sends it via Novu. Returns `200 { ok: true }` or `404`.
+- `POST /api/client-auth/dev-magic-link`: **Dev-only** (`NODE_ENV === 'development'`). Body `{ email, origin }`. Same contact check. Uses Firebase Admin `generateSignInWithEmailLink` to return `{ link }` so the app can display the link for copying when SMTP is not configured.
+
+**Delivery mode (env)**:
+- `NEXT_PUBLIC_CLIENT_MAGIC_LINK_MODE`: `novu` (always send via Novu), `dev` (always return link), `auto` (default: dev on localhost/127.0.0.1; Novu elsewhere).
+- `NOVU_CLIENT_MAGIC_LINK_WORKFLOW_ID`: Novu workflow identifier for the email (e.g. `client-magic-link`).
 
 **Firebase**: Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method → Email/Password. Add `localhost` to **Authorized domains** (Authentication → Settings) for local testing.
 

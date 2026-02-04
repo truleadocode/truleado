@@ -53,6 +53,7 @@
    - **Backend**: `ensureClientUser` mutation creates `users` + `auth_identities` (provider `firebase_email_link`), links `contacts.user_id`; idempotent. `User.contact` added; `me` fetches `contact { id }` for redirect logic.  
    - **Auth context**: `contact` in state; redirect rules: if `agencies.length === 0` and `contact` exists → `/client` (login, root, onboarding, `ProtectedRoute`).  
    - **Dev-only**: `POST /api/client-auth/dev-magic-link` (localhost) returns the sign-in link so it can be displayed/copied when SMTP is not configured.  
+   - **Delivery mode**: `NEXT_PUBLIC_CLIENT_MAGIC_LINK_MODE` env var: `novu` (always send via Novu), `dev` (always return link), `auto` (default: dev on localhost/127.0.0.1; Novu elsewhere). `NOVU_CLIENT_MAGIC_LINK_WORKFLOW_ID` for Novu workflow identifier.  
    - **“Email already in use”**: If the email has an existing Firebase account (e.g. agency email/password), verify page shows “Use agency sign-in” and links to `/login`.
 
 4. **Deliverables** — Delete version, caption audit, preview, approval workflow; notifications now trigger from deliverable mutations.
