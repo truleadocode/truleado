@@ -39,7 +39,8 @@ export async function POST(request: NextRequest) {
     const raw = body.email;
     const rawOrigin = body.origin;
     const email = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
-    const baseUrl = resolveBaseUrl(request, rawOrigin);
+    const origin = typeof rawOrigin === 'string' ? rawOrigin.trim() : undefined;
+    const baseUrl = resolveBaseUrl(request, origin);
 
     if (!email) {
       return NextResponse.json(
