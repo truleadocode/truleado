@@ -196,7 +196,6 @@ export async function updateAgencyLocale(
     action: 'updated',
     actorId: user.id,
     actorType: 'user',
-    beforeState: null,
     afterState: updated,
     metadata: { updatedFields: ['currency_code', 'timezone', 'language_code'] },
   });
