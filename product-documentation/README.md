@@ -100,6 +100,7 @@ When adding new features:
 ## Changelog
 
 ### February 2026
+- **Deliverable tracking** — Added deliverable tracking system for approved deliverables. Users can store 1–10 published URLs per deliverable (immutable once saved). Migration `00021_deliverable_tracking.sql` adds `deliverable_tracking_records` and `deliverable_tracking_urls` tables. GraphQL mutation `startDeliverableTracking(deliverableId, urls)`; UI: "Start Tracking" button on deliverable detail page and campaign deliverables list. Tracked deliverables display a "Tracking" status badge.
 - **Contact form dialog redesign** — Extracted shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) with premium tabbed UI (Details + Phone & Address tabs), gradient header, icon-prefixed inputs. Used on both `/dashboard/contacts` and `/dashboard/clients/[id]`.
 - **Creator summary above tabs** — Creator detail page now shows a summary card at the top with profile pic (Instagram > YouTube > initials), display name, platform handles, and status. Removed duplicate info from Dashboard tab.
 - **Multi-phone contacts with country picker** — Added `phone`, `office_phone`, `home_phone` fields to contacts (migration `00020`); `PhoneInput` component with country code picker using `libphonenumber-js`.
