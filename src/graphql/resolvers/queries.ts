@@ -22,6 +22,12 @@ import {
   AgencyRole,
 } from '@/lib/rbac';
 import { notFoundError, forbiddenError } from '../errors';
+import {
+  myCreatorProfile,
+  myCreatorCampaigns,
+  myCreatorDeliverables,
+  myCreatorProposal,
+} from './queries/creator-portal';
 
 export const queryResolvers = {
   /**
@@ -696,4 +702,13 @@ export const queryResolvers = {
     if (error) throw new Error('Failed to fetch token purchases');
     return data || [];
   },
+
+  // -----------------------------------------------
+  // Creator Portal Queries
+  // -----------------------------------------------
+
+  myCreatorProfile,
+  myCreatorCampaigns,
+  myCreatorDeliverables,
+  myCreatorProposal,
 };

@@ -67,6 +67,7 @@ Campaign Permission
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
 - [x] **Notifications (Phase 4/5)**: Novu in-app Inbox + email; agency SMTP at Settings → Notifications; workflows `approval-requested`, `approval-approved`, `approval-rejected`; sample script `scripts/trigger-sample-notification.js`
 - [x] Creator roster (incl. rates + social analytics tabs)
+- [x] **Creator Portal Phase 1 (MVP Foundation)**: Magic-link authentication at `/creator/login` and `/creator/verify`; `ensureCreatorUser` mutation; proposal system with immutable append-only versions; state machine (`DRAFT` → `SENT` → `ACCEPTED`/`REJECTED`/`COUNTERED`); mutations `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `assignDeliverableToCreator`; notifications `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned`; creator dashboard placeholder at `/creator/dashboard` with queries `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables`, `myCreatorProposal`.
 - [ ] Audit logs
 
 ### Excluded (Post-MVP)
@@ -98,6 +99,17 @@ When adding new features:
 ---
 
 ## Changelog
+
+### February 2026 (Continued)
+- **Creator Portal Phase 1 (Foundation)**:
+  - **Creator authentication**: Magic-link sign-in at `/creator/login` and `/creator/verify` (similar to client portal pattern). `ensureCreatorUser` mutation creates `users` + `auth_identities` (provider `firebase_creator_link`) and links to `creators.user_id`. Validates email against active creators in roster. Idempotent; supports reuse of existing user if already linked.
+  - **Proposal system**: Append-only `proposal_versions` table with immutable history. State machine: `DRAFT` → `SENT` (agency sends) → `ACCEPTED`/`REJECTED`/`COUNTERED` (creator responds). Denormalized fields on `campaign_creators` (`proposal_state`, `current_proposal_version`, `proposal_accepted_at`).
+  - **GraphQL mutations**: `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `assignDeliverableToCreator`. Require appropriate auth (`INVITE_CREATOR` permission for agency mutations; creator auth for creator mutations).
+  - **Creator queries**: `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables(campaignId?)`, `myCreatorProposal(campaignCreatorId)`.
+  - **Notifications**: `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned` workflows trigger on state transitions.
+  - **Invite mutation update**: `inviteCreatorToCampaign` now automatically creates and sends proposal with state `SENT`; updates `campaign_creators.proposal_state`.
+  - **RBAC extensions**: `requireCreator`, `hasCreatorCampaignAccess`, `requireCreatorCampaignAccess`, `hasCreatorDeliverableAccess`, `requireCreatorDeliverableAccess` authorization guards in `src/lib/rbac/authorize.ts`.
+  - **UI**: Creator dashboard pages at `/creator/dashboard`, `/creator/campaigns`, `/creator/proposals/[id]`, `/creator/deliverables/[id]` (placeholder implementations). Creator layout at `/creator/layout.tsx`.
 
 ### February 2026
 - **Deliverable tracking** — Added deliverable tracking system for approved deliverables. Users can store 1–10 published URLs per deliverable (immutable once saved). Migration `00021_deliverable_tracking.sql` adds `deliverable_tracking_records` and `deliverable_tracking_urls` tables. GraphQL mutation `startDeliverableTracking(deliverableId, urls)`; UI: "Start Tracking" button on deliverable detail page and campaign deliverables list. Tracked deliverables display a "Tracking" status badge.

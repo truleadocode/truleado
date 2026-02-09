@@ -23,6 +23,8 @@ export default function CreatorLogin() {
       });
 
       if (response.ok) {
+        // Store email for Firebase email link sign-in verification
+        window.localStorage.setItem('emailForSignIn', email);
         setSent(true);
       } else {
         setError('Unable to send magic link. Please try again.');

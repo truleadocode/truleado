@@ -11,6 +11,7 @@ import {
   requireAuth,
   requireCampaignAccess,
   requireClientApproverDeliverableAccess,
+  requireCreatorDeliverableAccess,
   getAgencyIdForCampaign,
   Permission,
 } from '@/lib/rbac';
@@ -180,21 +181,33 @@ export async function uploadDeliverableVersion(
   ctx: GraphQLContext
 ) {
   const user = requireAuth(ctx);
-  
+
   // Get deliverable and verify access
   const { data: deliverable, error: fetchError } = await supabaseAdmin
     .from('deliverables')
     .select('*, campaigns!inner(id)')
     .eq('id', deliverableId)
     .single();
-  
+
   if (fetchError || !deliverable) {
     throw notFoundError('Deliverable', deliverableId);
   }
-  
+
   const campaigns = deliverable.campaigns as { id: string };
-  await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
-  
+
+  // Check if creator or agency user
+  if (ctx.creator) {
+    // Creator path: must own the deliverable
+    await requireCreatorDeliverableAccess(ctx, deliverableId);
+    // Creator can only upload to non-approved deliverables
+    if (deliverable.status === 'approved') {
+      throw forbiddenError('Cannot upload to an approved deliverable');
+    }
+  } else {
+    // Agency user path
+    await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
+  }
+
   // Can't upload to approved deliverables
   if (deliverable.status === 'approved') {
     throw invalidStateError(
@@ -264,19 +277,29 @@ export async function submitDeliverableForReview(
   { deliverableId }: { deliverableId: string },
   ctx: GraphQLContext
 ) {
+  requireAuth(ctx);
+
   // Get deliverable
   const { data: deliverable, error: fetchError } = await supabaseAdmin
     .from('deliverables')
     .select('*, campaigns!inner(id)')
     .eq('id', deliverableId)
     .single();
-  
+
   if (fetchError || !deliverable) {
     throw notFoundError('Deliverable', deliverableId);
   }
-  
+
   const campaigns = deliverable.campaigns as { id: string };
-  await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
+
+  // Check if creator or agency user
+  if (ctx.creator) {
+    // Creator path: must own the deliverable
+    await requireCreatorDeliverableAccess(ctx, deliverableId);
+  } else {
+    // Agency user path
+    await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
+  }
   
   // Validate transition
   const allowedFrom = ['pending', 'rejected'];

@@ -205,7 +205,38 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 **Firebase**: Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method → Email/Password. Add `localhost` to **Authorized domains** (Authentication → Settings) for local testing.
 
-**“Email already in use”**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows “Use agency sign-in” with a link to `/login`; user signs in with password instead.
+**"Email already in use"**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows "Use agency sign-in" with a link to `/login`; user signs in with password instead.
+
+---
+
+### 4.6 Creator Portal & Magic-Link Auth (Phase 1)
+
+**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, submit tracking URLs. Creators authenticate via **magic link** (Firebase Email Link) using the email from the `creators` roster.
+
+**Flow**:
+
+1. **Request link** (`/creator/login`): User enters email. Frontend calls `POST /api/creator-auth/request-magic-link` (validates email belongs to an active creator in the agency). Server generates Firebase email-link (Admin SDK) and sends via **Novu**. Email is stored in `localStorage` for the verify step.
+2. **Verify** (`/creator/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureCreatorUser` (GraphQL). Backend:
+   - Checks if creator already has `user_id` linked; if so, links Firebase UID to that user (idempotent).
+   - Otherwise: creates `users` + `auth_identities` (provider `firebase_creator_link`) and updates `creators.user_id`.
+   - Throws if no active creator found for email.
+   - Redirect to `/creator/dashboard`.
+3. **Creator dashboard** (`/creator/dashboard`): Overview of campaigns, pending proposals, deliverables awaiting upload.
+
+**Auth context**: `GetMe` fetches `me { ... }`. `GraphQLContext.creator` is set after loading the creator row (if `user_id` matches and creator is active). **Key difference** from client auth: creators are in the **roster table**, not linked via contacts.
+
+**Data model updates** (Phase 1):
+- `creators.user_id` (UUID, nullable foreign key to `users.id`) — set on first sign-in.
+- `proposal_versions` table (append-only): tracks proposal negotiation history.
+- `campaign_creators.proposal_state`, `campaign_creators.current_proposal_version`, `campaign_creators.proposal_accepted_at` — denormalized from latest `proposal_versions` row.
+- `deliverables.creator_id` (nullable) — assigned after proposal accepted.
+- `deliverables.proposal_version_id` (nullable) — tracks which proposal was used.
+
+**API routes**:
+
+- `POST /api/creator-auth/request-magic-link`: Body `{ email, origin }`. Validates email is in active `creators` roster (case-insensitive). Generates Firebase email-link and sends via Novu. Returns `200 { ok: true }` always (no email enumeration). Supports same delivery modes as client portal (`NEXT_PUBLIC_CREATOR_MAGIC_LINK_MODE`, `NOVU_CREATOR_MAGIC_LINK_WORKFLOW_ID`).
+
+**Firebase**: Same setup as client portal (Email link already enabled).
 
 ---
 
@@ -414,7 +445,51 @@ Attached at:
 
 ---
 
-## 11. Approval System
+## 11. Proposal System (Creator Portal Phase 1)
+
+**Purpose**: Proposal negotiation workflow between agency and creator before deliverable assignment and execution.
+
+**Data model**:
+- `proposal_versions` (append-only): immutable record of each proposal version with state, rate, deliverable scopes, notes, creator, timestamp.
+- `campaign_creators.proposal_state`: current state (`DRAFT`, `SENT`, `COUNTERED`, `ACCEPTED`, `REJECTED`).
+- `campaign_creators.current_proposal_version`: version number of latest proposal.
+- `campaign_creators.proposal_accepted_at`: timestamp when creator accepted.
+
+**State machine**:
+- `DRAFT` → `SENT` (agency sends to creator via email)
+- `SENT` → `COUNTERED` (creator responds with different terms)
+- `SENT` | `COUNTERED` → `ACCEPTED` (creator accepts)
+- `SENT` | `COUNTERED` → `REJECTED` (creator declines)
+
+**Lifecycle**:
+1. Agency invites creator (`inviteCreatorToCampaign`) → creates proposal version with state `SENT` → sends `proposal-sent` email.
+2. Creator can:
+   - Accept: state → `ACCEPTED`, `campaign_creators.status` → `ACCEPTED`, sends `proposal-accepted` notification to agency.
+   - Reject: state → `REJECTED`, `campaign_creators.status` → `DECLINED`, sends `proposal-rejected` notification.
+   - Counter: creates new version with state `COUNTERED`, sends `proposal-countered` notification.
+3. Agency can create new draft and re-send to move to `SENT`.
+4. Once `ACCEPTED`, agency can assign deliverables to creator via `assignDeliverableToCreator`.
+
+**Immutability**: All proposal versions are append-only. No updates to existing versions; new versions always created.
+
+**Notifications**:
+- `proposal-sent`: Agency → Creator (email with proposal details + action link).
+- `proposal-accepted`: Creator → Agency (proposal accepted).
+- `proposal-countered`: Creator → Agency (counter-offer).
+- `proposal-rejected`: Creator → Agency (rejection reason).
+- `deliverable-assigned`: Agency → Creator (deliverable assigned after proposal accepted).
+
+**GraphQL mutations**:
+- `createProposal(input: CreateProposalInput!): ProposalVersion!` — agency creates draft.
+- `sendProposal(campaignCreatorId: ID!): ProposalVersion!` — agency sends (state SENT).
+- `acceptProposal(campaignCreatorId: ID!): ProposalVersion!` — creator accepts.
+- `rejectProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!` — creator rejects.
+- `counterProposal(input: CounterProposalInput!): ProposalVersion!` — creator counters.
+- `assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!` — agency assigns (after accepted).
+
+---
+
+## 11.1 Approval System
 
 - Approvals are records, not flags
 - Each approval has:
@@ -427,7 +502,7 @@ Client and internal approvals are strictly separated.
 
 ---
 
-## 12. Payments Module
+## 12. Payments Module (Existing)
 
 - Payments are campaign-scoped
 - Milestone-based

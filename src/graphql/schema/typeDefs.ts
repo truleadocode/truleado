@@ -93,6 +93,14 @@ export const typeDefs = gql`
     REMOVED
   }
 
+  enum ProposalState {
+    DRAFT
+    SENT
+    COUNTERED
+    ACCEPTED
+    REJECTED
+  }
+
   # =============================================================================
   # OBJECT TYPES
   # =============================================================================
@@ -255,6 +263,9 @@ export const typeDefs = gql`
     versions: [DeliverableVersion!]!
     approvals: [Approval!]!
     trackingRecord: DeliverableTrackingRecord
+    # Creator assignment
+    creator: Creator
+    proposalVersion: ProposalVersion
     createdAt: DateTime!
   }
 
@@ -349,8 +360,35 @@ export const typeDefs = gql`
     rateAmount: Money
     rateCurrency: String
     notes: String
+    # Proposal fields
+    proposalState: ProposalState
+    currentProposalVersion: Int
+    proposalAcceptedAt: DateTime
+    proposalVersions: [ProposalVersion!]!
+    currentProposal: ProposalVersion
     analyticsSnapshots: [CreatorAnalyticsSnapshot!]!
     payments: [Payment!]!
+    createdAt: DateTime!
+  }
+
+  # Proposal system types
+  type ProposalDeliverableScope {
+    deliverableType: String!
+    quantity: Int!
+    notes: String
+  }
+
+  type ProposalVersion {
+    id: ID!
+    campaignCreator: CampaignCreator!
+    versionNumber: Int!
+    state: ProposalState!
+    rateAmount: Money
+    rateCurrency: String
+    deliverableScopes: [ProposalDeliverableScope!]!
+    notes: String
+    createdBy: User
+    createdByType: String!
     createdAt: DateTime!
   }
 
@@ -559,6 +597,29 @@ export const typeDefs = gql`
     rateCurrency: String
   }
 
+  # Proposal inputs
+  input ProposalDeliverableScopeInput {
+    deliverableType: String!
+    quantity: Int!
+    notes: String
+  }
+
+  input CreateProposalInput {
+    campaignCreatorId: ID!
+    rateAmount: Money
+    rateCurrency: String
+    deliverableScopes: [ProposalDeliverableScopeInput!]!
+    notes: String
+  }
+
+  input CounterProposalInput {
+    campaignCreatorId: ID!
+    rateAmount: Money
+    rateCurrency: String
+    deliverableScopes: [ProposalDeliverableScopeInput!]!
+    notes: String
+  }
+
   # =============================================================================
   # QUERY ROOT
   # =============================================================================
@@ -631,6 +692,22 @@ export const typeDefs = gql`
 
     # Purchase history for an agency (most recent first, limit 50)
     tokenPurchases(agencyId: ID!): [TokenPurchase!]!
+
+    # ---------------------------------------------
+    # Creator Portal Queries
+    # ---------------------------------------------
+
+    # Get authenticated creator's profile
+    myCreatorProfile: Creator!
+
+    # Get creator's campaign assignments (invited or accepted)
+    myCreatorCampaigns: [CampaignCreator!]!
+
+    # Get creator's assigned deliverables, optionally filtered by campaign
+    myCreatorDeliverables(campaignId: ID): [Deliverable!]!
+
+    # Get proposal details for a specific campaign assignment
+    myCreatorProposal(campaignCreatorId: ID!): ProposalVersion
   }
 
   # =============================================================================
@@ -653,7 +730,10 @@ export const typeDefs = gql`
     
     # Client portal: create user from magic-link auth and link to contact. Idempotent.
     ensureClientUser: User!
-    
+
+    # Creator portal: create user from magic-link auth and link to creator. Idempotent.
+    ensureCreatorUser: User!
+
     # Create a new agency (signup flow)
     createAgency(name: String!, billingEmail: String): Agency!
     
@@ -881,6 +961,28 @@ export const typeDefs = gql`
       rateCurrency: String
       notes: String
     ): CampaignCreator!
+
+    # ---------------------------------------------
+    # Proposal Mutations
+    # ---------------------------------------------
+
+    # Create a draft proposal for a campaign creator (agency action)
+    createProposal(input: CreateProposalInput!): ProposalVersion!
+
+    # Send a proposal to the creator (agency action)
+    sendProposal(campaignCreatorId: ID!): ProposalVersion!
+
+    # Accept a proposal (creator action)
+    acceptProposal(campaignCreatorId: ID!): ProposalVersion!
+
+    # Reject a proposal (creator action)
+    rejectProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!
+
+    # Counter a proposal with different terms (creator action)
+    counterProposal(input: CounterProposalInput!): ProposalVersion!
+
+    # Assign a deliverable to a creator with an accepted proposal (agency action)
+    assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!
 
     # ---------------------------------------------
     # Analytics Mutations (Token-Aware)

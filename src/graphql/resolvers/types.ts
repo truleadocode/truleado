@@ -463,6 +463,25 @@ export const typeResolvers = {
         .maybeSingle();
       return data ?? null;
     },
+    // Creator assignment fields
+    creator: async (parent: { creator_id: string | null }) => {
+      if (!parent.creator_id) return null;
+      const { data } = await supabaseAdmin
+        .from('creators')
+        .select('*')
+        .eq('id', parent.creator_id)
+        .single();
+      return data;
+    },
+    proposalVersion: async (parent: { proposal_version_id: string | null }) => {
+      if (!parent.proposal_version_id) return null;
+      const { data } = await supabaseAdmin
+        .from('proposal_versions')
+        .select('*')
+        .eq('id', parent.proposal_version_id)
+        .single();
+      return data;
+    },
   },
 
   DeliverableTrackingRecord: {
@@ -669,6 +688,31 @@ export const typeResolvers = {
       parent.status.toUpperCase(),
     rateAmount: (parent: { rate_amount: number | null }) => parent.rate_amount,
     rateCurrency: (parent: { rate_currency: string }) => parent.rate_currency,
+    // Proposal fields
+    proposalState: (parent: { proposal_state: string | null }) =>
+      parent.proposal_state?.toUpperCase() ?? null,
+    currentProposalVersion: (parent: { current_proposal_version: number | null }) =>
+      parent.current_proposal_version,
+    proposalAcceptedAt: (parent: { proposal_accepted_at: string | null }) =>
+      parent.proposal_accepted_at,
+    proposalVersions: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('proposal_versions')
+        .select('*')
+        .eq('campaign_creator_id', parent.id)
+        .order('version_number', { ascending: false });
+      return data || [];
+    },
+    currentProposal: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('proposal_versions')
+        .select('*')
+        .eq('campaign_creator_id', parent.id)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data ?? null;
+    },
     analyticsSnapshots: async (parent: WithId) => {
       const { data } = await supabaseAdmin
         .from('creator_analytics_snapshots')
@@ -685,6 +729,42 @@ export const typeResolvers = {
         .order('created_at', { ascending: false });
       return data || [];
     },
+  },
+
+  ProposalVersion: {
+    // Field mappings
+    versionNumber: (parent: { version_number: number }) => parent.version_number,
+    state: (parent: { state: string }) => parent.state.toUpperCase(),
+    rateAmount: (parent: { rate_amount: number | null }) => parent.rate_amount,
+    rateCurrency: (parent: { rate_currency: string | null }) => parent.rate_currency,
+    deliverableScopes: (parent: { deliverable_scopes: unknown }) =>
+      parent.deliverable_scopes ?? [],
+    createdByType: (parent: { created_by_type: string }) => parent.created_by_type,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    campaignCreator: async (parent: { campaign_creator_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_creators')
+        .select('*')
+        .eq('id', parent.campaign_creator_id)
+        .single();
+      return data;
+    },
+    createdBy: async (parent: { created_by: string | null }) => {
+      if (!parent.created_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+  },
+
+  ProposalDeliverableScope: {
+    // These are from the JSONB field, already in camelCase
+    deliverableType: (parent: { deliverableType: string }) => parent.deliverableType,
+    quantity: (parent: { quantity: number }) => parent.quantity,
+    notes: (parent: { notes: string | null }) => parent.notes ?? null,
   },
 
   CreatorAnalyticsSnapshot: {

@@ -636,7 +636,7 @@ export default function CampaignDetailPage() {
     }
   }
 
-  // Assign Creator handlers
+  // Invite Creator handlers
   const openAssignCreator = async () => {
     if (!currentAgency?.id) return
     setAssignCreatorOpen(true)
@@ -1166,7 +1166,7 @@ export default function CampaignDetailPage() {
               {!isArchived && (
                 <Button size="sm" variant="outline" onClick={openAssignCreator}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Assign Creator
+                  Invite Creator
                 </Button>
               )}
             </div>
@@ -1177,7 +1177,7 @@ export default function CampaignDetailPage() {
                   <Users className="h-10 w-10 text-muted-foreground mb-3" />
                   <h3 className="font-medium">No creators assigned</h3>
                   <p className="text-sm text-muted-foreground text-center mt-1">
-                    Assign creators from your roster
+                    Invite creators from your roster
                   </p>
                 </CardContent>
               </Card>
@@ -1604,12 +1604,12 @@ export default function CampaignDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Creator Dialog */}
+      {/* Invite Creator Dialog */}
       <Dialog open={assignCreatorOpen} onOpenChange={setAssignCreatorOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign Creator to Campaign</DialogTitle>
-            <DialogDescription>Select a creator from your roster</DialogDescription>
+            <DialogTitle>Invite Creator to Campaign</DialogTitle>
+            <DialogDescription>Select a creator and send them a proposal via email</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input
@@ -1688,7 +1688,7 @@ export default function CampaignDetailPage() {
               Cancel
             </Button>
             <Button onClick={handleAssignCreator} disabled={!selectedCreatorId || assigning}>
-              {assigning ? 'Assigning...' : 'Assign Creator'}
+              {assigning ? 'Sending...' : 'Send Invite'}
             </Button>
           </DialogFooter>
         </DialogContent>

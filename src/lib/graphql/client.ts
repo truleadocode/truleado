@@ -716,6 +716,126 @@ export const queries = {
     }
   `,
 
+  // Creator Portal Queries
+  myCreatorProfile: `
+    query MyCreatorProfile {
+      myCreatorProfile {
+        id
+        displayName
+        email
+        phone
+        instagramHandle
+        youtubeHandle
+        tiktokHandle
+        facebookHandle
+        linkedinHandle
+        notes
+        isActive
+        createdAt
+      }
+    }
+  `,
+
+  myCreatorCampaigns: `
+    query MyCreatorCampaigns {
+      myCreatorCampaigns {
+        id
+        status
+        rateAmount
+        rateCurrency
+        notes
+        proposalState
+        proposalAcceptedAt
+        createdAt
+        campaign {
+          id
+          name
+          description
+          status
+          startDate
+          endDate
+          project {
+            id
+            name
+            client {
+              id
+              name
+            }
+          }
+        }
+        currentProposal {
+          id
+          versionNumber
+          state
+          rateAmount
+          rateCurrency
+          notes
+          createdAt
+        }
+      }
+    }
+  `,
+
+  myCreatorDeliverables: `
+    query MyCreatorDeliverables($campaignId: ID) {
+      myCreatorDeliverables(campaignId: $campaignId) {
+        id
+        title
+        description
+        deliverableType
+        status
+        dueDate
+        createdAt
+        campaign {
+          id
+          name
+          project {
+            id
+            name
+            client {
+              id
+              name
+            }
+          }
+        }
+        versions {
+          id
+          versionNumber
+          fileUrl
+          fileName
+          createdAt
+        }
+        trackingRecord {
+          id
+          urls {
+            id
+            url
+          }
+        }
+      }
+    }
+  `,
+
+  myCreatorProposal: `
+    query MyCreatorProposal($campaignCreatorId: ID!) {
+      myCreatorProposal(campaignCreatorId: $campaignCreatorId) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        notes
+        deliverableScopes {
+          deliverableType
+          quantity
+          notes
+        }
+        createdByType
+        createdAt
+      }
+    }
+  `,
+
   // Billing / Token Purchases
   agencyTokenBalance: `
     query GetAgencyTokenBalance($id: ID!) {
@@ -788,6 +908,16 @@ export const mutations = {
         email
         name
         contact { id }
+      }
+    }
+  `,
+
+  ensureCreatorUser: `
+    mutation EnsureCreatorUser {
+      ensureCreatorUser {
+        id
+        email
+        name
       }
     }
   `,
@@ -1271,6 +1401,45 @@ export const mutations = {
         platform
         jobType
         status
+        createdAt
+      }
+    }
+  `,
+
+  // Creator Portal Mutations
+  acceptProposal: `
+    mutation AcceptProposal($campaignCreatorId: ID!) {
+      acceptProposal(campaignCreatorId: $campaignCreatorId) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        createdAt
+      }
+    }
+  `,
+
+  rejectProposal: `
+    mutation RejectProposal($campaignCreatorId: ID!, $reason: String) {
+      rejectProposal(campaignCreatorId: $campaignCreatorId, reason: $reason) {
+        id
+        versionNumber
+        state
+        createdAt
+      }
+    }
+  `,
+
+  counterProposal: `
+    mutation CounterProposal($input: CounterProposalInput!) {
+      counterProposal(input: $input) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        notes
         createdAt
       }
     }
