@@ -19,6 +19,7 @@ import {
   getAgencyIdForClient,
   getAgencyRole,
   requireClientApproverDeliverableAccess,
+  hasCreatorDeliverableAccess,
   AgencyRole,
 } from '@/lib/rbac';
 import { notFoundError, forbiddenError } from '../errors';
@@ -333,27 +334,39 @@ export const queryResolvers = {
   },
 
   /**
-   * Get a deliverable by ID (agency users via campaign access, client users via client approver access)
+   * Get a deliverable by ID (agency users via campaign access, creators via assignment, client users via client approver access)
    */
   deliverable: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
     requireAuth(ctx);
-    
+
     const { data: deliverable, error } = await supabaseAdmin
       .from('deliverables')
       .select('*, campaigns!inner(id)')
       .eq('id', id)
       .single();
-    
+
     if (error || !deliverable) {
       throw notFoundError('Deliverable', id);
     }
-    
+
     const campaigns = deliverable.campaigns as { id: string };
+
+    // Agency users: check campaign access
     const hasAgency = ctx.user?.agencies?.some((a) => a.isActive) ?? false;
     if (hasAgency) {
       await requireCampaignAccess(ctx, campaigns.id);
       return deliverable;
     }
+
+    // Creators: check if deliverable is assigned to them
+    if (ctx.creator) {
+      const creatorHasAccess = await hasCreatorDeliverableAccess(ctx.creator.id, id);
+      if (creatorHasAccess) {
+        return deliverable;
+      }
+    }
+
+    // Client approvers: check client access
     await requireClientApproverDeliverableAccess(ctx, id);
     return deliverable;
   },

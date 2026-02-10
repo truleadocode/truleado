@@ -266,6 +266,9 @@ export const typeDefs = gql`
     # Creator assignment
     creator: Creator
     proposalVersion: ProposalVersion
+    # Activity comments and events
+    comments: [DeliverableComment!]!
+    submissionEvents: [SubmissionEvent!]!
     createdAt: DateTime!
   }
 
@@ -366,6 +369,7 @@ export const typeDefs = gql`
     proposalAcceptedAt: DateTime
     proposalVersions: [ProposalVersion!]!
     currentProposal: ProposalVersion
+    proposalNotes: [ProposalNote!]!
     analyticsSnapshots: [CreatorAnalyticsSnapshot!]!
     payments: [Payment!]!
     createdAt: DateTime!
@@ -390,6 +394,33 @@ export const typeDefs = gql`
     createdBy: User
     createdByType: String!
     createdAt: DateTime!
+  }
+
+  # Proposal notes for timeline messages
+  type ProposalNote {
+    id: ID!
+    campaignCreatorId: ID!
+    message: String!
+    createdBy: User
+    createdByType: String!
+    createdAt: DateTime!
+  }
+
+  # Deliverable comments for activity timeline
+  type DeliverableComment {
+    id: ID!
+    deliverableId: ID!
+    message: String!
+    createdBy: User
+    createdByType: String!
+    createdAt: DateTime!
+  }
+
+  # Submission events for activity timeline (from activity_logs)
+  type SubmissionEvent {
+    id: ID!
+    createdAt: DateTime!
+    submittedBy: User
   }
 
   # 4.9 Analytics (Immutable)
@@ -557,6 +588,7 @@ export const typeDefs = gql`
     fromEmail: String!
     fromName: String
     novuIntegrationIdentifier: String
+    useCustomSmtp: Boolean!
     createdAt: DateTime!
     updatedAt: DateTime!
   }
@@ -582,6 +614,7 @@ export const typeDefs = gql`
     smtpPassword: String
     fromEmail: String!
     fromName: String
+    useCustomSmtp: Boolean
   }
 
   input AgencyLocaleInput {
@@ -616,7 +649,23 @@ export const typeDefs = gql`
     campaignCreatorId: ID!
     rateAmount: Money
     rateCurrency: String
-    deliverableScopes: [ProposalDeliverableScopeInput!]!
+    deliverableScopes: [ProposalDeliverableScopeInput!]
+    notes: String
+  }
+
+  input ReCounterProposalInput {
+    campaignCreatorId: ID!
+    rateAmount: Money
+    rateCurrency: String
+    deliverableScopes: [ProposalDeliverableScopeInput!]
+    notes: String
+  }
+
+  input ReopenProposalInput {
+    campaignCreatorId: ID!
+    rateAmount: Money
+    rateCurrency: String
+    deliverableScopes: [ProposalDeliverableScopeInput!]
     notes: String
   }
 
@@ -980,6 +1029,24 @@ export const typeDefs = gql`
 
     # Counter a proposal with different terms (creator action)
     counterProposal(input: CounterProposalInput!): ProposalVersion!
+
+    # Accept a creator's counter proposal (agency action)
+    acceptCounterProposal(campaignCreatorId: ID!): ProposalVersion!
+
+    # Decline a creator's counter proposal (agency action)
+    declineCounterProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!
+
+    # Re-counter a creator's counter proposal with new terms (agency action)
+    reCounterProposal(input: ReCounterProposalInput!): ProposalVersion!
+
+    # Reopen a rejected proposal with new terms (agency action)
+    reopenProposal(input: ReopenProposalInput!): ProposalVersion!
+
+    # Add a note to the proposal timeline
+    addProposalNote(campaignCreatorId: ID!, message: String!): ProposalNote!
+
+    # Add a comment to the deliverable activity timeline
+    addDeliverableComment(deliverableId: ID!, message: String!): DeliverableComment!
 
     # Assign a deliverable to a creator with an accepted proposal (agency action)
     assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!

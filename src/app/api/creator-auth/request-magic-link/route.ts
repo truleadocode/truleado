@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { adminAuth } from '@/lib/firebase/admin';
 import { triggerNotification } from '@/lib/novu/trigger';
+import { ensureSubscriber } from '@/lib/novu/subscriber';
 
 export const runtime = 'nodejs';
 
@@ -65,6 +66,14 @@ export async function POST(request: NextRequest) {
     const link = await adminAuth.generateSignInWithEmailLink(email, {
       url: continueUrl,
       handleCodeInApp: true,
+    });
+
+    // Ensure subscriber exists with tenant association for multi-tenant support
+    await ensureSubscriber({
+      subscriberId: email,
+      email: email,
+      firstName: creator.display_name ?? undefined,
+      tenantId: creator.agency_id,
     });
 
     // Send magic link via Novu

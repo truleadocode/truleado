@@ -472,7 +472,7 @@ export async function counterProposal(
       campaignCreatorId: string;
       rateAmount?: number;
       rateCurrency?: string;
-      deliverableScopes: DeliverableScopeInput[];
+      deliverableScopes?: DeliverableScopeInput[];
       notes?: string;
     };
   },
@@ -502,10 +502,10 @@ export async function counterProposal(
     );
   }
 
-  // Validate deliverable scopes
-  if (!deliverableScopes || deliverableScopes.length === 0) {
-    throw validationError('At least one deliverable scope is required');
-  }
+  // Use provided deliverable scopes or fall back to previous proposal's scopes
+  const finalDeliverableScopes = deliverableScopes && deliverableScopes.length > 0
+    ? deliverableScopes
+    : latestProposal.deliverable_scopes;
 
   // Get next version number
   const versionNumber = await getNextVersionNumber(campaignCreatorId);
@@ -519,7 +519,7 @@ export async function counterProposal(
       state: 'countered',
       rate_amount: rateAmount ?? null,
       rate_currency: rateCurrency || latestProposal.rate_currency || 'USD',
-      deliverable_scopes: deliverableScopes,
+      deliverable_scopes: finalDeliverableScopes,
       notes: notes?.trim() || null,
       created_by: ctx.user!.id,
       created_by_type: 'creator',
@@ -655,6 +655,574 @@ export async function rejectProposal(
   }
 
   return proposal;
+}
+
+/**
+ * Accept a counter proposal (agency action)
+ * Agency accepts the creator's counter terms
+ */
+export async function acceptCounterProposal(
+  _: unknown,
+  { campaignCreatorId }: { campaignCreatorId: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  // Fetch campaign_creator with campaign info
+  const { data: campaignCreator, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select(`
+      *,
+      campaigns!inner(id, name, project_id, projects!inner(client_id, clients!inner(agency_id))),
+      creators!inner(id, email, display_name)
+    `)
+    .eq('id', campaignCreatorId)
+    .single();
+
+  if (fetchError || !campaignCreator) {
+    throw notFoundError('CampaignCreator', campaignCreatorId);
+  }
+
+  const campaigns = campaignCreator.campaigns as {
+    id: string;
+    name: string;
+    project_id: string;
+    projects: { client_id: string; clients: { agency_id: string } };
+  };
+  const creators = campaignCreator.creators as {
+    id: string;
+    email: string | null;
+    display_name: string;
+  };
+
+  // Check agency access
+  await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+  const agencyId = campaigns.projects.clients.agency_id;
+
+  // Get latest proposal
+  const latestProposal = await getLatestProposal(campaignCreatorId);
+  if (!latestProposal) {
+    throw validationError('No proposal exists');
+  }
+
+  // Can only accept when proposal is countered
+  if (latestProposal.state !== 'countered') {
+    throw invalidStateError(
+      `Can only accept counter from countered state, current state: ${latestProposal.state}`,
+      latestProposal.state,
+      'accepted'
+    );
+  }
+
+  // Get next version number
+  const versionNumber = await getNextVersionNumber(campaignCreatorId);
+
+  // Insert accepted version
+  const { data: proposal, error: insertError } = await supabaseAdmin
+    .from('proposal_versions')
+    .insert({
+      campaign_creator_id: campaignCreatorId,
+      version_number: versionNumber,
+      state: 'accepted',
+      rate_amount: latestProposal.rate_amount,
+      rate_currency: latestProposal.rate_currency,
+      deliverable_scopes: latestProposal.deliverable_scopes,
+      notes: latestProposal.notes,
+      created_by: ctx.user!.id,
+      created_by_type: 'agency',
+    })
+    .select()
+    .single();
+
+  if (insertError || !proposal) {
+    throw new Error('Failed to accept counter proposal');
+  }
+
+  // Update campaign_creator status to accepted
+  await supabaseAdmin
+    .from('campaign_creators')
+    .update({ status: 'accepted' })
+    .eq('id', campaignCreatorId);
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'proposal_version',
+    entityId: proposal.id,
+    action: 'counter_accepted',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: latestProposal as unknown as Record<string, unknown>,
+    afterState: proposal as unknown as Record<string, unknown>,
+    metadata: { campaignCreatorId },
+  });
+
+  // TODO: Notify creator that their counter was accepted
+
+  return proposal;
+}
+
+/**
+ * Decline a counter proposal (agency action)
+ * Agency declines the creator's counter terms
+ */
+export async function declineCounterProposal(
+  _: unknown,
+  { campaignCreatorId, reason }: { campaignCreatorId: string; reason?: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  // Fetch campaign_creator with campaign info
+  const { data: campaignCreator, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select(`
+      *,
+      campaigns!inner(id, name, project_id, projects!inner(client_id, clients!inner(agency_id))),
+      creators!inner(id, email, display_name)
+    `)
+    .eq('id', campaignCreatorId)
+    .single();
+
+  if (fetchError || !campaignCreator) {
+    throw notFoundError('CampaignCreator', campaignCreatorId);
+  }
+
+  const campaigns = campaignCreator.campaigns as {
+    id: string;
+    name: string;
+    project_id: string;
+    projects: { client_id: string; clients: { agency_id: string } };
+  };
+
+  // Check agency access
+  await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+  const agencyId = campaigns.projects.clients.agency_id;
+
+  // Get latest proposal
+  const latestProposal = await getLatestProposal(campaignCreatorId);
+  if (!latestProposal) {
+    throw validationError('No proposal exists');
+  }
+
+  // Can only decline when proposal is countered
+  if (latestProposal.state !== 'countered') {
+    throw invalidStateError(
+      `Can only decline counter from countered state, current state: ${latestProposal.state}`,
+      latestProposal.state,
+      'rejected'
+    );
+  }
+
+  // Get next version number
+  const versionNumber = await getNextVersionNumber(campaignCreatorId);
+
+  // Insert rejected version
+  const { data: proposal, error: insertError } = await supabaseAdmin
+    .from('proposal_versions')
+    .insert({
+      campaign_creator_id: campaignCreatorId,
+      version_number: versionNumber,
+      state: 'rejected',
+      rate_amount: latestProposal.rate_amount,
+      rate_currency: latestProposal.rate_currency,
+      deliverable_scopes: latestProposal.deliverable_scopes,
+      notes: reason?.trim() || latestProposal.notes,
+      created_by: ctx.user!.id,
+      created_by_type: 'agency',
+    })
+    .select()
+    .single();
+
+  if (insertError || !proposal) {
+    throw new Error('Failed to decline counter proposal');
+  }
+
+  // Update campaign_creator status to declined
+  await supabaseAdmin
+    .from('campaign_creators')
+    .update({ status: 'declined' })
+    .eq('id', campaignCreatorId);
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'proposal_version',
+    entityId: proposal.id,
+    action: 'counter_declined',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: latestProposal as unknown as Record<string, unknown>,
+    afterState: proposal as unknown as Record<string, unknown>,
+    metadata: { campaignCreatorId, reason },
+  });
+
+  // TODO: Notify creator that their counter was declined
+
+  return proposal;
+}
+
+/**
+ * Re-counter a creator's counter proposal (agency action)
+ * Agency proposes new terms back to the creator - creates a negotiation loop
+ */
+export async function reCounterProposal(
+  _: unknown,
+  {
+    input,
+  }: {
+    input: {
+      campaignCreatorId: string;
+      rateAmount?: number;
+      rateCurrency?: string;
+      deliverableScopes?: DeliverableScopeInput[];
+      notes?: string;
+    };
+  },
+  ctx: GraphQLContext
+) {
+  const { campaignCreatorId, rateAmount, rateCurrency, deliverableScopes, notes } = input;
+
+  requireAuth(ctx);
+
+  // Fetch campaign_creator with campaign info
+  const { data: campaignCreator, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select(`
+      *,
+      campaigns!inner(id, name, project_id, projects!inner(client_id, clients!inner(agency_id))),
+      creators!inner(id, email, display_name)
+    `)
+    .eq('id', campaignCreatorId)
+    .single();
+
+  if (fetchError || !campaignCreator) {
+    throw notFoundError('CampaignCreator', campaignCreatorId);
+  }
+
+  const campaigns = campaignCreator.campaigns as {
+    id: string;
+    name: string;
+    project_id: string;
+    projects: { client_id: string; clients: { agency_id: string } };
+  };
+  const creators = campaignCreator.creators as {
+    id: string;
+    email: string | null;
+    display_name: string;
+  };
+
+  // Check agency access
+  await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+  const agencyId = campaigns.projects.clients.agency_id;
+
+  // Get latest proposal
+  const latestProposal = await getLatestProposal(campaignCreatorId);
+  if (!latestProposal) {
+    throw validationError('No proposal exists');
+  }
+
+  // Can only re-counter when proposal is in countered state
+  if (latestProposal.state !== 'countered') {
+    throw invalidStateError(
+      `Can only re-counter from countered state, current state: ${latestProposal.state}`,
+      latestProposal.state,
+      'sent'
+    );
+  }
+
+  // Use provided deliverable scopes or fall back to previous proposal's scopes
+  const finalDeliverableScopes = deliverableScopes && deliverableScopes.length > 0
+    ? deliverableScopes
+    : latestProposal.deliverable_scopes;
+
+  // Get next version number
+  const versionNumber = await getNextVersionNumber(campaignCreatorId);
+
+  // Insert re-countered version (state: sent - back to creator for review)
+  const { data: proposal, error: insertError } = await supabaseAdmin
+    .from('proposal_versions')
+    .insert({
+      campaign_creator_id: campaignCreatorId,
+      version_number: versionNumber,
+      state: 'sent', // Goes back to 'sent' state for creator to review
+      rate_amount: rateAmount ?? latestProposal.rate_amount,
+      rate_currency: rateCurrency || latestProposal.rate_currency || 'INR',
+      deliverable_scopes: finalDeliverableScopes,
+      notes: notes?.trim() || null,
+      created_by: ctx.user!.id,
+      created_by_type: 'agency',
+    })
+    .select()
+    .single();
+
+  if (insertError || !proposal) {
+    throw new Error('Failed to re-counter proposal');
+  }
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'proposal_version',
+    entityId: proposal.id,
+    action: 're_countered',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: latestProposal as unknown as Record<string, unknown>,
+    afterState: proposal as unknown as Record<string, unknown>,
+    metadata: { campaignCreatorId },
+  });
+
+  // Notify creator of the re-counter
+  if (creators.email) {
+    try {
+      await notifyProposalSent({
+        agencyId,
+        creatorEmail: creators.email,
+        creatorName: creators.display_name || 'Creator',
+        campaignName: campaigns.name,
+        campaignCreatorId,
+        rateAmount: proposal.rate_amount ?? undefined,
+        rateCurrency: proposal.rate_currency || 'INR',
+      });
+    } catch (err) {
+      console.error('[Proposal] Failed to send re-counter notification:', err);
+    }
+  }
+
+  return proposal;
+}
+
+/**
+ * Reopen a rejected proposal (agency action)
+ * Allows agency to restart negotiations after a proposal has been rejected
+ */
+export async function reopenProposal(
+  _: unknown,
+  {
+    input,
+  }: {
+    input: {
+      campaignCreatorId: string;
+      rateAmount?: number;
+      rateCurrency?: string;
+      deliverableScopes?: DeliverableScopeInput[];
+      notes?: string;
+    };
+  },
+  ctx: GraphQLContext
+) {
+  const { campaignCreatorId, rateAmount, rateCurrency, deliverableScopes, notes } = input;
+
+  requireAuth(ctx);
+
+  // Fetch campaign_creator with campaign info
+  const { data: campaignCreator, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select(`
+      *,
+      campaigns!inner(id, name, project_id, projects!inner(client_id, clients!inner(agency_id))),
+      creators!inner(id, email, display_name)
+    `)
+    .eq('id', campaignCreatorId)
+    .single();
+
+  if (fetchError || !campaignCreator) {
+    throw notFoundError('CampaignCreator', campaignCreatorId);
+  }
+
+  const campaigns = campaignCreator.campaigns as {
+    id: string;
+    name: string;
+    project_id: string;
+    projects: { client_id: string; clients: { agency_id: string } };
+  };
+  const creators = campaignCreator.creators as {
+    id: string;
+    email: string | null;
+    display_name: string;
+  };
+
+  // Check agency access
+  await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+  const agencyId = campaigns.projects.clients.agency_id;
+
+  // Get latest proposal
+  const latestProposal = await getLatestProposal(campaignCreatorId);
+  if (!latestProposal) {
+    throw validationError('No proposal exists');
+  }
+
+  // Can only reopen when proposal is in rejected state
+  if (latestProposal.state !== 'rejected') {
+    throw invalidStateError(
+      `Can only reopen from rejected state, current state: ${latestProposal.state}`,
+      latestProposal.state,
+      'sent'
+    );
+  }
+
+  // Use provided deliverable scopes or fall back to previous proposal's scopes
+  const finalDeliverableScopes = deliverableScopes && deliverableScopes.length > 0
+    ? deliverableScopes
+    : latestProposal.deliverable_scopes;
+
+  // Get next version number
+  const versionNumber = await getNextVersionNumber(campaignCreatorId);
+
+  // Insert reopened proposal (state: sent - fresh start for creator)
+  const { data: proposal, error: insertError } = await supabaseAdmin
+    .from('proposal_versions')
+    .insert({
+      campaign_creator_id: campaignCreatorId,
+      version_number: versionNumber,
+      state: 'sent',
+      rate_amount: rateAmount ?? latestProposal.rate_amount,
+      rate_currency: rateCurrency || latestProposal.rate_currency || 'INR',
+      deliverable_scopes: finalDeliverableScopes,
+      notes: notes?.trim() || null,
+      created_by: ctx.user!.id,
+      created_by_type: 'agency',
+    })
+    .select()
+    .single();
+
+  if (insertError || !proposal) {
+    throw new Error('Failed to reopen proposal');
+  }
+
+  // Update campaign_creator status back to invited
+  await supabaseAdmin
+    .from('campaign_creators')
+    .update({ status: 'invited' })
+    .eq('id', campaignCreatorId);
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'proposal_version',
+    entityId: proposal.id,
+    action: 'proposal_reopened',
+    actorId: ctx.user!.id,
+    actorType: 'user',
+    beforeState: latestProposal as unknown as Record<string, unknown>,
+    afterState: proposal as unknown as Record<string, unknown>,
+    metadata: { campaignCreatorId },
+  });
+
+  // Notify creator of the reopened proposal
+  if (creators.email) {
+    try {
+      await notifyProposalSent({
+        agencyId,
+        creatorEmail: creators.email,
+        creatorName: creators.display_name || 'Creator',
+        campaignName: campaigns.name,
+        campaignCreatorId,
+        rateAmount: proposal.rate_amount ?? undefined,
+        rateCurrency: proposal.rate_currency || 'INR',
+      });
+    } catch (err) {
+      console.error('[Proposal] Failed to send reopen notification:', err);
+    }
+  }
+
+  return proposal;
+}
+
+/**
+ * Add a note to the proposal timeline
+ * Both agency and creator can add notes
+ */
+export async function addProposalNote(
+  _: unknown,
+  { campaignCreatorId, message }: { campaignCreatorId: string; message: string },
+  ctx: GraphQLContext
+) {
+  // Determine if this is agency or creator
+  let createdByType: 'agency' | 'creator';
+  let createdBy: string;
+  let agencyId: string;
+
+  if (ctx.creator) {
+    // Creator adding a note
+    const { campaignCreator, agencyId: aId } = await verifyCreatorOwnsProposal(
+      ctx.creator.id,
+      campaignCreatorId
+    );
+    createdByType = 'creator';
+    createdBy = ctx.user?.id || ctx.creator.id;
+    agencyId = aId;
+  } else {
+    // Agency user adding a note
+    requireAuth(ctx);
+
+    const { data: campaignCreator, error: fetchError } = await supabaseAdmin
+      .from('campaign_creators')
+      .select(`
+        *,
+        campaigns!inner(id, project_id, projects!inner(client_id, clients!inner(agency_id)))
+      `)
+      .eq('id', campaignCreatorId)
+      .single();
+
+    if (fetchError || !campaignCreator) {
+      throw notFoundError('CampaignCreator', campaignCreatorId);
+    }
+
+    const campaigns = campaignCreator.campaigns as {
+      id: string;
+      project_id: string;
+      projects: { client_id: string; clients: { agency_id: string } };
+    };
+
+    await requireCampaignAccess(ctx, campaigns.id, Permission.INVITE_CREATOR);
+
+    createdByType = 'agency';
+    createdBy = ctx.user!.id;
+    agencyId = campaigns.projects.clients.agency_id;
+  }
+
+  // Validate message
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage) {
+    throw validationError('Message cannot be empty');
+  }
+
+  // Insert the note
+  const { data: note, error: insertError } = await supabaseAdmin
+    .from('proposal_notes')
+    .insert({
+      campaign_creator_id: campaignCreatorId,
+      message: trimmedMessage,
+      created_by: createdBy,
+      created_by_type: createdByType,
+    })
+    .select()
+    .single();
+
+  if (insertError || !note) {
+    console.error('[Proposal] Failed to add note:', insertError);
+    throw new Error('Failed to add note');
+  }
+
+  // Log activity
+  await logActivity({
+    agencyId,
+    entityType: 'proposal_note',
+    entityId: note.id,
+    action: 'note_added',
+    actorId: createdBy,
+    actorType: 'user',
+    afterState: note as unknown as Record<string, unknown>,
+    metadata: { campaignCreatorId },
+  });
+
+  return note;
 }
 
 /**

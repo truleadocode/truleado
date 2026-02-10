@@ -1,7 +1,15 @@
 /**
- * Central service to trigger Novu workflows with correct subscriber, tenant, and email overrides.
- * Uses Novu REST API directly so we can pass context (for Inbox filtering) and log full request/response.
- * Tenant must exist in Novu before triggering (no_tenant_found otherwise); we ensure it per agency.
+ * Central service to trigger Novu workflows with optional tenant context.
+ * Uses Novu REST API directly for full control and logging.
+ *
+ * Multi-tenant setup:
+ * - Each agency has a tenant in Novu (created via ensureTenant)
+ * - Each agency's SMTP integration has conditions matching their tenant.identifier
+ * - When triggering with a tenant, Novu auto-selects the matching integration
+ *
+ * Fallback:
+ * - If agency has use_custom_smtp=false or no config, we don't pass tenant
+ * - This causes Novu to use the default (primary) integration (Mailgun)
  */
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -15,6 +23,17 @@ export type TriggerPayload = {
   agencyId: string;
   data: Record<string, unknown>;
 };
+
+/** Check if agency has custom SMTP enabled */
+async function isCustomSmtpEnabled(agencyId: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('agency_email_config')
+    .select('use_custom_smtp')
+    .eq('agency_id', agencyId)
+    .maybeSingle();
+
+  return data?.use_custom_smtp === true;
+}
 
 /** Ensure the agency exists as a Novu tenant so trigger does not return no_tenant_found. */
 async function ensureTenant(agencyId: string, secretKey: string): Promise<void> {
@@ -55,25 +74,30 @@ export async function triggerNotification(payload: TriggerPayload): Promise<void
   const { workflowId, subscriberId, email, agencyId, data } = payload;
 
   try {
-    await ensureTenant(agencyId, secretKey);
+    // Check if agency wants to use custom SMTP
+    const useCustomSmtp = await isCustomSmtpEnabled(agencyId);
 
-    const integrationIdentifier = await getAgencyNovuIntegrationIdentifier(agencyId);
+    // Only ensure tenant and use tenant context if custom SMTP is enabled
+    // Otherwise, Novu will use the default (primary) Mailgun integration
+    if (useCustomSmtp) {
+      await ensureTenant(agencyId, secretKey);
+    }
 
-    // REST API body: name, to, payload, tenant, context (for Inbox), overrides
-    const body = {
+    // Build request body - only include tenant if custom SMTP is enabled
+    const body: Record<string, unknown> = {
       name: workflowId,
       to: {
         subscriberId,
         email: email ?? undefined,
       },
       payload: data,
-      tenant: agencyId,
-      // Context must match Inbox context so notifications appear (multi-tenancy).
-      context: { tenant: { id: agencyId, data: {} } },
-      ...(integrationIdentifier && {
-        overrides: { email: { integrationIdentifier } },
-      }),
     };
+
+    if (useCustomSmtp) {
+      body.tenant = agencyId;
+    }
+
+    console.log('[Novu] Trigger using', useCustomSmtp ? 'custom SMTP' : 'default Mailgun', 'for agency', agencyId);
 
     const res = await fetch(`${NOVU_API_BASE}/events/trigger`, {
       method: 'POST',
@@ -113,11 +137,5 @@ export async function triggerNotification(payload: TriggerPayload): Promise<void
   }
 }
 
-export async function getAgencyNovuIntegrationIdentifier(agencyId: string): Promise<string | null> {
-  const { data } = await supabaseAdmin
-    .from('agency_email_config')
-    .select('novu_integration_identifier')
-    .eq('agency_id', agencyId)
-    .maybeSingle();
-  return data?.novu_integration_identifier ?? null;
-}
+// Note: getAgencyNovuIntegrationIdentifier is no longer needed as tenant conditions
+// on integrations auto-select the right SMTP config based on the tenant passed in trigger

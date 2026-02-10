@@ -68,11 +68,12 @@ export async function notifyProposalSent(params: {
     rateCurrency = 'INR',
   } = params;
 
-  // Ensure subscriber exists in Novu
+  // Ensure subscriber exists in Novu with tenant association
   await ensureSubscriber({
     subscriberId: creatorEmail,
     email: creatorEmail,
     firstName: creatorName,
+    tenantId: agencyId,
   });
 
   // Format rate for display
@@ -129,7 +130,10 @@ export async function notifyProposalAccepted(params: {
         subscriberId: user.id,
         email: user.email,
         firstName: user.full_name,
+        tenantId: agencyId,
       });
+
+      const baseUrl = getBaseUrl();
 
       await triggerNotification({
         workflowId: 'proposal-accepted',
@@ -139,7 +143,8 @@ export async function notifyProposalAccepted(params: {
         data: {
           creatorName,
           campaignName,
-          actionUrl: `/dashboard/campaigns/${campaignId}/creators`,
+          baseUrl,
+          actionUrl: `/dashboard/campaigns/${campaignId}`,
         },
       });
     } catch (err) {
@@ -192,7 +197,10 @@ export async function notifyProposalCountered(params: {
         subscriberId: user.id,
         email: user.email,
         firstName: user.full_name,
+        tenantId: agencyId,
       });
+
+      const baseUrl = getBaseUrl();
 
       await triggerNotification({
         workflowId: 'proposal-countered',
@@ -204,7 +212,8 @@ export async function notifyProposalCountered(params: {
           campaignName,
           rateAmount,
           rateCurrency,
-          actionUrl: `/dashboard/campaigns/${campaignId}/creators`,
+          baseUrl,
+          actionUrl: `/dashboard/campaigns/${campaignId}`,
         },
       });
     } catch (err) {
@@ -248,7 +257,10 @@ export async function notifyProposalRejected(params: {
         subscriberId: user.id,
         email: user.email,
         firstName: user.full_name,
+        tenantId: agencyId,
       });
+
+      const baseUrl = getBaseUrl();
 
       await triggerNotification({
         workflowId: 'proposal-rejected',
@@ -259,7 +271,8 @@ export async function notifyProposalRejected(params: {
           creatorName,
           campaignName,
           reason: reason ?? 'No reason provided',
-          actionUrl: `/dashboard/campaigns/${campaignId}/creators`,
+          baseUrl,
+          actionUrl: `/dashboard/campaigns/${campaignId}`,
         },
       });
     } catch (err) {
@@ -294,7 +307,10 @@ export async function notifyDeliverableAssigned(params: {
     subscriberId: creatorEmail,
     email: creatorEmail,
     firstName: creatorName,
+    tenantId: agencyId,
   });
+
+  const baseUrl = getBaseUrl();
 
   await triggerNotification({
     workflowId: 'deliverable-assigned',
@@ -306,6 +322,7 @@ export async function notifyDeliverableAssigned(params: {
       deliverableTitle,
       campaignName,
       dueDate,
+      baseUrl,
       actionUrl: `/creator/deliverables/${deliverableId}`,
     },
   });
@@ -337,7 +354,10 @@ export async function notifyCreatorDeliverableApproved(params: {
     subscriberId: creatorEmail,
     email: creatorEmail,
     firstName: creatorName,
+    tenantId: agencyId,
   });
+
+  const baseUrl = getBaseUrl();
 
   await triggerNotification({
     workflowId: 'deliverable-approved-creator',
@@ -349,6 +369,7 @@ export async function notifyCreatorDeliverableApproved(params: {
       deliverableTitle,
       approverName,
       comment: comment ?? '',
+      baseUrl,
       actionUrl: `/creator/deliverables/${deliverableId}`,
     },
   });
@@ -380,7 +401,10 @@ export async function notifyCreatorDeliverableRejected(params: {
     subscriberId: creatorEmail,
     email: creatorEmail,
     firstName: creatorName,
+    tenantId: agencyId,
   });
+
+  const baseUrl = getBaseUrl();
 
   await triggerNotification({
     workflowId: 'deliverable-rejected-creator',
@@ -392,7 +416,178 @@ export async function notifyCreatorDeliverableRejected(params: {
       deliverableTitle,
       approverName,
       comment,
+      baseUrl,
       actionUrl: `/creator/deliverables/${deliverableId}`,
     },
   });
+}
+
+/**
+ * Notify when a new comment is added to a deliverable
+ * - If agency comments: notify the creator
+ * - If creator comments: notify agency team (admins, account managers, operators)
+ */
+export async function notifyDeliverableComment(params: {
+  agencyId: string;
+  deliverableId: string;
+  deliverableTitle: string;
+  campaignId: string;
+  campaignName: string;
+  commentByType: 'agency' | 'creator';
+  commentByName: string;
+  message: string;
+  creatorInfo: { id: string; email: string | null; display_name: string; user_id: string | null } | null;
+}): Promise<void> {
+  const {
+    agencyId,
+    deliverableId,
+    deliverableTitle,
+    campaignId,
+    campaignName,
+    commentByType,
+    commentByName,
+    message,
+    creatorInfo,
+  } = params;
+
+  const baseUrl = getBaseUrl();
+
+  if (commentByType === 'agency' && creatorInfo?.email) {
+    // Agency commented - notify the creator
+    await ensureSubscriber({
+      subscriberId: creatorInfo.email,
+      email: creatorInfo.email,
+      firstName: creatorInfo.display_name,
+      tenantId: agencyId,
+    });
+
+    await triggerNotification({
+      workflowId: 'deliverable-comment',
+      subscriberId: creatorInfo.email,
+      email: creatorInfo.email,
+      agencyId,
+      data: {
+        recipientName: creatorInfo.display_name,
+        deliverableTitle,
+        campaignName,
+        commentByName,
+        message,
+        actionUrl: `${baseUrl}/creator/deliverables/${deliverableId}`,
+      },
+    });
+  } else if (commentByType === 'creator') {
+    // Creator commented - notify agency team (admins, account managers, operators)
+    const { data: agencyUsers } = await supabaseAdmin
+      .from('agency_users')
+      .select('user_id, users!inner(id, email, full_name)')
+      .eq('agency_id', agencyId)
+      .eq('is_active', true)
+      .in('role', ['agency_admin', 'account_manager', 'operator']);
+
+    if (!agencyUsers || agencyUsers.length === 0) {
+      console.warn('[Novu] No agency users to notify for deliverable comment');
+      return;
+    }
+
+    for (const agencyUser of agencyUsers) {
+      const user = agencyUser.users as { id: string; email: string; full_name: string };
+      if (!user?.email) continue;
+
+      try {
+        await ensureSubscriber({
+          subscriberId: user.id,
+          email: user.email,
+          firstName: user.full_name,
+          tenantId: agencyId,
+        });
+
+        await triggerNotification({
+          workflowId: 'deliverable-comment',
+          subscriberId: user.id,
+          email: user.email,
+          agencyId,
+          data: {
+            recipientName: user.full_name,
+            deliverableTitle,
+            campaignName,
+            commentByName: creatorInfo?.display_name || 'Creator',
+            message,
+            actionUrl: `${baseUrl}/dashboard/deliverables/${deliverableId}`,
+          },
+        });
+      } catch (err) {
+        console.error('[Novu] Failed to notify user of deliverable comment:', user.id, err);
+      }
+    }
+  }
+}
+
+/**
+ * Notify agency team when a creator uploads a new version
+ */
+export async function notifyVersionUploaded(params: {
+  agencyId: string;
+  deliverableId: string;
+  deliverableTitle: string;
+  campaignId: string;
+  campaignName: string;
+  versionNumber: number;
+  creatorName: string;
+}): Promise<void> {
+  const {
+    agencyId,
+    deliverableId,
+    deliverableTitle,
+    campaignId,
+    campaignName,
+    versionNumber,
+    creatorName,
+  } = params;
+
+  const baseUrl = getBaseUrl();
+
+  // Get agency team members to notify (admins, account managers, operators)
+  const { data: agencyUsers } = await supabaseAdmin
+    .from('agency_users')
+    .select('user_id, users!inner(id, email, full_name)')
+    .eq('agency_id', agencyId)
+    .eq('is_active', true)
+    .in('role', ['agency_admin', 'account_manager', 'operator']);
+
+  if (!agencyUsers || agencyUsers.length === 0) {
+    console.warn('[Novu] No agency users to notify for version upload');
+    return;
+  }
+
+  for (const agencyUser of agencyUsers) {
+    const user = agencyUser.users as { id: string; email: string; full_name: string };
+    if (!user?.email) continue;
+
+    try {
+      await ensureSubscriber({
+        subscriberId: user.id,
+        email: user.email,
+        firstName: user.full_name,
+        tenantId: agencyId,
+      });
+
+      await triggerNotification({
+        workflowId: 'version-uploaded',
+        subscriberId: user.id,
+        email: user.email,
+        agencyId,
+        data: {
+          recipientName: user.full_name,
+          deliverableTitle,
+          campaignName,
+          creatorName,
+          versionNumber,
+          baseUrl,
+          actionUrl: `/dashboard/deliverables/${deliverableId}`,
+        },
+      });
+    } catch (err) {
+      console.error('[Novu] Failed to notify user of version upload:', user.id, err);
+    }
+  }
 }

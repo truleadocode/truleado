@@ -3,13 +3,15 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Calendar, Banknote, FileText, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { format } from 'date-fns'
+import { ChevronLeft, Calendar, Banknote, FileText, Clock, CheckCircle, XCircle, AlertCircle, Send, ArrowLeftRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 
@@ -25,6 +27,13 @@ interface ProposalVersion {
     quantity: number
     notes: string | null
   }> | null
+  createdByType: string
+  createdAt: string
+}
+
+interface ProposalNote {
+  id: string
+  message: string
   createdByType: string
   createdAt: string
 }
@@ -52,7 +61,14 @@ interface CampaignCreator {
     }
   }
   currentProposal: ProposalVersion | null
+  proposalVersions: ProposalVersion[]
+  proposalNotes: ProposalNote[]
 }
+
+// Timeline item type for merged display
+type TimelineItem =
+  | { type: 'proposal'; data: ProposalVersion }
+  | { type: 'note'; data: ProposalNote }
 
 export default function CreatorProposalPage() {
   const router = useRouter()
@@ -72,6 +88,10 @@ export default function CreatorProposalPage() {
   const [counterRate, setCounterRate] = useState('')
   const [counterNotes, setCounterNotes] = useState('')
   const [rejectReason, setRejectReason] = useState('')
+
+  // Note/message state
+  const [noteMessage, setNoteMessage] = useState('')
+  const [isSendingNote, setIsSendingNote] = useState(false)
 
   const fetchData = useCallback(async () => {
     try {
@@ -170,6 +190,25 @@ export default function CreatorProposalPage() {
       setError(err instanceof Error ? err.message : 'Failed to submit counter proposal')
     } finally {
       setActionLoading(false)
+    }
+  }
+
+  const handleSendNote = async () => {
+    if (!noteMessage.trim()) return
+    setIsSendingNote(true)
+    try {
+      await graphqlRequest(mutations.addProposalNote, {
+        campaignCreatorId,
+        message: noteMessage.trim(),
+      })
+      setNoteMessage('')
+      // Refresh data to show the new note
+      fetchData()
+    } catch (err) {
+      console.error('Failed to send note:', err)
+      setError(err instanceof Error ? err.message : 'Failed to send message')
+    } finally {
+      setIsSendingNote(false)
     }
   }
 
@@ -513,6 +552,207 @@ export default function CreatorProposalPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Message Input & Timeline */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Messages & Timeline</CardTitle>
+              <CardDescription>
+                Send messages and view negotiation history
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Send Message */}
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Textarea
+                    value={noteMessage}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNoteMessage(e.target.value)}
+                    placeholder="Type a message to the agency..."
+                    className="min-h-[60px] resize-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                        e.preventDefault()
+                        handleSendNote()
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-muted-foreground">
+                    Press ⌘+Enter to send
+                  </span>
+                  <Button
+                    onClick={handleSendNote}
+                    disabled={!noteMessage.trim() || isSendingNote}
+                    size="sm"
+                  >
+                    <Send className="mr-2 h-4 w-4" />
+                    {isSendingNote ? 'Sending...' : 'Send'}
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Timeline */}
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Negotiation History
+                </h3>
+
+                {(() => {
+                  // Merge proposal versions and notes into a single timeline
+                  const timelineItems: TimelineItem[] = [
+                    ...(campaign.proposalVersions || []).map((pv) => ({ type: 'proposal' as const, data: pv })),
+                    ...(campaign.proposalNotes || []).map((pn) => ({ type: 'note' as const, data: pn })),
+                  ].sort((a, b) => new Date(b.data.createdAt).getTime() - new Date(a.data.createdAt).getTime())
+
+                  if (timelineItems.length === 0) {
+                    return (
+                      <p className="text-sm text-muted-foreground py-4">
+                        No activity yet.
+                      </p>
+                    )
+                  }
+
+                  const formatShortDateTime = (dateString: string) => {
+                    return format(new Date(dateString), 'MMM d, yyyy h:mm a')
+                  }
+
+                  const formatRate = (amount: number | null, currency: string | null) => {
+                    if (!amount) return null
+                    const currencyCode = currency || 'INR'
+                    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
+                    return new Intl.NumberFormat(locale, {
+                      style: 'currency',
+                      currency: currencyCode,
+                      minimumFractionDigits: 0,
+                    }).format(amount / 100)
+                  }
+
+                  const getActionText = (createdByType: string, state: string) => {
+                    const type = createdByType.toLowerCase()
+                    const stateUpper = state.toUpperCase()
+
+                    if (type === 'agency') {
+                      switch (stateUpper) {
+                        case 'SENT': return 'Agency proposed'
+                        case 'DRAFT': return 'Agency drafted proposal'
+                        case 'ACCEPTED': return 'Agency accepted counter'
+                        case 'REJECTED': return 'Agency declined counter'
+                        default: return 'Agency action'
+                      }
+                    } else {
+                      switch (stateUpper) {
+                        case 'COUNTERED': return 'You countered'
+                        case 'ACCEPTED': return 'You accepted'
+                        case 'REJECTED': return 'You declined'
+                        default: return 'Your action'
+                      }
+                    }
+                  }
+
+                  const getEntryIcon = (state: string) => {
+                    const stateUpper = state.toUpperCase()
+                    switch (stateUpper) {
+                      case 'ACCEPTED': return <CheckCircle className="h-3 w-3" />
+                      case 'REJECTED': return <XCircle className="h-3 w-3" />
+                      case 'COUNTERED': return <ArrowLeftRight className="h-3 w-3" />
+                      default: return <Send className="h-3 w-3" />
+                    }
+                  }
+
+                  const getEntryIconStyle = (state: string, createdByType: string) => {
+                    const stateUpper = state.toUpperCase()
+                    if (stateUpper === 'ACCEPTED') return 'bg-green-100 text-green-600'
+                    if (stateUpper === 'REJECTED') return 'bg-red-100 text-red-600'
+                    if (stateUpper === 'COUNTERED') return 'bg-orange-100 text-orange-600'
+                    if (createdByType.toLowerCase() === 'agency') return 'bg-blue-100 text-blue-600'
+                    return 'bg-gray-100 text-gray-600'
+                  }
+
+                  return (
+                    <div className="mt-4 space-y-0">
+                      {timelineItems.map((item, index) => (
+                        <div
+                          key={item.data.id}
+                          className="relative pl-8 pb-6 last:pb-0"
+                        >
+                          {/* Vertical line */}
+                          {index < timelineItems.length - 1 && (
+                            <div className="absolute left-[11px] top-6 bottom-0 w-px bg-border" />
+                          )}
+
+                          {item.type === 'proposal' ? (
+                            <>
+                              <div
+                                className={`absolute left-0 w-6 h-6 rounded-full flex items-center justify-center ${getEntryIconStyle(
+                                  item.data.state,
+                                  item.data.createdByType
+                                )}`}
+                              >
+                                {getEntryIcon(item.data.state)}
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium">
+                                    {getActionText(item.data.createdByType, item.data.state)}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatShortDateTime(item.data.createdAt)}
+                                  </span>
+                                </div>
+                                {item.data.rateAmount && (
+                                  <div className="text-sm">
+                                    <span className="font-semibold">
+                                      {formatRate(item.data.rateAmount, item.data.rateCurrency)}
+                                    </span>
+                                  </div>
+                                )}
+                                {item.data.notes && (
+                                  <p className="text-sm text-muted-foreground italic">
+                                    &ldquo;{item.data.notes}&rdquo;
+                                  </p>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div
+                                className={`absolute left-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                                  item.data.createdByType.toLowerCase() === 'agency'
+                                    ? 'bg-purple-100 text-purple-600'
+                                    : 'bg-teal-100 text-teal-600'
+                                }`}
+                              >
+                                <MessageCircle className="h-3 w-3" />
+                              </div>
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-sm font-medium">
+                                    {item.data.createdByType.toLowerCase() === 'agency'
+                                      ? 'Agency message'
+                                      : 'Your message'}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatShortDateTime(item.data.createdAt)}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-muted-foreground">
+                                  {item.data.message}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       ) : null}
     </div>

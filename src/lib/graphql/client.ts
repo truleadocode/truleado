@@ -368,6 +368,13 @@ export const queries = {
         status
         dueDate
         createdAt
+        creator {
+          id
+          displayName
+          email
+          instagramHandle
+          youtubeHandle
+        }
         campaign {
           id
           name
@@ -376,6 +383,18 @@ export const queries = {
           users {
             role
             user { id name email }
+          }
+          creators {
+            id
+            status
+            proposalState
+            creator {
+              id
+              displayName
+              email
+              instagramHandle
+              youtubeHandle
+            }
           }
           project {
             id
@@ -412,6 +431,26 @@ export const queries = {
               name
               email
             }
+          }
+        }
+        comments {
+          id
+          message
+          createdByType
+          createdAt
+          createdBy {
+            id
+            name
+            email
+          }
+        }
+        submissionEvents {
+          id
+          createdAt
+          submittedBy {
+            id
+            name
+            email
           }
         }
         approvals {
@@ -502,6 +541,7 @@ export const queries = {
         fromEmail
         fromName
         novuIntegrationIdentifier
+        useCustomSmtp
         createdAt
         updatedAt
       }
@@ -616,6 +656,33 @@ export const queries = {
           rateAmount
           rateCurrency
           notes
+          proposalState
+          currentProposal {
+            id
+            versionNumber
+            state
+            rateAmount
+            rateCurrency
+            notes
+            createdByType
+            createdAt
+          }
+          proposalVersions {
+            id
+            versionNumber
+            state
+            rateAmount
+            rateCurrency
+            notes
+            createdByType
+            createdAt
+          }
+          proposalNotes {
+            id
+            message
+            createdByType
+            createdAt
+          }
           creator {
             id
             displayName
@@ -770,6 +837,23 @@ export const queries = {
           rateAmount
           rateCurrency
           notes
+          createdByType
+          createdAt
+        }
+        proposalVersions {
+          id
+          versionNumber
+          state
+          rateAmount
+          rateCurrency
+          notes
+          createdByType
+          createdAt
+        }
+        proposalNotes {
+          id
+          message
+          createdByType
           createdAt
         }
       }
@@ -1254,6 +1338,19 @@ export const mutations = {
     }
   `,
 
+  assignDeliverableToCreator: `
+    mutation AssignDeliverableToCreator($deliverableId: ID!, $creatorId: ID!) {
+      assignDeliverableToCreator(deliverableId: $deliverableId, creatorId: $creatorId) {
+        id
+        creator {
+          id
+          displayName
+          email
+        }
+      }
+    }
+  `,
+
   saveAgencyEmailConfig: `
     mutation SaveAgencyEmailConfig($agencyId: ID!, $input: AgencyEmailConfigInput!) {
       saveAgencyEmailConfig(agencyId: $agencyId, input: $input) {
@@ -1266,6 +1363,7 @@ export const mutations = {
         fromEmail
         fromName
         novuIntegrationIdentifier
+        useCustomSmtp
         createdAt
         updatedAt
       }
@@ -1440,6 +1538,78 @@ export const mutations = {
         rateAmount
         rateCurrency
         notes
+        createdAt
+      }
+    }
+  `,
+
+  acceptCounterProposal: `
+    mutation AcceptCounterProposal($campaignCreatorId: ID!) {
+      acceptCounterProposal(campaignCreatorId: $campaignCreatorId) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        createdAt
+      }
+    }
+  `,
+
+  declineCounterProposal: `
+    mutation DeclineCounterProposal($campaignCreatorId: ID!, $reason: String) {
+      declineCounterProposal(campaignCreatorId: $campaignCreatorId, reason: $reason) {
+        id
+        versionNumber
+        state
+        createdAt
+      }
+    }
+  `,
+
+  reCounterProposal: `
+    mutation ReCounterProposal($input: ReCounterProposalInput!) {
+      reCounterProposal(input: $input) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        createdAt
+      }
+    }
+  `,
+
+  reopenProposal: `
+    mutation ReopenProposal($input: ReopenProposalInput!) {
+      reopenProposal(input: $input) {
+        id
+        versionNumber
+        state
+        rateAmount
+        rateCurrency
+        createdAt
+      }
+    }
+  `,
+
+  addProposalNote: `
+    mutation AddProposalNote($campaignCreatorId: ID!, $message: String!) {
+      addProposalNote(campaignCreatorId: $campaignCreatorId, message: $message) {
+        id
+        message
+        createdByType
+        createdAt
+      }
+    }
+  `,
+
+  addDeliverableComment: `
+    mutation AddDeliverableComment($deliverableId: ID!, $message: String!) {
+      addDeliverableComment(deliverableId: $deliverableId, message: $message) {
+        id
+        message
+        createdByType
         createdAt
       }
     }

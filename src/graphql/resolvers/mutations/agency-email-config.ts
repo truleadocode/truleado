@@ -24,13 +24,14 @@ export async function saveAgencyEmailConfig(
       smtpPassword?: string | null;
       fromEmail: string;
       fromName?: string | null;
+      useCustomSmtp?: boolean | null;
     };
   },
   ctx: GraphQLContext
 ) {
   requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN]);
 
-  const { smtpHost, smtpPort, smtpSecure, smtpUsername, smtpPassword, fromEmail, fromName } = input;
+  const { smtpHost, smtpPort, smtpSecure, smtpUsername, smtpPassword, fromEmail, fromName, useCustomSmtp } = input;
 
   if (!smtpHost?.trim()) throw validationError('SMTP host is required', 'smtpHost');
   if (smtpPort == null || smtpPort < 1 || smtpPort > 65535) {
@@ -83,6 +84,7 @@ export async function saveAgencyEmailConfig(
     from_email: configForNovu.fromEmail,
     from_name: configForNovu.fromName,
     novu_integration_identifier: identifier,
+    use_custom_smtp: useCustomSmtp ?? false,
     updated_at: new Date().toISOString(),
   };
 
@@ -98,6 +100,7 @@ export async function saveAgencyEmailConfig(
         from_email: row.from_email,
         from_name: row.from_name,
         novu_integration_identifier: row.novu_integration_identifier,
+        use_custom_smtp: row.use_custom_smtp,
         updated_at: row.updated_at,
       })
       .eq('id', existing.id)

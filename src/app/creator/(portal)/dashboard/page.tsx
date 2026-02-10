@@ -1,11 +1,21 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { FileCheck, ChevronRight, Inbox, Clock, CheckCircle, AlertCircle, Briefcase } from 'lucide-react'
+import {
+  FileCheck,
+  ChevronRight,
+  Inbox,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Briefcase,
+  DollarSign,
+  TrendingUp,
+  FileText
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
@@ -80,8 +90,7 @@ interface CreatorProfile {
 }
 
 export default function CreatorDashboardPage() {
-  const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
+  const { user } = useAuth()
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignCreator[]>([])
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
@@ -108,21 +117,14 @@ export default function CreatorDashboardPage() {
   }, [])
 
   useEffect(() => {
-    if (authLoading) return
-    if (!user) {
-      router.replace('/creator/login')
-      return
+    if (user) {
+      fetchData()
     }
-    fetchData()
-  }, [authLoading, user, router, fetchData])
+  }, [user, fetchData])
 
-  if (authLoading || !user) {
-    return null
-  }
-
-  // Filter campaigns with pending proposals (state: SENT)
+  // Filter campaigns with pending proposals (state: SENT or COUNTERED)
   const pendingProposals = campaigns.filter(
-    (c) => c.currentProposal?.state === 'SENT'
+    (c) => c.currentProposal?.state === 'SENT' || c.currentProposal?.state === 'COUNTERED'
   )
 
   // Filter active campaigns (accepted status)
@@ -140,10 +142,17 @@ export default function CreatorDashboardPage() {
     (d) => d.status === 'approved' && (!d.trackingRecord || d.trackingRecord.urls.length === 0)
   )
 
+  // Calculate total earnings (from accepted proposals)
+  const totalEarnings = campaigns.reduce((sum, c) => {
+    if (c.proposalState === 'ACCEPTED' && c.currentProposal?.rateAmount) {
+      return sum + c.currentProposal.rateAmount
+    }
+    return sum
+  }, 0)
+
   const formatCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return null
     const currencyCode = currency || 'INR'
-    // Use appropriate locale for the currency
     const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
     const formatter = new Intl.NumberFormat(locale, {
       style: 'currency',
@@ -176,13 +185,13 @@ export default function CreatorDashboardPage() {
   }
 
   return (
-    <div className="flex-1 container max-w-4xl mx-auto px-4 py-8">
+    <div className="p-6 lg:p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold mb-1">
           Welcome back{profile?.displayName ? `, ${profile.displayName}` : ''}
         </h1>
         <p className="text-muted-foreground">
-          Manage your campaigns and deliverables
+          Here&apos;s an overview of your creator activity
         </p>
       </div>
 
@@ -200,6 +209,60 @@ export default function CreatorDashboardPage() {
         </Card>
       ) : (
         <div className="space-y-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Campaigns</CardTitle>
+                <Briefcase className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{campaigns.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  All time
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Campaigns</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{activeCampaigns.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Currently working on
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Pending Proposals</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{pendingProposals.length}</div>
+                <p className="text-xs text-muted-foreground">
+                  Awaiting response
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(totalEarnings, 'INR') || '₹0'}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  From accepted proposals
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Pending Proposals Section */}
           {pendingProposals.length > 0 && (
             <div className="space-y-4">
@@ -226,7 +289,7 @@ export default function CreatorDashboardPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge variant="outline" className="border-orange-300 text-orange-600">
-                              Review Proposal
+                              {c.currentProposal?.state === 'COUNTERED' ? 'Counter Received' : 'Review Proposal'}
                             </Badge>
                             <ChevronRight className="h-4 w-4 text-muted-foreground" />
                           </div>
@@ -360,7 +423,7 @@ export default function CreatorDashboardPage() {
             )}
           </div>
 
-          {/* All Deliverables Quick Access */}
+          {/* Recent Deliverables */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

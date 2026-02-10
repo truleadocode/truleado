@@ -34,6 +34,7 @@ import {
   deleteDeliverableVersion,
 } from './deliverable';
 import { startDeliverableTracking } from './deliverable-tracking';
+import { addDeliverableComment } from './deliverable-comment';
 import {
   addCreator,
   updateCreator,
@@ -56,6 +57,11 @@ import {
   acceptProposal,
   counterProposal,
   rejectProposal,
+  acceptCounterProposal,
+  declineCounterProposal,
+  reCounterProposal,
+  reopenProposal,
+  addProposalNote,
   assignDeliverableToCreator,
 } from './proposal';
 
@@ -104,6 +110,7 @@ export const mutationResolvers = {
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
   startDeliverableTracking,
+  addDeliverableComment,
   
   // Creators
   addCreator,
@@ -137,5 +144,10 @@ export const mutationResolvers = {
   acceptProposal,
   counterProposal,
   rejectProposal,
+  acceptCounterProposal,
+  declineCounterProposal,
+  reCounterProposal,
+  reopenProposal,
+  addProposalNote,
   assignDeliverableToCreator,
 };
