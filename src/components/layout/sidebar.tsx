@@ -126,7 +126,7 @@ export function Sidebar() {
                   </div>
                   {!collapsed && (
                     <>
-                      <div className="flex-1 text-left">
+                      <div className="flex-1 min-w-0 text-left">
                         <p className="text-sm font-medium truncate">
                           {currentAgency?.name || 'Select Agency'}
                         </p>
@@ -269,7 +269,7 @@ export function Sidebar() {
                     </AvatarFallback>
                   </Avatar>
                   {!collapsed && (
-                    <div className="flex-1 text-left">
+                    <div className="flex-1 min-w-0 text-left">
                       <p className="text-sm font-medium truncate">
                         {user?.name || 'User'}
                       </p>
