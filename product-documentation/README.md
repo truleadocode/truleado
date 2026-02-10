@@ -101,79 +101,135 @@ When adding new features:
 
 ## Changelog
 
-### February 2026 (Phase 1 Creator Portal – Complete Implementation)
-- **Creator Portal UI Implementation**:
-  - Full creator portal directory structure at `/src/app/creator/(portal)/` with protected routes using auth guard layout.
-  - **Pages**: Dashboard (overview: campaigns, proposals, deliverables, revenue); Campaigns (campaign list with proposal status); Proposals (negotiation interface with proposal history); Deliverables (assigned deliverables with status tracking); Social Accounts (placeholder); Revenue (earnings tracking); Settings (account settings).
-  - **CreatorSidebar component** (`src/components/creator/CreatorSidebar.tsx`): Collapsible navigation sidebar with main nav items (Dashboard, Campaigns, Proposals, Deliverables, Social Accounts, Revenue), Settings at bottom, and user menu dropdown with sign out.
-  - **Database schema updates**: `creators.user_id` for authentication link (nullable, SET NULL on user delete); `campaign_creators.proposal_state`, `current_proposal_version`, `proposal_accepted_at` (denormalized tracking); `deliverables.creator_id`, `deliverables.proposal_version_id` (creator assignment); `use_custom_smtp` toggle on agencies table (migration 00028).
-  - **New database tables**: `proposal_versions` (append-only immutable proposal history), `proposal_notes` (timeline messages for negotiation), `deliverable_comments` (timeline messages for feedback).
-  - **GraphQL mutations**: `addProposalNote(campaignCreatorId, message)` for proposal timeline; `addDeliverableComment(deliverableId, message)` for deliverable feedback.
-  - **GraphQL types**: `ProposalNote` and `DeliverableComment` types with created_by, created_by_type (agency/creator), timestamps.
-  - **Notifications**: Full set of creator portal notifications (`deliverable-comment`, `deliverable-rejected-creator`, `deliverable-approved-creator` in addition to proposal notifications). All workflows pass baseUrl + actionUrl for proper CTA button functionality.
-  - **Proposal negotiation flow**: Complete workflow from agency sending proposal → creator counter/accept/reject → agency accepting counter → deliverable assignment → creator upload and iteration.
-  - **Migrations**: `00027_proposal_notes.sql`, `00028_agency_email_config_toggle.sql`, `00029_deliverable_comments.sql`.
-  - **Documentation**: Updated GRAPHQL_API_CONTRACT.md with new mutations and types; updated DATABASE_SCHEMA_DDL.md with new tables and schema fields; added comprehensive creator portal section to TECHNICAL_LLD.md (§6.4); created NOVU_NOTIFICATION_TEMPLATES.md with all 14 workflow templates (email + in-app).
+### February 10, 2026
 
-### February 2026 (Continued)
-- **Creator Portal Phase 1 (Foundation)**:
-  - **Creator authentication**: Magic-link sign-in at `/creator/login` and `/creator/verify` (similar to client portal pattern). `ensureCreatorUser` mutation creates `users` + `auth_identities` (provider `firebase_creator_link`) and links to `creators.user_id`. Validates email against active creators in roster. Idempotent; supports reuse of existing user if already linked.
-  - **Proposal system**: Append-only `proposal_versions` table with immutable history. State machine: `DRAFT` → `SENT` (agency sends) → `ACCEPTED`/`REJECTED`/`COUNTERED` (creator responds). Denormalized fields on `campaign_creators` (`proposal_state`, `current_proposal_version`, `proposal_accepted_at`).
-  - **GraphQL mutations**: `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `assignDeliverableToCreator`. Require appropriate auth (`INVITE_CREATOR` permission for agency mutations; creator auth for creator mutations).
-  - **Creator queries**: `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables(campaignId?)`, `myCreatorProposal(campaignCreatorId)`.
-  - **Notifications**: `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned` workflows trigger on state transitions.
-  - **Invite mutation update**: `inviteCreatorToCampaign` now automatically creates and sends proposal with state `SENT`; updates `campaign_creators.proposal_state`.
-  - **RBAC extensions**: `requireCreator`, `hasCreatorCampaignAccess`, `requireCreatorCampaignAccess`, `hasCreatorDeliverableAccess`, `requireCreatorDeliverableAccess` authorization guards in `src/lib/rbac/authorize.ts`.
-  - **UI**: Creator dashboard pages at `/creator/dashboard`, `/creator/campaigns`, `/creator/proposals/[id]`, `/creator/deliverables/[id]` (placeholder implementations). Creator layout at `/creator/layout.tsx`.
+#### <New Feature> Creator Portal Phase 1 – Complete Implementation
+- **Creator Portal UI**: Full creator portal directory structure at `/src/app/creator/(portal)/` with protected routes and auth guard layout
+- **Pages implemented**: Dashboard (campaigns, proposals, deliverables, revenue overview), Campaigns (list with proposal status), Proposals (negotiation interface with history), Deliverables (assigned with status tracking), Social Accounts (placeholder), Revenue (earnings tracking), Settings
+- **CreatorSidebar component**: Collapsible navigation sidebar with Dashboard, Campaigns, Proposals, Deliverables, Social Accounts, Revenue, Settings, and user menu dropdown with sign out
+- **Creator authentication**: Magic-link sign-in at `/creator/login` and `/creator/verify`. `ensureCreatorUser` mutation creates `users` + `auth_identities` (provider `firebase_creator_link`) and links to `creators.user_id`
 
-### February 2026
-- **Deliverable tracking** — Added deliverable tracking system for approved deliverables. Users can store 1–10 published URLs per deliverable (immutable once saved). Migration `00021_deliverable_tracking.sql` adds `deliverable_tracking_records` and `deliverable_tracking_urls` tables. GraphQL mutation `startDeliverableTracking(deliverableId, urls)`; UI: "Start Tracking" button on deliverable detail page and campaign deliverables list. Tracked deliverables display a "Tracking" status badge.
-- **Contact form dialog redesign** — Extracted shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) with premium tabbed UI (Details + Phone & Address tabs), gradient header, icon-prefixed inputs. Used on both `/dashboard/contacts` and `/dashboard/clients/[id]`.
-- **Creator summary above tabs** — Creator detail page now shows a summary card at the top with profile pic (Instagram > YouTube > initials), display name, platform handles, and status. Removed duplicate info from Dashboard tab.
-- **Multi-phone contacts with country picker** — Added `phone`, `office_phone`, `home_phone` fields to contacts (migration `00020`); `PhoneInput` component with country code picker using `libphonenumber-js`.
-- **Dev script fix** — Fixed `NODE_ENV=production` conflict by explicitly setting `NODE_ENV=development` in the dev script.
-- **Creators: Instagram images** — Added same-origin proxy endpoint `GET /api/image-proxy` and updated Instagram tab to render profile pics and post thumbnails through it, to avoid browser blocking from restrictive `Cross-Origin-Resource-Policy` headers on Instagram/Facebook CDNs.
-- **Creators: profile editing + handles** — Added Facebook and LinkedIn handles to creator profiles, edit modal fields, and disabled "Coming Soon" tabs for TikTok/Facebook/LinkedIn; remove action is now deactivation-only.
-- **Agency locale settings** — Added agency-level locale defaults (currency, timezone, language) and a Settings page at `/dashboard/settings/locale`.
-- **Creators: rates** — Added creator rates (deliverable pricing + flat rate retainer), a Rates tab in creator edit modal and rates section on creator creation, and a summary display of average rate per platform labeled "Average Engagement Rate".
+#### <New Feature> Proposal Management System
+- **State machine**: `DRAFT` → `SENT` → `ACCEPTED`/`REJECTED`/`COUNTERED` with immutable `proposal_versions` table
+- **GraphQL mutations**: `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `assignDeliverableToCreator`, `addProposalNote`
+- **Creator queries**: `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables(campaignId?)`, `myCreatorProposal(campaignCreatorId)`
+- **Timeline messaging**: `addProposalNote` for proposal communication, immutable proposal history tracking
+
+#### <Update> Database Schema
+- **New tables**: `proposal_versions`, `proposal_notes`, `deliverable_comments` for immutable timeline tracking
+- **Schema updates**: `creators.user_id`, `campaign_creators.proposal_state`, `current_proposal_version`, `proposal_accepted_at`, `deliverables.creator_id`, `deliverables.proposal_version_id`, `use_custom_smtp` toggle on agencies
+- **Migrations**: 00027 (proposal_notes), 00028 (agency_email_config_toggle), 00029 (deliverable_comments)
+
+#### <Update> GraphQL API
+- **New types**: `ProposalNote`, `DeliverableComment` with created_by, created_by_type (agency/creator), timestamps
+- **Mutations**: `addProposalNote(campaignCreatorId, message)`, `addDeliverableComment(deliverableId, message)`
+- **RBAC extensions**: `requireCreator`, `hasCreatorCampaignAccess`, `requireCreatorCampaignAccess`, `hasCreatorDeliverableAccess`, `requireCreatorDeliverableAccess`
+
+#### <New Feature> Notifications
+- **Creator portal workflows**: `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned`, `deliverable-comment`, `deliverable-rejected-creator`, `deliverable-approved-creator`
+- **Template coverage**: All 14 workflow templates with email + in-app configurations via Novu (see NOVU_NOTIFICATION_TEMPLATES.md)
+
+#### <Update> Documentation
+- Updated GRAPHQL_API_CONTRACT.md with new mutations and types
+- Updated DATABASE_SCHEMA_DDL.md with new tables and schema changes
+- Added comprehensive creator portal section to TECHNICAL_LLD.md (§6.4)
+- Created NOVU_NOTIFICATION_TEMPLATES.md with all workflow templates
+
+---
+
+### February 2026 (Early)
+
+#### <New Feature> Deliverable Tracking
+- Added system for tracking published URLs on approved deliverables (1–10 immutable URLs per deliverable)
+- **Migration**: 00021_deliverable_tracking.sql with `deliverable_tracking_records` and `deliverable_tracking_urls` tables
+- **GraphQL**: `startDeliverableTracking(deliverableId, urls)` mutation
+- **UI**: "Start Tracking" button on deliverable detail and campaign deliverables list; "Tracking" status badge
+
+#### <Update> Contact Management
+- **Contact form redesign**: Extracted shared `ContactFormDialog` component with tabbed UI (Details + Phone & Address), gradient header, icon-prefixed inputs
+- **Multi-phone support**: Added `phone`, `office_phone`, `home_phone` fields to contacts (migration 00020) with country code picker via `libphonenumber-js`
+- **Creator detail**: Summary card at top with profile pic (Instagram > YouTube > initials), display name, platform handles, and status
+
+#### <Update> Creator Platform
+- **Instagram images**: Added proxy endpoint `GET /api/image-proxy` to render profile pics and post thumbnails, avoiding browser blocking from restrictive CORS headers
+- **Profile handles**: Added Facebook and LinkedIn handles to creator profiles; disabled "Coming Soon" tabs for TikTok/Facebook/LinkedIn
+- **Creator rates**: Added deliverable pricing + flat rate retainer with Rates tab in edit modal and average rate display per platform
+
+#### <Update> Agency Settings
+- **Locale defaults**: Added currency, timezone, language settings at agency level
+- **Settings page**: New `/dashboard/settings/locale` for configuring agency-wide locale preferences
+
+#### <Bug Fix> Development Script
+- Fixed `NODE_ENV=production` conflict by explicitly setting `NODE_ENV=development` in dev script
+
+---
 
 ### January 2026
+
+#### <New Feature> Deliverable System
+- **Caption editing**: Full audit trail via `deliverable_version_caption_audit` table
+- **Mutations**: `updateDeliverableVersionCaption` with audit logging
+- **UI enhancements**: Version selection for preview, pop-out/maximize, version dropdown with latest as default; hashtag badges in caption display
+- **Migration**: 00009_deliverable_version_caption_audit.sql
+
+#### <New Feature> Campaign Performance
+- Campaign Performance section (placeholder metrics) at bottom of campaign detail page
+
+#### <New Feature> User Authentication & Onboarding (Phase 0)
+- **createUser mutation**: Creates `users` row and `auth_identities` link (provider `firebase_email`), idempotent on Firebase signup
+- **Onboarding routes**: `/choose-agency`, `/create-agency`, `/join-agency` (route group `(onboarding)`)
+- **Agency join by code**: `joinAgencyByCode` mutation with `agency_code` (migration 00010); shareable code via Settings
+- **Access guard**: `ProtectedRoute` redirects to `/choose-agency` when no agency selected
+- **Login flow**: Auth context waits for user/agencies load before redirect to `/dashboard` or `/choose-agency`
+- **Auth resilience**: 15s timeout on `fetchUserData`, `.limit(1)` on `auth_identities` lookup
+
+#### <New Feature> Deliverable Approval Unit (Phase 1)
+- Only **Deliverable** can reach "Fully Approved" (status `APPROVED`)
+- Campaigns and Projects serve as **containers** and **approval sources**
+- **Status labels**: Deliverable `APPROVED` = "Fully Approved"; Campaign `APPROVED` = "Review complete"
+- **Helper utilities**: `src/lib/campaign-status.ts` with `getCampaignStatusLabel`, `getDeliverableStatusLabel`
+
+#### <New Feature> Approval System (Phase 2)
+- Project approvers with deliverable statuses (pending_project_approval, client_review, etc.)
+- **Migration**: 00011_phase2_approval_system.sql
+- **UI components**: ApproverPicker for campaign/project approvers
+- **Campaign creation**: Approver selection during setup
+
+#### <New Feature> Client & Contacts (Phase 3)
+- **Contacts table**: client_id, name, email, phone fields, address, department, notes, is_client_approver flag, user_id
+- **Migrations**: 00012_phase3_contacts.sql, 00020_contacts_phone_fields.sql with RLS for agency-scoped access
+- **GraphQL types**: `Contact` type; `Client.contacts`, `Client.clientApprovers` queries
+- **Contact management**: `contact(id)`, `contacts(clientId)`, `contactsList(...)` queries and `createContact`, `updateContact`, `deleteContact` mutations
+- **Client portal UI**: Contacts tab on client detail (list/add/edit/delete); Global Contacts page at `/dashboard/contacts` with filters
+- **Bug fix**: Corrected contact CRUD to use mutations instead of queries
+
+#### <New Feature> Client Login Portal (Magic Link)
+- **Routes**: `/client` (dashboard), `/client/login`, `/client/verify` with layout at `src/app/client/layout.tsx`
+- **Authentication**: Firebase Email Link auth with helpers in `src/lib/firebase/client.ts`
+- **APIs**:
+  - `POST /api/client-auth/request-magic-link` (validates contact `is_client_approver`)
+  - `POST /api/client-auth/dev-magic-link` (dev-only, localhost only, returns sign-in link for testing)
+- **GraphQL**: `ensureClientUser` mutation (creates user + `auth_identities` provider `firebase_email_link`), `User.contact` query
+- **Redirect logic**: If no agency and contact exists → `/client`; handles "email already in use" with sign-in option
+
+#### <New Feature> Deliverable Version Management
+- **Delete capability**: `deleteDeliverableVersion(deliverableVersionId)` mutation with UI button when status PENDING/REJECTED
+- **Constraints**: Version must have no approvals before deletion; storage file is removed
+
+#### <New Feature> Notifications & Email (Phase 4/5)
+- **Novu integration**: In-app Inbox + email via per-agency SMTP
+- **Email config**: `agencyEmailConfig` query/mutation; Settings → Notifications SMTP form (agency admin only)
+- **Workflows**: `approval-requested`, `approval-approved`, `approval-rejected` trigger on state transitions
+- **Migration**: 00013_agency_email_config.sql
+- **Sample trigger**: `node scripts/trigger-sample-notification.js`
+
+#### <Update> Documentation Foundation
 - Initial documentation created from canonical source documents
 - Established MVP scope and implementation priorities
-- **Deliverables**: Caption editing with full audit trail (`deliverable_version_caption_audit`); `updateDeliverableVersionCaption` mutation; caption display with hashtag badges; deliverable detail UX: file/version selection for preview, pop-out and maximize, version dropdown (default latest).
-- **Campaign**: Campaign Performance section (placeholder metrics) at bottom of campaign detail page.
-- **Schema**: Migration `00009_deliverable_version_caption_audit.sql`; GraphQL types `DeliverableVersionCaptionAudit`, `captionAudits` on `DeliverableVersion`.
-- **Auth & onboarding (Phase 0)**:
-  - **createUser**: GraphQL mutation `createUser(input: CreateUserInput!)`; creates `users` row and `auth_identities` link (provider `firebase_email`) after Firebase signup; idempotent if identity exists.
-  - **Onboarding routes**: `/choose-agency`, `/create-agency`, `/join-agency` (route group `(onboarding)`; links use paths without `/onboarding/` prefix).
-  - **joinAgencyByCode**: Mutation and resolver; agency `agency_code` added (migration `00010_agency_code_for_join.sql`); Agency Admin can share code via Settings.
-  - **Access guard**: `ProtectedRoute` redirects to `/choose-agency` when `agencies.length === 0`; root and dashboard rely on this.
-  - **Login UX**: After sign-in, client waits for auth context to load user and agencies, then redirects once to `/dashboard` or `/choose-agency` (no intermediate dashboard loading).
-  - **Auth context**: `fetchUserData` timeout (15s), `setLoading(false)` in `finally`; context uses `auth_identities` lookup with `.limit(1)` for resilience.
-- **Phase 1 — Deliverable as Approval Unit (Task 1.1)**:
-  - Only **Deliverable** can reach "Fully Approved" (status `APPROVED`). Campaigns and Projects are **containers** and **approval sources**.
-  - STATE_MACHINES.md: approval-unit principle; campaign `APPROVED` = "Campaign-level review complete"; deliverable `APPROVED` = "Fully Approved".
-  - UI: deliverable status APPROVED shown as "Fully Approved"; campaign status APPROVED shown as "Review complete". Shared helpers in `src/lib/campaign-status.ts` (`getCampaignStatusLabel`, `getDeliverableStatusLabel`).
-- **Phase 2 — Approval System**: Project approvers, deliverable statuses (e.g. `pending_project_approval`, `client_review`), migration `00011_phase2_approval_system.sql`; campaign/project approvers, ApproverPicker, Create Campaign with approvers.
-- **Phase 3 — Client & Contacts**:
-  - Migrations `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql`: `contacts` table (client_id, first_name, last_name, email, phone, mobile, office_phone, home_phone, address, department, notes, is_client_approver, user_id); RLS for agency-scoped access. `00020` resets legacy `mobile` values.
-  - GraphQL: `Contact` type; `Client.contacts`, `Client.clientApprovers`; `approverUsers` now includes users from contacts (is_client_approver + user_id) and legacy client_users.
-  - Queries: `contact(id)`, `contacts(clientId)`, `contactsList(agencyId, clientId?, department?, isClientApprover?)`.
-  - Mutations: `createContact`, `updateContact`, `deleteContact`.
-  - UI: Client detail page has **Contacts** tab (list, add/edit/delete, toggle client approver); **Global Contacts** page at `/dashboard/contacts` with filters (client, department, approver); sidebar link "Contacts".
-  - **Create Contact fix**: Client detail Contacts tab was incorrectly using `queries.createContact` / `updateContact` / `deleteContact` (those are mutations). Fixed by using `mutations.*`; "non-empty query" errors on contact CRUD resolved.
-- **Client login portal (magic link)**:
-  - Routes: `/client` (dashboard placeholder), `/client/login`, `/client/verify`. Layout: `src/app/client/layout.tsx`.
-  - Firebase Email Link auth; helpers in `src/lib/firebase/client.ts` (`sendClientSignInLink`, `isClientSignInLink`, `signInWithClientLink`, `CLIENT_MAGIC_LINK_EMAIL_KEY`).
-  - API: `POST /api/client-auth/request-magic-link` (validates contact `is_client_approver` by email); `POST /api/client-auth/dev-magic-link` (dev-only, returns sign-in link for testing without SMTP; localhost only).
-  - GraphQL: `ensureClientUser` mutation (create user + `auth_identities` provider `firebase_email_link`, link contact); `User.contact`; `me` fetches `contact { id }` for redirect logic.
-  - Auth context: `contact` in state; redirect logic: if `agencies.length === 0` and `contact` exists → `/client` (login, root, onboarding, `ProtectedRoute`).
-  - Verify page: on Firebase "email already in use" / "account exists with different credential", show "Use agency sign-in" and link to `/login`.
-- **Deliverables**: `deleteDeliverableVersion(deliverableVersionId)` mutation; delete button on deliverable detail when status PENDING/REJECTED; version must have no approvals; storage file removed.
-- **Docs**: `ai-doc.md` §0 Session Context, §5 Implemented Features, §8 How to Resume; GRAPHQL_API_CONTRACT (User.contact, ensureClientUser, deleteDeliverableVersion); TECHNICAL_LLD §4.5 Client Portal; DATABASE_SCHEMA_DDL (auth_identities `firebase_email_link`).
-- **Phase 4/5 — Notifications & Agency Email**:
-  - Novu: in-app Inbox (header), email via per-agency SMTP. Migration `00013_agency_email_config.sql`; GraphQL `agencyEmailConfig`, `saveAgencyEmailConfig`; Settings → Notifications SMTP form (agency admin). Triggers on submit-for-review, approval, reject; workflows `approval-requested`, `approval-approved`, `approval-rejected`. See `notification-service-implementation.md`. Sample trigger: `node scripts/trigger-sample-notification.js`.
-- **2025-01-29**: ai-doc handoff updated with "Start here tomorrow" for email delivery testing.
+- **ai-doc.md**: Session context, implemented features tracking, agent handoff format
+- **GraphQL API Contract**: User.contact, ensureClientUser, deleteDeliverableVersion
+- **Technical LLD**: §4.5 Client Portal design
+- **Database Schema**: auth_identities `firebase_email_link` provider
 
 ---
 
