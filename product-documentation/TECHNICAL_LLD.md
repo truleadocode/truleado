@@ -205,7 +205,38 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 **Firebase**: Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method → Email/Password. Add `localhost` to **Authorized domains** (Authentication → Settings) for local testing.
 
-**“Email already in use”**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows “Use agency sign-in” with a link to `/login`; user signs in with password instead.
+**"Email already in use"**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows "Use agency sign-in" with a link to `/login`; user signs in with password instead.
+
+---
+
+### 4.6 Creator Portal & Magic-Link Auth (Phase 1)
+
+**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, submit tracking URLs. Creators authenticate via **magic link** (Firebase Email Link) using the email from the `creators` roster.
+
+**Flow**:
+
+1. **Request link** (`/creator/login`): User enters email. Frontend calls `POST /api/creator-auth/request-magic-link` (validates email belongs to an active creator in the agency). Server generates Firebase email-link (Admin SDK) and sends via **Novu**. Email is stored in `localStorage` for the verify step.
+2. **Verify** (`/creator/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureCreatorUser` (GraphQL). Backend:
+   - Checks if creator already has `user_id` linked; if so, links Firebase UID to that user (idempotent).
+   - Otherwise: creates `users` + `auth_identities` (provider `firebase_creator_link`) and updates `creators.user_id`.
+   - Throws if no active creator found for email.
+   - Redirect to `/creator/dashboard`.
+3. **Creator dashboard** (`/creator/dashboard`): Overview of campaigns, pending proposals, deliverables awaiting upload.
+
+**Auth context**: `GetMe` fetches `me { ... }`. `GraphQLContext.creator` is set after loading the creator row (if `user_id` matches and creator is active). **Key difference** from client auth: creators are in the **roster table**, not linked via contacts.
+
+**Data model updates** (Phase 1):
+- `creators.user_id` (UUID, nullable foreign key to `users.id`) — set on first sign-in.
+- `proposal_versions` table (append-only): tracks proposal negotiation history.
+- `campaign_creators.proposal_state`, `campaign_creators.current_proposal_version`, `campaign_creators.proposal_accepted_at` — denormalized from latest `proposal_versions` row.
+- `deliverables.creator_id` (nullable) — assigned after proposal accepted.
+- `deliverables.proposal_version_id` (nullable) — tracks which proposal was used.
+
+**API routes**:
+
+- `POST /api/creator-auth/request-magic-link`: Body `{ email, origin }`. Validates email is in active `creators` roster (case-insensitive). Generates Firebase email-link and sends via Novu. Returns `200 { ok: true }` always (no email enumeration). Supports same delivery modes as client portal (`NEXT_PUBLIC_CREATOR_MAGIC_LINK_MODE`, `NOVU_CREATOR_MAGIC_LINK_WORKFLOW_ID`).
+
+**Firebase**: Same setup as client portal (Email link already enabled).
 
 ---
 
@@ -271,6 +302,89 @@ Permission rules are defined in the **Permission Matrix (Canonical)**.
 - **contacts** table: belongs to Client; fields first_name, last_name, email, phone (primary), mobile, office_phone, home_phone, address, department, notes, is_client_approver, optional user_id. RLS: agency-scoped (agency admin or client account manager). Migrations: `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql` (resets legacy `mobile` values).
 - **Client approvers**: Client-level approval uses (1) contacts with `is_client_approver` and optional `user_id` (Truleado user link), (2) legacy `client_users` with role approver. GraphQL: `Client.contacts`, `Client.clientApprovers`, `Client.approverUsers`; queries `contact(id)`, `contacts(clientId)`, `contactsList(...)`; mutations `createContact`, `updateContact`, `deleteContact`.
 - **UI**: Client detail page has Contacts tab (list, add/edit/delete, toggle approver); Global Contacts page at `/dashboard/contacts` (filters: client, department, approver). Both pages use the shared `ContactFormDialog` component (`src/components/contacts/contact-form-dialog.tsx`) — premium tabbed dialog with gradient header, two tabs (Details / Phone & Address), icon-prefixed inputs, `PhoneInput` with country picker. See `GRAPHQL_API_CONTRACT.md` and `ai-doc.md` §5.2.1.
+
+---
+
+### 6.4 Phase 1: Creator Portal (MVP Foundation)
+
+**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, manage account settings.
+
+**Directory Structure**:
+```
+src/app/creator/
+├── (portal)/                          # Protected routes group (requires auth)
+│   ├── layout.tsx                     # Portal layout + auth guard + sidebar
+│   ├── dashboard/page.tsx             # Overview: campaigns, proposals, deliverables, revenue
+│   ├── campaigns/[id]/page.tsx        # Campaign detail
+│   ├── proposals/[campaignCreatorId]/ # Proposal negotiation interface
+│   ├── deliverables/page.tsx          # List of assigned deliverables
+│   ├── deliverables/[id]/page.tsx     # Deliverable detail + upload
+│   ├── social-accounts/page.tsx       # Creator social profile management
+│   ├── revenue/page.tsx               # Earnings tracking
+│   └── settings/page.tsx              # Account settings
+├── login/page.tsx                     # Request magic link
+├── verify/page.tsx                    # Verify email link + ensureCreatorUser
+└── layout.tsx                         # Root layout
+```
+
+**Components**:
+- `CreatorSidebar` (`src/components/creator/CreatorSidebar.tsx`): Collapsible navigation sidebar with main nav (Dashboard, Campaigns, Proposals, Revenue), settings link, and user menu (dropdown with sign out).
+
+**Data Model (Phase 1)**:
+- `creators.user_id`: Links creator to authenticated user after first sign-in.
+- `campaign_creators.proposal_state`, `proposal_versions` (append-only), `proposal_notes`: Proposal negotiation history.
+- `deliverables.creator_id`, `deliverables.proposal_version_id`: Track creator assignment and associated proposal.
+- `deliverable_comments`: Append-only timeline for deliverable feedback from both agency and creator.
+
+**GraphQL Queries (Creator Portal)**:
+- `myCreatorProfile`: Fetch authenticated creator's profile.
+- `myCreatorCampaigns`: List campaigns the creator is invited/accepted to.
+- `myCreatorDeliverables(campaignId?)`: List assigned deliverables (filterable by campaign).
+- `myCreatorProposal(campaignCreatorId)`: Fetch current proposal details.
+
+**GraphQL Mutations (Creator Portal)**:
+- `acceptProposal(campaignCreatorId)`: Accept agency proposal.
+- `rejectProposal(campaignCreatorId, reason?)`: Decline proposal.
+- `counterProposal(input)`: Counter with alternative terms (rate, scope).
+- `addProposalNote(campaignCreatorId, message)`: Add timeline message.
+- `assignDeliverableToCreator(deliverableId, creatorId)`: Agency assigns deliverable to creator (after proposal accepted).
+- `addDeliverableComment(deliverableId, message)`: Add comment to deliverable (for creator/agency communication).
+
+**Notifications**:
+- `proposal-sent`: Creator notified when agency sends proposal (with rate and action link).
+- `proposal-accepted`: Agency notified when creator accepts.
+- `proposal-countered`: Agency notified when creator counters with different terms.
+- `proposal-rejected`: Agency notified when creator declines.
+- `deliverable-assigned`: Creator notified when assigned new deliverable.
+- `deliverable-comment`: Team notified when comment added to deliverable.
+- `deliverable-rejected-creator`: Creator notified of revision request.
+- `deliverable-approved-creator`: Creator notified of approval.
+
+**Proposal Negotiation Flow**:
+```
+Agency: inviteCreatorToCampaign(rate, scope)
+  ↓
+Agency: sendProposal
+  → Notification: proposal-sent (Creator)
+  ↓
+Creator: acceptProposal | rejectProposal | counterProposal
+  → Notification: proposal-accepted/rejected/countered (Agency)
+  ↓
+(If accepted) Agency: assignDeliverableToCreator
+  → Notification: deliverable-assigned (Creator)
+```
+
+**Deliverable Workflow (Creator Portal)**:
+- Creator views assigned deliverables on Deliverables page.
+- Can upload versions, add tracking URLs, submit for review.
+- Receives notifications on rejection (with feedback) and approval.
+- Can add comments during deliverable review cycle.
+
+**Security & Permissions**:
+- Creators can only view/edit their own campaigns, proposals, and deliverables.
+- Agency users cannot access creator portal (separate auth context).
+- Proposal and deliverable mutations require authenticated creator (`ctx.creator`).
+- All creator data is RLS-protected at row level.
 
 ---
 
@@ -414,7 +528,51 @@ Attached at:
 
 ---
 
-## 11. Approval System
+## 11. Proposal System (Creator Portal Phase 1)
+
+**Purpose**: Proposal negotiation workflow between agency and creator before deliverable assignment and execution.
+
+**Data model**:
+- `proposal_versions` (append-only): immutable record of each proposal version with state, rate, deliverable scopes, notes, creator, timestamp.
+- `campaign_creators.proposal_state`: current state (`DRAFT`, `SENT`, `COUNTERED`, `ACCEPTED`, `REJECTED`).
+- `campaign_creators.current_proposal_version`: version number of latest proposal.
+- `campaign_creators.proposal_accepted_at`: timestamp when creator accepted.
+
+**State machine**:
+- `DRAFT` → `SENT` (agency sends to creator via email)
+- `SENT` → `COUNTERED` (creator responds with different terms)
+- `SENT` | `COUNTERED` → `ACCEPTED` (creator accepts)
+- `SENT` | `COUNTERED` → `REJECTED` (creator declines)
+
+**Lifecycle**:
+1. Agency invites creator (`inviteCreatorToCampaign`) → creates proposal version with state `SENT` → sends `proposal-sent` email.
+2. Creator can:
+   - Accept: state → `ACCEPTED`, `campaign_creators.status` → `ACCEPTED`, sends `proposal-accepted` notification to agency.
+   - Reject: state → `REJECTED`, `campaign_creators.status` → `DECLINED`, sends `proposal-rejected` notification.
+   - Counter: creates new version with state `COUNTERED`, sends `proposal-countered` notification.
+3. Agency can create new draft and re-send to move to `SENT`.
+4. Once `ACCEPTED`, agency can assign deliverables to creator via `assignDeliverableToCreator`.
+
+**Immutability**: All proposal versions are append-only. No updates to existing versions; new versions always created.
+
+**Notifications**:
+- `proposal-sent`: Agency → Creator (email with proposal details + action link).
+- `proposal-accepted`: Creator → Agency (proposal accepted).
+- `proposal-countered`: Creator → Agency (counter-offer).
+- `proposal-rejected`: Creator → Agency (rejection reason).
+- `deliverable-assigned`: Agency → Creator (deliverable assigned after proposal accepted).
+
+**GraphQL mutations**:
+- `createProposal(input: CreateProposalInput!): ProposalVersion!` — agency creates draft.
+- `sendProposal(campaignCreatorId: ID!): ProposalVersion!` — agency sends (state SENT).
+- `acceptProposal(campaignCreatorId: ID!): ProposalVersion!` — creator accepts.
+- `rejectProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!` — creator rejects.
+- `counterProposal(input: CounterProposalInput!): ProposalVersion!` — creator counters.
+- `assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!` — agency assigns (after accepted).
+
+---
+
+## 11.1 Approval System
 
 - Approvals are records, not flags
 - Each approval has:
@@ -427,7 +585,7 @@ Client and internal approvals are strictly separated.
 
 ---
 
-## 12. Payments Module
+## 12. Payments Module (Existing)
 
 - Payments are campaign-scoped
 - Milestone-based

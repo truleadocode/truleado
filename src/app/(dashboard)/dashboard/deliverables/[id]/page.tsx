@@ -51,8 +51,10 @@ import { Header } from '@/components/layout/header'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
+import { DeliverableTimelineSheet } from './components/deliverable-timeline-sheet'
 
 interface CaptionAudit {
   id: string
@@ -126,6 +128,35 @@ interface DeliverableTrackingRecord {
   urls: DeliverableTrackingUrl[]
 }
 
+interface Creator {
+  id: string
+  displayName: string
+  email: string | null
+  instagramHandle: string | null
+  youtubeHandle: string | null
+}
+
+interface CampaignCreator {
+  id: string
+  status: string
+  proposalState: string | null
+  creator: Creator
+}
+
+interface DeliverableComment {
+  id: string
+  message: string
+  createdByType: string
+  createdAt: string
+  createdBy: { id: string; name: string | null; email: string } | null
+}
+
+interface SubmissionEvent {
+  id: string
+  createdAt: string
+  submittedBy: { id: string; name: string | null; email: string } | null
+}
+
 interface Deliverable {
   id: string
   title: string
@@ -134,12 +165,14 @@ interface Deliverable {
   status: string
   dueDate: string | null
   createdAt: string
+  creator: Creator | null
   campaign: {
     id: string
     name: string
     status: string
     campaignType: string
     users: CampaignUser[]
+    creators: CampaignCreator[]
     project: {
       id: string
       name: string
@@ -152,6 +185,8 @@ interface Deliverable {
     }
   }
   versions: DeliverableVersion[]
+  comments: DeliverableComment[]
+  submissionEvents: SubmissionEvent[]
   approvals: Approval[]
   trackingRecord?: DeliverableTrackingRecord | null
 }
@@ -205,6 +240,7 @@ export default function DeliverableDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { user } = useAuth()
   const deliverableId = params.id as string
   
   const [deliverable, setDeliverable] = useState<Deliverable | null>(null)
@@ -238,6 +274,10 @@ export default function DeliverableDetailPage() {
   const [urlErrors, setUrlErrors] = useState<string[]>([])
   const [validatedUrls, setValidatedUrls] = useState<string[]>([])
   const [savingTracking, setSavingTracking] = useState(false)
+  const [assignCreatorDialogOpen, setAssignCreatorDialogOpen] = useState(false)
+  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null)
+  const [assigningCreator, setAssigningCreator] = useState(false)
+  const [activitySheetOpen, setActivitySheetOpen] = useState(false)
 
   const isTracking = useMemo(() => deliverable?.trackingRecord != null, [deliverable?.trackingRecord])
 
@@ -325,20 +365,39 @@ export default function DeliverableDetailPage() {
 
   const handleSubmitForReview = async () => {
     if (!deliverable) return
-    
+
     setSubmitting(true)
     try {
       await graphqlRequest(mutations.submitDeliverableForReview, { deliverableId })
       toast({ title: 'Submitted for review' })
       await fetchDeliverable()
     } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to submit', 
-        variant: 'destructive' 
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to submit',
+        variant: 'destructive'
       })
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handleAddComment = async (message: string) => {
+    if (!deliverable) return
+    try {
+      await graphqlRequest(mutations.addDeliverableComment, {
+        deliverableId,
+        message,
+      })
+      toast({ title: 'Comment added' })
+      await fetchDeliverable()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to add comment',
+        variant: 'destructive',
+      })
+      throw err
     }
   }
 
@@ -541,6 +600,36 @@ export default function DeliverableDetailPage() {
     }
   }
 
+  const handleAssignCreator = async () => {
+    if (!deliverable || !selectedCreatorId) return
+    setAssigningCreator(true)
+    try {
+      await graphqlRequest(mutations.assignDeliverableToCreator, {
+        deliverableId,
+        creatorId: selectedCreatorId,
+      })
+      toast({ title: 'Creator assigned', description: 'The creator will be notified.' })
+      setAssignCreatorDialogOpen(false)
+      setSelectedCreatorId(null)
+      await fetchDeliverable()
+    } catch (err) {
+      toast({
+        title: 'Failed to assign creator',
+        description: err instanceof Error ? err.message : 'Unable to assign creator',
+        variant: 'destructive',
+      })
+    } finally {
+      setAssigningCreator(false)
+    }
+  }
+
+  // Filter creators with accepted proposals
+  const acceptedCreators = useMemo(() => {
+    return deliverable?.campaign?.creators?.filter(
+      (cc) => cc.proposalState === 'ACCEPTED' || cc.status === 'accepted'
+    ) ?? []
+  }, [deliverable?.campaign?.creators])
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return 'Not set'
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -575,7 +664,6 @@ export default function DeliverableDetailPage() {
   const canUpload = deliverable && ['PENDING', 'REJECTED'].includes(deliverable.status)
   const canSubmit = deliverable && deliverable.status === 'PENDING' && deliverable.versions.length > 0
   const canResubmit = deliverable && deliverable.status === 'REJECTED' && deliverable.versions.length > 0
-  const canApprove = deliverable && ['SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(deliverable.status)
   const isApproved = deliverable?.status === 'APPROVED'
 
   // Must run before any early return so hook count is stable
@@ -678,6 +766,30 @@ export default function DeliverableDetailPage() {
     latestVersionId,
     approvalsForLatestVersion,
     clientApprovers,
+  ])
+
+  // Check if current user can approve at this stage
+  const canApprove = useMemo(() => {
+    if (!deliverable || !user) return false
+    const status = deliverable.status
+
+    if (status === 'SUBMITTED' || status === 'INTERNAL_REVIEW') {
+      // Check if user is a campaign approver who hasn't approved yet
+      return pendingCampaignApprovers.some((a) => a.id === user.id)
+    }
+    if (status === 'PENDING_PROJECT_APPROVAL') {
+      return pendingProjectApprovers.some((a) => a.id === user.id)
+    }
+    if (status === 'CLIENT_REVIEW') {
+      return pendingClientApprovers.some((a) => a.id === user.id)
+    }
+    return false
+  }, [
+    deliverable?.status,
+    user?.id,
+    pendingCampaignApprovers,
+    pendingProjectApprovers,
+    pendingClientApprovers,
   ])
 
   const currentStageLabel = useMemo(() => {
@@ -796,6 +908,10 @@ export default function DeliverableDetailPage() {
           </Link>
           
           <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => setActivitySheetOpen(true)}>
+              <Activity className="mr-2 h-4 w-4" />
+              Activity
+            </Button>
             {(canSubmit || canResubmit) && (
               <Button onClick={handleSubmitForReview} disabled={submitting}>
                 <Send className="mr-2 h-4 w-4" />
@@ -903,6 +1019,49 @@ export default function DeliverableDetailPage() {
                 <p>{deliverable.description}</p>
               </div>
             )}
+
+            {/* Creator Assignment Section */}
+            <div className="mt-6 pt-6 border-t">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Assigned Creator</p>
+                  {deliverable.creator ? (
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                          {getInitials(deliverable.creator.displayName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium">{deliverable.creator.displayName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {deliverable.creator.instagramHandle && `@${deliverable.creator.instagramHandle}`}
+                          {deliverable.creator.instagramHandle && deliverable.creator.youtubeHandle && ' · '}
+                          {deliverable.creator.youtubeHandle && deliverable.creator.youtubeHandle}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground">No creator assigned</p>
+                  )}
+                </div>
+                {acceptedCreators.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAssignCreatorDialogOpen(true)}
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    {deliverable.creator ? 'Change Creator' : 'Assign Creator'}
+                  </Button>
+                )}
+              </div>
+              {acceptedCreators.length === 0 && !deliverable.creator && (
+                <p className="text-sm text-muted-foreground mt-2">
+                  No creators with accepted proposals available. Invite creators to this campaign first.
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -1377,11 +1536,11 @@ export default function DeliverableDetailPage() {
                         <CardContent className="p-4">
                           <div className="flex items-start gap-3">
                             <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                              approval.decision === 'approved' 
-                                ? 'bg-green-100 text-green-600' 
+                              approval.decision === 'APPROVED'
+                                ? 'bg-green-100 text-green-600'
                                 : 'bg-red-100 text-red-600'
                             }`}>
-                              {approval.decision === 'approved' 
+                              {approval.decision === 'APPROVED'
                                 ? <CheckCircle className="h-4 w-4" />
                                 : <XCircle className="h-4 w-4" />
                               }
@@ -1769,6 +1928,96 @@ export default function DeliverableDetailPage() {
         type="file"
         className="hidden"
         onChange={handleFileInputChange}
+      />
+
+      {/* Assign Creator Dialog */}
+      <Dialog open={assignCreatorDialogOpen} onOpenChange={setAssignCreatorDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Creator</DialogTitle>
+            <DialogDescription>
+              Select a creator with an accepted proposal to assign this deliverable to.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            {acceptedCreators.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">
+                No creators with accepted proposals available.
+              </p>
+            ) : (
+              acceptedCreators.map((cc) => (
+                <div
+                  key={cc.id}
+                  onClick={() => setSelectedCreatorId(cc.creator.id)}
+                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    selectedCreatorId === cc.creator.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-muted hover:border-primary/50'
+                  }`}
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback className="bg-primary/10 text-primary">
+                      {getInitials(cc.creator.displayName)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium">{cc.creator.displayName}</p>
+                    <p className="text-sm text-muted-foreground truncate">
+                      {cc.creator.email}
+                      {cc.creator.instagramHandle && ` · @${cc.creator.instagramHandle}`}
+                    </p>
+                  </div>
+                  {selectedCreatorId === cc.creator.id && (
+                    <CheckCircle className="h-5 w-5 text-primary shrink-0" />
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignCreatorDialogOpen(false)
+                setSelectedCreatorId(null)
+              }}
+              disabled={assigningCreator}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignCreator}
+              disabled={!selectedCreatorId || assigningCreator}
+            >
+              {assigningCreator ? 'Assigning...' : 'Assign Creator'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activity Timeline Sheet */}
+      <DeliverableTimelineSheet
+        open={activitySheetOpen}
+        onOpenChange={setActivitySheetOpen}
+        deliverableTitle={deliverable.title}
+        versions={deliverable.versions.map((v) => ({
+          id: v.id,
+          versionNumber: v.versionNumber,
+          fileName: v.fileName,
+          createdAt: v.createdAt,
+          uploadedBy: v.uploadedBy,
+        }))}
+        comments={deliverable.comments || []}
+        submissionEvents={deliverable.submissionEvents || []}
+        approvals={deliverable.approvals.map((a) => ({
+          id: a.id,
+          decision: a.decision,
+          approvalLevel: a.approvalLevel,
+          comment: a.comment,
+          decidedAt: a.decidedAt,
+          decidedBy: a.decidedBy,
+        }))}
+        onAddComment={handleAddComment}
       />
     </>
   )

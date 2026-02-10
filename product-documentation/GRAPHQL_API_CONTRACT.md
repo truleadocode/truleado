@@ -91,6 +91,14 @@ enum PaymentStatus {
   PENDING
   PAID
 }
+
+enum ProposalState {
+  DRAFT
+  SENT
+  COUNTERED
+  ACCEPTED
+  REJECTED
+}
 ```
 
 ---
@@ -297,6 +305,12 @@ type CampaignCreator {
   rateAmount: Money
   rateCurrency: String
   notes: String
+  # Proposal fields (Creator Portal Phase 1)
+  proposalState: ProposalState
+  currentProposalVersion: Int
+  proposalAcceptedAt: DateTime
+  proposalVersions: [ProposalVersion!]!
+  currentProposal: ProposalVersion
   analyticsSnapshots: [CreatorAnalyticsSnapshot!]!
   payments: [Payment!]!
   createdAt: DateTime!
@@ -321,6 +335,9 @@ type Deliverable {
   versions: [DeliverableVersion!]!
   approvals: [Approval!]!
   trackingRecord: DeliverableTrackingRecord
+  # Creator assignment (Creator Portal Phase 1)
+  creator: Creator
+  proposalVersion: ProposalVersion
   createdAt: DateTime!
 }
 
@@ -365,7 +382,59 @@ type DeliverableTrackingUrl {
   displayOrder: Int!
   createdAt: DateTime!
 }
+
+type DeliverableComment {
+  id: ID!
+  deliverable: Deliverable!
+  message: String!
+  createdBy: User
+  createdByType: String!  # 'agency' | 'creator'
+  createdAt: DateTime!
+}
 ```
+
+---
+
+### 4.6.1 Proposal System (Creator Portal Phase 1)
+
+```graphql
+type ProposalDeliverableScope {
+  deliverableType: String!
+  quantity: Int!
+  notes: String
+}
+
+type ProposalVersion {
+  id: ID!
+  campaignCreator: CampaignCreator!
+  versionNumber: Int!
+  state: ProposalState!
+  rateAmount: Money
+  rateCurrency: String
+  deliverableScopes: [ProposalDeliverableScope!]!
+  notes: String
+  createdBy: User
+  createdByType: String!  # 'agency' | 'creator'
+  createdAt: DateTime!
+}
+
+type ProposalNote {
+  id: ID!
+  campaignCreator: CampaignCreator!
+  message: String!
+  createdBy: User
+  createdByType: String!  # 'agency' | 'creator'
+  createdAt: DateTime!
+}
+```
+
+> **ProposalState**: Tracks the lifecycle of a proposal negotiation. Proposals are **append-only** (immutable history via `proposal_versions` table). Transitions:
+> - `DRAFT` → `SENT` (agency sends to creator)
+> - `SENT` → `COUNTERED` (creator responds with different terms)
+> - `SENT`/`COUNTERED` → `ACCEPTED` (creator accepts)
+> - `SENT`/`COUNTERED` → `REJECTED` (creator declines)
+
+> **ProposalNote**: Timeline messages for proposal negotiation. Both agency and creator can add notes. Append-only history stored in `proposal_notes` table.
 
 ---
 
@@ -402,6 +471,8 @@ type Creator {
   linkedinHandle: String
   notes: String
   isActive: Boolean!
+  # Creator Portal Phase 1: user_id links to auth system
+  userId: ID              # Nullable; set after first magic-link sign-in
   rates: [CreatorRate!]!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -664,6 +735,22 @@ type Query {
   
   # Token Purchases
   tokenPurchases(agencyId: ID!): [TokenPurchase!]!
+
+  # =========================================
+  # Creator Portal Queries (Phase 1)
+  # =========================================
+
+  # Get authenticated creator's profile
+  myCreatorProfile: Creator!
+
+  # Get creator's campaign assignments (invited or accepted status)
+  myCreatorCampaigns: [CampaignCreator!]!
+
+  # Get creator's assigned deliverables, optionally filtered by campaign
+  myCreatorDeliverables(campaignId: ID): [Deliverable!]!
+
+  # Get proposal details for a specific campaign assignment
+  myCreatorProposal(campaignCreatorId: ID!): ProposalVersion
 }
 ```
 
@@ -686,11 +773,13 @@ input CreateUserInput {
 type Mutation {
   createUser(input: CreateUserInput!): User!
   ensureClientUser: User!
+  ensureCreatorUser: User!
 }
 ```
 
 - **createUser**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup). **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user. **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
-- **ensureClientUser**: **Client portal** magic-link flow. Requires a valid Firebase token from **email-link sign-in** (not email/password). **Idempotent**: If an `auth_identities` row exists for this Firebase UID with provider `firebase_email_link`, returns the existing user. Otherwise: finds a `contacts` row with matching email and `is_client_approver = true`, creates `users` and `auth_identities` (provider `firebase_email_link`), updates the contact’s `user_id`, returns the user. Used after the user completes sign-in via the magic link on `/client/verify`.
+- **ensureClientUser**: **Client portal** magic-link flow. Requires a valid Firebase token from **email-link sign-in** (not email/password). **Idempotent**: If an `auth_identities` row exists for this Firebase UID with provider `firebase_email_link`, returns the existing user. Otherwise: finds a `contacts` row with matching email and `is_client_approver = true`, creates `users` and `auth_identities` (provider `firebase_email_link`), updates the contact's `user_id`, returns the user. Used after the user completes sign-in via the magic link on `/client/verify`.
+- **ensureCreatorUser**: **Creator portal** magic-link flow (Phase 1). Requires a valid Firebase token from **email-link sign-in**. **Idempotent**: If creator already has `user_id` linked, returns that user. Otherwise: finds `creators` row matching email and `is_active = true`, creates `users` and `auth_identities` (provider `firebase_creator_link`), links creator's `user_id`, returns the user. Throws if no creator account found for email. Used after creator completes sign-in via magic link on `/creator/verify`.
 
 ### 6.2 Agency & Client
 
@@ -870,11 +959,17 @@ type Mutation {
     deliverableId: ID!
     urls: [String!]!
   ): DeliverableTrackingRecord!
+
+  addDeliverableComment(
+    deliverableId: ID!
+    message: String!
+  ): DeliverableComment!
 }
 ```
 
-- **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **Caption editing**: `updateDeliverableVersionCaption` updates the version's caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
 - **deleteDeliverableVersion**: Permanently deletes a deliverable version and its file in the `deliverables` storage bucket. **Allowed only when**: (1) the deliverable status is `PENDING` or `REJECTED`, (2) the user has `UPLOAD_VERSION` on the campaign, and (3) the version has no associated approvals. Throws if the version has been used in any approval. UI: delete button on the deliverable detail page (when status permits).
+- **addDeliverableComment**: Agency and creator can add timeline comments to a deliverable. Creates append-only entry in `deliverable_comments` table. Requires authenticated user with access to the deliverable.
 
 ---
 
@@ -959,10 +1054,72 @@ type Mutation {
 - **declineCampaignInvite**: Changes campaign creator status from `INVITED` to `DECLINED`. Currently requires campaign access (future: creator authentication).
 - **removeCreatorFromCampaign**: Sets campaign creator status to `REMOVED`. Requires `INVITE_CREATOR` permission.
 - **updateCampaignCreator**: Updates rate amount, currency, or notes for a campaign creator assignment. Requires `INVITE_CREATOR` permission.
+- **inviteCreatorToCampaign** (updated Phase 1): Now automatically creates and sends a proposal when inviting a creator. Updates `campaign_creators.proposal_state` to `SENT` and sends notification email via Novu `proposal-sent` workflow.
+
+---
+
+## 9.1 Mutations – Proposals (Creator Portal Phase 1)
+
+```graphql
+input ProposalDeliverableScopeInput {
+  deliverableType: String!
+  quantity: Int!
+  notes: String
+}
+
+input CreateProposalInput {
+  campaignCreatorId: ID!
+  rateAmount: Money
+  rateCurrency: String
+  deliverableScopes: [ProposalDeliverableScopeInput!]!
+  notes: String
+}
+
+input CounterProposalInput {
+  campaignCreatorId: ID!
+  rateAmount: Money
+  rateCurrency: String
+  deliverableScopes: [ProposalDeliverableScopeInput!]!
+  notes: String
+}
+
+type Mutation {
+  # Create a draft proposal for a campaign creator (agency action)
+  createProposal(input: CreateProposalInput!): ProposalVersion!
+
+  # Send a proposal to the creator (agency action)
+  sendProposal(campaignCreatorId: ID!): ProposalVersion!
+
+  # Accept a proposal (creator action - requires creator auth)
+  acceptProposal(campaignCreatorId: ID!): ProposalVersion!
+
+  # Reject a proposal (creator action - requires creator auth)
+  rejectProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!
+
+  # Counter a proposal with different terms (creator action - requires creator auth)
+  counterProposal(input: CounterProposalInput!): ProposalVersion!
+
+  # Add a message/note to proposal timeline (creator or agency action - requires auth)
+  addProposalNote(campaignCreatorId: ID!, message: String!): ProposalNote!
+
+  # Assign a deliverable to a creator with an accepted proposal (agency action)
+  assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!
+}
+```
+
+- **createProposal**: Creates a draft proposal. Requires `INVITE_CREATOR` permission (agency). Inserts into `proposal_versions` with state `DRAFT`.
+- **sendProposal**: Changes proposal state from `DRAFT` to `SENT`. Requires `INVITE_CREATOR` permission (agency). Sends email notification to creator via `proposal-sent` workflow.
+- **acceptProposal**: Creator accepts proposal. Requires creator authentication (`ctx.creator`). Changes state to `ACCEPTED`, updates `campaign_creators.status` to `ACCEPTED`, `campaign_creators.proposal_state` to `ACCEPTED`, sets `proposal_accepted_at`. Sends `proposal-accepted` notification to agency.
+- **rejectProposal**: Creator rejects proposal. Requires creator authentication. Changes state to `REJECTED`, updates `campaign_creators.status` to `DECLINED`. Sends `proposal-rejected` notification to agency.
+- **counterProposal**: Creator counters with different terms. Requires creator authentication. Creates new proposal version with state `COUNTERED`, preserving old version (append-only). Sends `proposal-countered` notification to agency.
+- **assignDeliverableToCreator**: Agency assigns deliverable to creator after proposal accepted. Verifies `campaign_creators.proposal_state === 'accepted'`. Updates `deliverables.creator_id` and `deliverables.proposal_version_id`. Sends `deliverable-assigned` notification to creator.
+- **addProposalNote**: Both agency and creator can add timeline messages to a proposal. Requires authenticated user (agency user or creator) with access to the proposal. Creates append-only entry in `proposal_notes` table. Used for communication during proposal negotiation.
 
 ---
 
 ## 10. Mutations – Analytics (Token-Aware)
+
+---
 
 ```graphql
 type Mutation {

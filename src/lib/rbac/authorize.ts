@@ -8,7 +8,7 @@
  * Campaign Permission → Project Permission → Client Permission → Agency Permission → Deny
  */
 
-import { GraphQLContext, AuthenticatedUser, ContextContact } from '@/graphql/context';
+import { GraphQLContext, AuthenticatedUser, ContextContact, CreatorContext } from '@/graphql/context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { forbiddenError, unauthenticatedError, notFoundError } from '@/graphql/errors';
 import { AgencyRole, CampaignRole, Permission, PermissionCheckResult } from './types';
@@ -494,4 +494,101 @@ export async function requireClientApproverDeliverableAccess(
     throw forbiddenError('This deliverable does not belong to your client');
   }
   return user;
+}
+
+// =============================================================================
+// Creator Authorization Guards
+// =============================================================================
+
+/**
+ * Require creator authentication - throws if context doesn't have creator
+ */
+export function requireCreator(ctx: GraphQLContext): CreatorContext {
+  if (!ctx.creator) {
+    throw forbiddenError('Creator authentication required');
+  }
+  return ctx.creator;
+}
+
+/**
+ * Check if creator has access to a campaign (via campaign_creators)
+ */
+export async function hasCreatorCampaignAccess(
+  creatorId: string,
+  campaignId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('campaign_creators')
+    .select('id')
+    .eq('creator_id', creatorId)
+    .eq('campaign_id', campaignId)
+    .in('status', ['invited', 'accepted'])
+    .limit(1);
+
+  return !error && (data?.length ?? 0) > 0;
+}
+
+/**
+ * Require creator has campaign access - throws if not authorized
+ */
+export async function requireCreatorCampaignAccess(
+  ctx: GraphQLContext,
+  campaignId: string
+): Promise<CreatorContext> {
+  const creator = requireCreator(ctx);
+  const hasAccess = await hasCreatorCampaignAccess(creator.id, campaignId);
+
+  if (!hasAccess) {
+    throw forbiddenError('You do not have access to this campaign');
+  }
+
+  return creator;
+}
+
+/**
+ * Check if creator owns a deliverable (via deliverables.creator_id)
+ */
+export async function hasCreatorDeliverableAccess(
+  creatorId: string,
+  deliverableId: string
+): Promise<boolean> {
+  const { data, error } = await supabaseAdmin
+    .from('deliverables')
+    .select('id')
+    .eq('id', deliverableId)
+    .eq('creator_id', creatorId)
+    .limit(1);
+
+  return !error && (data?.length ?? 0) > 0;
+}
+
+/**
+ * Require creator owns deliverable - throws if not authorized
+ */
+export async function requireCreatorDeliverableAccess(
+  ctx: GraphQLContext,
+  deliverableId: string
+): Promise<CreatorContext> {
+  const creator = requireCreator(ctx);
+  const hasAccess = await hasCreatorDeliverableAccess(creator.id, deliverableId);
+
+  if (!hasAccess) {
+    throw forbiddenError('You do not have access to this deliverable');
+  }
+
+  return creator;
+}
+
+/**
+ * Get the agency ID for a creator
+ */
+export async function getAgencyIdForCreator(creatorId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from('creators')
+    .select('agency_id')
+    .eq('id', creatorId)
+    .single();
+
+  if (error || !data) return null;
+  return data.agency_id;
 }

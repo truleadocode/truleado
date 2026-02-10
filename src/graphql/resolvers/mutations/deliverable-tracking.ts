@@ -9,6 +9,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   requireAuth,
   requireCampaignAccess,
+  requireCreatorDeliverableAccess,
   getAgencyIdForCampaign,
   Permission,
 } from '@/lib/rbac';
@@ -76,7 +77,14 @@ export async function startDeliverableTracking(
     throw notFoundError('Deliverable', deliverableId);
   }
 
-  await requireCampaignAccess(ctx, deliverable.campaign_id, Permission.VIEW_DELIVERABLE);
+  // Check if creator or agency user
+  if (ctx.creator) {
+    // Creator path: must own the deliverable
+    await requireCreatorDeliverableAccess(ctx, deliverableId);
+  } else {
+    // Agency user path
+    await requireCampaignAccess(ctx, deliverable.campaign_id, Permission.VIEW_DELIVERABLE);
+  }
 
   if (deliverable.status !== 'approved') {
     throw invalidStateError(

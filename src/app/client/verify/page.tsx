@@ -91,7 +91,7 @@ function ClientVerifyInner() {
             </CardTitle>
             <CardDescription>
               {useAgencyLogin
-                ? 'This email is used for agency sign-in. Sign in with your password to access the client portal.'
+                ? 'This email is already registered with an agency account. Please sign in with your password first, then you\'ll be able to access the client portal. After signing in, simply navigate to the client area.'
                 : error}
             </CardDescription>
           </CardHeader>

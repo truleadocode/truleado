@@ -4,7 +4,7 @@
  * Combines all mutation resolvers.
  */
 
-import { createUser, ensureClientUser } from './user';
+import { createUser, ensureClientUser, ensureCreatorUser } from './user';
 import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole, updateAgencyLocale } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
@@ -34,6 +34,7 @@ import {
   deleteDeliverableVersion,
 } from './deliverable';
 import { startDeliverableTracking } from './deliverable-tracking';
+import { addDeliverableComment } from './deliverable-comment';
 import {
   addCreator,
   updateCreator,
@@ -50,11 +51,25 @@ import { fetchPreCampaignAnalytics, triggerSocialFetch } from './analytics';
 import { createPayment, markPaymentPaid } from './payment';
 import { markNotificationRead, markAllNotificationsRead } from './notification';
 import { saveAgencyEmailConfig } from './agency-email-config';
+import {
+  createProposal,
+  sendProposal,
+  acceptProposal,
+  counterProposal,
+  rejectProposal,
+  acceptCounterProposal,
+  declineCounterProposal,
+  reCounterProposal,
+  reopenProposal,
+  addProposalNote,
+  assignDeliverableToCreator,
+} from './proposal';
 
 export const mutationResolvers = {
   // Identity (signup)
   createUser,
   ensureClientUser,
+  ensureCreatorUser,
   // Agency & Client
   createAgency,
   joinAgencyByCode,
@@ -95,6 +110,7 @@ export const mutationResolvers = {
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
   startDeliverableTracking,
+  addDeliverableComment,
   
   // Creators
   addCreator,
@@ -121,4 +137,17 @@ export const mutationResolvers = {
   markAllNotificationsRead,
   // Agency email config (SMTP for Novu)
   saveAgencyEmailConfig,
+
+  // Proposals
+  createProposal,
+  sendProposal,
+  acceptProposal,
+  counterProposal,
+  rejectProposal,
+  acceptCounterProposal,
+  declineCounterProposal,
+  reCounterProposal,
+  reopenProposal,
+  addProposalNote,
+  assignDeliverableToCreator,
 };

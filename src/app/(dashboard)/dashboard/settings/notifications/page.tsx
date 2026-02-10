@@ -23,6 +23,7 @@ const smtpSchema = z.object({
   smtpPassword: z.string().optional(),
   fromEmail: z.string().email('Valid from email is required'),
   fromName: z.string().optional(),
+  useCustomSmtp: z.boolean(),
 })
 
 type SmtpFormData = z.infer<typeof smtpSchema>
@@ -37,6 +38,7 @@ interface AgencyEmailConfig {
   fromEmail: string
   fromName: string | null
   novuIntegrationIdentifier: string | null
+  useCustomSmtp: boolean
   createdAt: string
   updatedAt: string
 }
@@ -52,6 +54,7 @@ export default function NotificationsSettingsPage() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors },
   } = useForm<SmtpFormData>({
     resolver: zodResolver(smtpSchema),
@@ -63,8 +66,11 @@ export default function NotificationsSettingsPage() {
       smtpPassword: '',
       fromEmail: '',
       fromName: '',
+      useCustomSmtp: false,
     },
   })
+
+  const useCustomSmtp = watch('useCustomSmtp')
 
   useEffect(() => {
     async function fetchConfig() {
@@ -85,6 +91,7 @@ export default function NotificationsSettingsPage() {
             smtpPassword: '',
             fromEmail: c.fromEmail,
             fromName: c.fromName ?? '',
+            useCustomSmtp: c.useCustomSmtp ?? false,
           })
         }
       } catch (err) {
@@ -111,6 +118,7 @@ export default function NotificationsSettingsPage() {
           smtpPassword: data.smtpPassword || null,
           fromEmail: data.fromEmail,
           fromName: data.fromName || null,
+          useCustomSmtp: data.useCustomSmtp,
         },
       })
       toast({ title: 'Email settings saved' })
@@ -124,6 +132,7 @@ export default function NotificationsSettingsPage() {
               smtpUsername: data.smtpUsername ?? null,
               fromEmail: data.fromEmail,
               fromName: data.fromName ?? null,
+              useCustomSmtp: data.useCustomSmtp,
               updatedAt: new Date().toISOString(),
             }
           : null
@@ -185,6 +194,28 @@ export default function NotificationsSettingsPage() {
               </p>
             ) : (
               <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 max-w-lg">
+                {/* Enable/Disable Custom SMTP Toggle */}
+                <div className="p-4 border rounded-lg bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="useCustomSmtp" className="text-base font-medium">
+                        Use Custom SMTP
+                      </Label>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {useCustomSmtp
+                          ? 'Emails will be sent using your custom SMTP server configured below.'
+                          : 'Emails will be sent using the default email service (recommended if your SMTP has delivery issues).'}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      id="useCustomSmtp"
+                      {...register('useCustomSmtp')}
+                      className="h-5 w-5 rounded border-input"
+                    />
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="smtpHost">SMTP host</Label>

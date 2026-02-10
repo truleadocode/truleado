@@ -24,6 +24,7 @@ import {
   Trash2,
   Upload,
   X,
+  XCircle,
   Pencil,
   BarChart3,
   Heart,
@@ -35,6 +36,7 @@ import {
   TrendingUp,
   Bookmark,
   UserPlus,
+  ChevronRight,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +68,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
 import { ApproverPicker } from '@/components/approver-picker'
+import { ProposalTimelineSheet } from './components/proposal-timeline-sheet'
 
 interface DeliverableVersion {
   id: string
@@ -95,12 +98,45 @@ interface Creator {
   tiktokHandle: string | null
 }
 
+interface CurrentProposal {
+  id: string
+  versionNumber: number
+  state: string
+  rateAmount: number | null
+  rateCurrency: string | null
+  notes: string | null
+  createdByType: string
+  createdAt: string
+}
+
+interface ProposalVersion {
+  id: string
+  versionNumber: number
+  state: string
+  rateAmount: number | null
+  rateCurrency: string | null
+  notes: string | null
+  createdByType: string
+  createdAt: string
+}
+
+interface ProposalNote {
+  id: string
+  message: string
+  createdByType: string
+  createdAt: string
+}
+
 interface CampaignCreator {
   id: string
   status: string
   rateAmount: number | null
   rateCurrency: string | null
   notes: string | null
+  proposalState: string | null
+  currentProposal: CurrentProposal | null
+  proposalVersions: ProposalVersion[]
+  proposalNotes: ProposalNote[]
   creator: Creator
 }
 
@@ -210,6 +246,10 @@ export default function CampaignDetailPage() {
   const [savingTracking, setSavingTracking] = useState(false)
   const [trackingDeliverable, setTrackingDeliverable] = useState<Deliverable | null>(null)
 
+  // Timeline sheet for creator proposals
+  const [timelineSheetOpen, setTimelineSheetOpen] = useState(false)
+  const [selectedCreatorForTimeline, setSelectedCreatorForTimeline] = useState<CampaignCreator | null>(null)
+
   // Assign creator dialog
   const [assignCreatorOpen, setAssignCreatorOpen] = useState(false)
   const [rosterCreators, setRosterCreators] = useState<RosterCreator[]>([])
@@ -271,6 +311,16 @@ export default function CampaignDetailPage() {
       .catch(() => setAgencyUsers([]))
       .finally(() => setLoadingAgencyUsers(false))
   }, [manageApproversOpen, currentAgency?.id])
+
+  // Keep selectedCreatorForTimeline in sync when campaign data refreshes
+  useEffect(() => {
+    if (selectedCreatorForTimeline && campaign?.creators) {
+      const updated = campaign.creators.find(c => c.id === selectedCreatorForTimeline.id)
+      if (updated) {
+        setSelectedCreatorForTimeline(updated)
+      }
+    }
+  }, [campaign?.creators, selectedCreatorForTimeline?.id])
 
   const handleStatusTransition = async () => {
     if (!campaign) return
@@ -636,7 +686,13 @@ export default function CampaignDetailPage() {
     }
   }
 
-  // Assign Creator handlers
+  // Timeline sheet handler
+  const openTimelineSheet = (campaignCreator: CampaignCreator) => {
+    setSelectedCreatorForTimeline(campaignCreator)
+    setTimelineSheetOpen(true)
+  }
+
+  // Invite Creator handlers
   const openAssignCreator = async () => {
     if (!currentAgency?.id) return
     setAssignCreatorOpen(true)
@@ -726,6 +782,86 @@ export default function CampaignDetailPage() {
     }
   }
 
+  const handleAcceptCounter = async (campaignCreatorId: string) => {
+    try {
+      await graphqlRequest(mutations.acceptCounterProposal, { campaignCreatorId })
+      toast({ title: 'Counter offer accepted', description: 'The creator has been confirmed for this campaign.' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to accept counter offer',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleDeclineCounter = async (campaignCreatorId: string) => {
+    try {
+      await graphqlRequest(mutations.declineCounterProposal, { campaignCreatorId })
+      toast({ title: 'Counter offer declined' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to decline counter offer',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleAddNote = async (campaignCreatorId: string, message: string) => {
+    try {
+      await graphqlRequest(mutations.addProposalNote, { campaignCreatorId, message })
+      toast({ title: 'Note added' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to add note',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleReCounter = async (campaignCreatorId: string, input: { rateAmount: number; rateCurrency: string; notes?: string }) => {
+    try {
+      await graphqlRequest(mutations.reCounterProposal, {
+        input: {
+          campaignCreatorId,
+          ...input,
+        }
+      })
+      toast({ title: 'Counter proposal sent', description: 'The creator will be notified of your new offer.' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to send counter proposal',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleReopen = async (campaignCreatorId: string, input: { rateAmount: number; rateCurrency: string; notes?: string }) => {
+    try {
+      await graphqlRequest(mutations.reopenProposal, {
+        input: {
+          campaignCreatorId,
+          ...input,
+        }
+      })
+      toast({ title: 'Proposal reopened', description: 'The creator will be notified of your new offer.' })
+      fetchCampaign()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to reopen proposal',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const getCreatorStatusColor = (status: string) => {
     switch (status) {
       case 'INVITED': return 'bg-yellow-100 text-yellow-800'
@@ -733,6 +869,39 @@ export default function CampaignDetailPage() {
       case 'DECLINED': return 'bg-red-100 text-red-800'
       default: return 'bg-gray-100 text-gray-800'
     }
+  }
+
+  const getProposalStateColor = (state: string | null) => {
+    switch (state) {
+      case 'sent': return 'bg-blue-100 text-blue-800'
+      case 'countered': return 'bg-orange-100 text-orange-800'
+      case 'accepted': return 'bg-green-100 text-green-800'
+      case 'rejected': return 'bg-red-100 text-red-800'
+      case 'draft': return 'bg-gray-100 text-gray-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getProposalStateLabel = (state: string | null) => {
+    switch (state) {
+      case 'sent': return 'Proposal Sent'
+      case 'countered': return 'Counter Received'
+      case 'accepted': return 'Accepted'
+      case 'rejected': return 'Rejected'
+      case 'draft': return 'Draft'
+      default: return state || 'No Proposal'
+    }
+  }
+
+  const formatRate = (amount: number | null, currency: string | null) => {
+    if (!amount) return null
+    const currencyCode = currency || 'INR'
+    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 0,
+    }).format(amount / 100)
   }
 
   // Filter available creators (exclude already assigned)
@@ -1166,7 +1335,7 @@ export default function CampaignDetailPage() {
               {!isArchived && (
                 <Button size="sm" variant="outline" onClick={openAssignCreator}>
                   <Plus className="mr-2 h-4 w-4" />
-                  Assign Creator
+                  Invite Creator
                 </Button>
               )}
             </div>
@@ -1177,14 +1346,18 @@ export default function CampaignDetailPage() {
                   <Users className="h-10 w-10 text-muted-foreground mb-3" />
                   <h3 className="font-medium">No creators assigned</h3>
                   <p className="text-sm text-muted-foreground text-center mt-1">
-                    Assign creators from your roster
+                    Invite creators from your roster
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-3">
                 {campaign.creators.map((campaignCreator) => (
-                  <Card key={campaignCreator.id}>
+                  <Card
+                    key={campaignCreator.id}
+                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => openTimelineSheet(campaignCreator)}
+                  >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
@@ -1194,22 +1367,27 @@ export default function CampaignDetailPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <Link
-                              href={`/dashboard/creators/${campaignCreator.creator.id}`}
-                              className="font-medium hover:underline"
-                            >
+                            <span className="font-medium">
                               {campaignCreator.creator.displayName}
-                            </Link>
+                            </span>
                             <div className="flex flex-wrap items-center gap-2 mt-1">
                               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getCreatorStatusColor(campaignCreator.status)}`}>
                                 {campaignCreator.status}
                               </span>
-                              {campaignCreator.rateAmount && (
-                                <span className="text-xs text-muted-foreground">
-                                  {campaignCreator.rateCurrency || 'INR'} {campaignCreator.rateAmount.toLocaleString()}
+                              {campaignCreator.proposalState && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getProposalStateColor(campaignCreator.proposalState)}`}>
+                                  {getProposalStateLabel(campaignCreator.proposalState)}
                                 </span>
                               )}
                             </div>
+                            {campaignCreator.rateAmount && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Rate: {formatRate(campaignCreator.rateAmount, campaignCreator.rateCurrency)}
+                                {campaignCreator.proposalState === 'countered' && (
+                                  <span className="ml-2 text-orange-600">(Counter pending)</span>
+                                )}
+                              </div>
+                            )}
                             <div className="flex gap-2 text-xs text-muted-foreground mt-1">
                               {campaignCreator.creator.instagramHandle && <span>@{campaignCreator.creator.instagramHandle}</span>}
                               {campaignCreator.creator.youtubeHandle && <span>YT: {campaignCreator.creator.youtubeHandle}</span>}
@@ -1217,34 +1395,7 @@ export default function CampaignDetailPage() {
                             </div>
                           </div>
                         </div>
-                        {!isArchived && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {campaignCreator.status === 'INVITED' && (
-                                <>
-                                  <DropdownMenuItem onClick={() => handleAcceptInvite(campaignCreator.id)}>
-                                    Accept Invite
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleDeclineInvite(campaignCreator.id)}>
-                                    Decline Invite
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                </>
-                              )}
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleRemoveCreator(campaignCreator.id)}
-                              >
-                                Remove from Campaign
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
+                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
                       </div>
                     </CardContent>
                   </Card>
@@ -1604,12 +1755,12 @@ export default function CampaignDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Assign Creator Dialog */}
+      {/* Invite Creator Dialog */}
       <Dialog open={assignCreatorOpen} onOpenChange={setAssignCreatorOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Assign Creator to Campaign</DialogTitle>
-            <DialogDescription>Select a creator from your roster</DialogDescription>
+            <DialogTitle>Invite Creator to Campaign</DialogTitle>
+            <DialogDescription>Select a creator and send them a proposal via email</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input
@@ -1688,11 +1839,25 @@ export default function CampaignDetailPage() {
               Cancel
             </Button>
             <Button onClick={handleAssignCreator} disabled={!selectedCreatorId || assigning}>
-              {assigning ? 'Assigning...' : 'Assign Creator'}
+              {assigning ? 'Sending...' : 'Send Invite'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Proposal Timeline Sheet */}
+      <ProposalTimelineSheet
+        open={timelineSheetOpen}
+        onOpenChange={setTimelineSheetOpen}
+        campaignCreator={selectedCreatorForTimeline}
+        onAcceptCounter={handleAcceptCounter}
+        onDeclineCounter={handleDeclineCounter}
+        onReCounter={handleReCounter}
+        onReopen={handleReopen}
+        onRemove={handleRemoveCreator}
+        onAddNote={handleAddNote}
+        isArchived={isArchived}
+      />
     </>
   )
 }

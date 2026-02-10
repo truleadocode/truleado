@@ -7,7 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { adminAuth } from '@/lib/firebase/admin';
-import { sendClientMagicLinkEmail } from '@/lib/novu/server';
+import { triggerNotification } from '@/lib/novu/trigger';
+import { ensureSubscriber } from '@/lib/novu/subscriber';
 
 export const runtime = 'nodejs';
 
@@ -55,9 +56,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Fetch contact with agency_id through clients relationship for multi-tenant support
     const { data: rows, error } = await supabaseAdmin
       .from('contacts')
-      .select('id')
+      .select('id, first_name, last_name, clients!inner(agency_id)')
       .eq('is_client_approver', true)
       .ilike('email', email)
       .limit(1);
@@ -78,16 +80,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const agencyId = (data.clients as { agency_id: string })?.agency_id;
+    if (!agencyId) {
+      console.error('request-magic-link: no agency_id found for contact', data.id);
+      return NextResponse.json(
+        { error: 'Unable to process request' },
+        { status: 500 }
+      );
+    }
+
     const continueUrl = `${baseUrl}/client/verify`;
     const link = await adminAuth.generateSignInWithEmailLink(email, {
       url: continueUrl,
       handleCodeInApp: true,
     });
 
-    await sendClientMagicLinkEmail({
-      email,
-      link,
-      expiresInMinutes: MAGIC_LINK_TTL_MINUTES,
+    // Ensure subscriber exists with tenant association for multi-tenant support
+    await ensureSubscriber({
+      subscriberId: email,
+      email: email,
+      firstName: data.first_name ?? undefined,
+      lastName: data.last_name ?? undefined,
+      tenantId: agencyId,
+    });
+
+    // Send magic link via Novu with proper tenant context
+    await triggerNotification({
+      workflowId: process.env.NOVU_CLIENT_MAGIC_LINK_WORKFLOW_ID || 'client-magic-link',
+      subscriberId: email,
+      email: email,
+      agencyId,
+      data: {
+        email,
+        magicLink: link,
+        expiresInMinutes: MAGIC_LINK_TTL_MINUTES,
+        sentAt: new Date().toISOString(),
+      },
     });
 
     return NextResponse.json({ ok: true });

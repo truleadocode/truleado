@@ -11,6 +11,7 @@ import {
   requireAuth,
   requireCampaignAccess,
   requireClientApproverDeliverableAccess,
+  requireCreatorDeliverableAccess,
   getAgencyIdForCampaign,
   Permission,
 } from '@/lib/rbac';
@@ -18,6 +19,25 @@ import { validationError, notFoundError, invalidStateError, forbiddenError } fro
 import { logActivity } from '@/lib/audit';
 import { triggerNotification } from '@/lib/novu/trigger';
 import { ensureSubscriber } from '@/lib/novu/subscriber';
+import {
+  notifyVersionUploaded,
+  notifyCreatorDeliverableApproved,
+  notifyCreatorDeliverableRejected,
+} from '@/lib/novu/workflows/creator';
+
+/**
+ * Get the base URL for action links
+ * Uses NEXT_PUBLIC_APP_URL with fallbacks
+ */
+function getBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_APP_URL?.trim()
+    || process.env.NEXT_PUBLIC_URL?.trim()
+    || process.env.VERCEL_URL?.trim()
+    || 'http://localhost:3000';
+
+  const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+  return fullUrl.replace(/\/$/, ''); // Remove trailing slash
+}
 
 // Deliverable state transitions
 const DELIVERABLE_TRANSITIONS: Record<string, string[]> = {
@@ -53,13 +73,14 @@ async function notifyApprovalRequested(params: {
       console.warn('[Novu] Skipping notification: user not found', userId);
       continue;
     }
-    await ensureSubscriber({ subscriberId: u.id, email: u.email, firstName: u.full_name?.split(' ')[0] ?? null, lastName: u.full_name?.split(' ').slice(1).join(' ') || null });
+    await ensureSubscriber({ subscriberId: u.id, email: u.email, firstName: u.full_name?.split(' ')[0] ?? null, lastName: u.full_name?.split(' ').slice(1).join(' ') || null, tenantId: agencyId });
+    const baseUrl = getBaseUrl();
     await triggerNotification({
       workflowId: 'approval-requested',
       subscriberId: u.id,
       email: u.email ?? undefined,
       agencyId,
-      data: { deliverableId, deliverableTitle, campaignId, approvalLevel, actionUrl: `/dashboard/deliverables/${deliverableId}` },
+      data: { deliverableId, deliverableTitle, campaignId, approvalLevel, baseUrl, actionUrl: `/dashboard/deliverables/${deliverableId}` },
     });
   }
 }
@@ -86,13 +107,15 @@ async function notifyApprovalDecided(params: {
       email: u.email,
       firstName: (u as { full_name?: string | null }).full_name?.split(' ')[0] ?? null,
       lastName: (u as { full_name?: string | null }).full_name?.split(' ').slice(1).join(' ') || null,
+      tenantId: agencyId,
     });
+    const baseUrl = getBaseUrl();
     await triggerNotification({
       workflowId,
       subscriberId: u.id,
       email: u.email ?? undefined,
       agencyId,
-      data: { deliverableId, deliverableTitle, decidedByName, comment: comment ?? undefined, actionUrl: `/dashboard/deliverables/${deliverableId}` },
+      data: { deliverableId, deliverableTitle, decidedByName, comment: comment ?? undefined, baseUrl, actionUrl: `/dashboard/deliverables/${deliverableId}` },
     });
   }
 }
@@ -180,21 +203,33 @@ export async function uploadDeliverableVersion(
   ctx: GraphQLContext
 ) {
   const user = requireAuth(ctx);
-  
+
   // Get deliverable and verify access
   const { data: deliverable, error: fetchError } = await supabaseAdmin
     .from('deliverables')
     .select('*, campaigns!inner(id)')
     .eq('id', deliverableId)
     .single();
-  
+
   if (fetchError || !deliverable) {
     throw notFoundError('Deliverable', deliverableId);
   }
-  
+
   const campaigns = deliverable.campaigns as { id: string };
-  await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
-  
+
+  // Check if creator or agency user
+  if (ctx.creator) {
+    // Creator path: must own the deliverable
+    await requireCreatorDeliverableAccess(ctx, deliverableId);
+    // Creator can only upload to non-approved deliverables
+    if (deliverable.status === 'approved') {
+      throw forbiddenError('Cannot upload to an approved deliverable');
+    }
+  } else {
+    // Agency user path
+    await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
+  }
+
   // Can't upload to approved deliverables
   if (deliverable.status === 'approved') {
     throw invalidStateError(
@@ -251,8 +286,32 @@ export async function uploadDeliverableVersion(
       afterState: version,
       metadata: { deliverableId, versionNumber: nextVersionNumber },
     });
+
+    // Notify agency team when creator uploads a new version
+    if (ctx.creator) {
+      try {
+        const { data: campaign } = await supabaseAdmin
+          .from('campaigns')
+          .select('name')
+          .eq('id', campaigns.id)
+          .single();
+
+        await notifyVersionUploaded({
+          agencyId,
+          deliverableId,
+          deliverableTitle: deliverable.title as string,
+          campaignId: campaigns.id,
+          campaignName: campaign?.name ?? 'Campaign',
+          versionNumber: nextVersionNumber,
+          creatorName: ctx.creator.displayName,
+        });
+      } catch (err) {
+        console.error('[Novu] Failed to notify version upload:', err);
+        // Don't fail the mutation; version was already uploaded
+      }
+    }
   }
-  
+
   return version;
 }
 
@@ -264,20 +323,30 @@ export async function submitDeliverableForReview(
   { deliverableId }: { deliverableId: string },
   ctx: GraphQLContext
 ) {
+  requireAuth(ctx);
+
   // Get deliverable
   const { data: deliverable, error: fetchError } = await supabaseAdmin
     .from('deliverables')
     .select('*, campaigns!inner(id)')
     .eq('id', deliverableId)
     .single();
-  
+
   if (fetchError || !deliverable) {
     throw notFoundError('Deliverable', deliverableId);
   }
-  
+
   const campaigns = deliverable.campaigns as { id: string };
+
+  // IMPORTANT: Only agency users (operators, account managers, admins) can submit for review
+  // Creators can only upload versions and add comments - they must wait for agency to submit
+  if (ctx.creator) {
+    throw forbiddenError('Creators cannot submit deliverables for review. Please wait for the agency team to review and submit.');
+  }
+
+  // Agency user path - requires UPLOAD_VERSION permission
   await requireCampaignAccess(ctx, campaigns.id, Permission.UPLOAD_VERSION);
-  
+
   // Validate transition
   const allowedFrom = ['pending', 'rejected'];
   if (!allowedFrom.includes(deliverable.status)) {
@@ -514,13 +583,14 @@ async function createApproval(
           const subscriberId = c.user_id ?? c.id;
           const email = c.email ?? undefined;
           try {
-            await ensureSubscriber({ subscriberId, email, firstName: c.first_name, lastName: c.last_name });
+            await ensureSubscriber({ subscriberId, email, firstName: c.first_name, lastName: c.last_name, tenantId: agencyIdForNotify });
+            const baseUrl = getBaseUrl();
             await triggerNotification({
               workflowId: 'approval-requested',
               subscriberId,
               email,
               agencyId: agencyIdForNotify,
-              data: { deliverableId, deliverableTitle, campaignId: campaign.id, approvalLevel: 'client', actionUrl: `/dashboard/deliverables/${deliverableId}` },
+              data: { deliverableId, deliverableTitle, campaignId: campaign.id, approvalLevel: 'client', baseUrl, actionUrl: `/dashboard/deliverables/${deliverableId}` },
             });
           } catch (err) {
             console.error('Novu approval-requested (client):', err);
@@ -593,6 +663,44 @@ async function createApproval(
       console.log('[Novu]', workflowLabel, 'notifications sent');
     } catch (err) {
       console.error('[Novu] approval-decided notify failed:', err);
+      // Don't fail the mutation; approval was already recorded
+    }
+  }
+
+  // Notify creator when their deliverable is approved or rejected
+  if (deliverable.creator_id && agencyId) {
+    try {
+      const { data: creator } = await supabaseAdmin
+        .from('creators')
+        .select('email, display_name')
+        .eq('id', deliverable.creator_id)
+        .single();
+
+      if (creator?.email) {
+        if (decision === 'approved') {
+          await notifyCreatorDeliverableApproved({
+            agencyId,
+            creatorEmail: creator.email,
+            creatorName: creator.display_name,
+            deliverableId,
+            deliverableTitle,
+            approverName: decidedByName,
+            comment,
+          });
+        } else {
+          await notifyCreatorDeliverableRejected({
+            agencyId,
+            creatorEmail: creator.email,
+            creatorName: creator.display_name,
+            deliverableId,
+            deliverableTitle,
+            approverName: decidedByName,
+            comment: comment || 'No comment provided',
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Novu] Failed to notify creator of approval decision:', err);
       // Don't fail the mutation; approval was already recorded
     }
   }

@@ -35,23 +35,35 @@ export interface ContextContact {
 }
 
 /**
+ * Linked creator (creator portal user) - set when user is linked to a creator account
+ */
+export interface CreatorContext {
+  id: string;
+  agencyId: string;
+  displayName: string;
+}
+
+/**
  * GraphQL context available to all resolvers
  */
 export interface GraphQLContext {
   // Authenticated user (null if not authenticated)
   user: AuthenticatedUser | null;
-  
+
   // Linked contact for client portal users (null if not a contact-linked user)
   contact: ContextContact | null;
-  
+
+  // Linked creator for creator portal users (null if not a creator-linked user)
+  creator: CreatorContext | null;
+
   // Firebase decoded token (for additional claims if needed)
   decodedToken: DecodedIdToken | null;
-  
+
   // Request metadata
   requestId: string;
   ipAddress: string | null;
   userAgent: string | null;
-  
+
   // Current agency context (set by client in headers)
   agencyId: string | null;
 }
@@ -75,6 +87,7 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
   const baseContext: GraphQLContext = {
     user: null,
     contact: null,
+    creator: null,
     decodedToken: null,
     requestId,
     ipAddress,
@@ -167,10 +180,28 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
         isClientApprover: contactData.is_client_approver ?? false,
       };
     }
-    
+
+    // Load linked creator (for creator portal users)
+    let creator: CreatorContext | null = null;
+    const { data: creatorRow } = await supabaseAdmin
+      .from('creators')
+      .select('id, agency_id, display_name')
+      .eq('user_id', userRow.id)
+      .eq('is_active', true)
+      .maybeSingle();
+    const creatorData = creatorRow as { id: string; agency_id: string; display_name: string } | null;
+    if (creatorData) {
+      creator = {
+        id: creatorData.id,
+        agencyId: creatorData.agency_id,
+        displayName: creatorData.display_name,
+      };
+    }
+
     return {
       user: authenticatedUser,
       contact,
+      creator,
       decodedToken,
       requestId,
       ipAddress,

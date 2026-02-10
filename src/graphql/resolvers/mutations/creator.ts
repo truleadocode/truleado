@@ -17,6 +17,7 @@ import {
 } from '@/lib/rbac';
 import { validationError, notFoundError, forbiddenError, insufficientTokensError } from '../../errors';
 import { logActivity } from '@/lib/audit';
+import { notifyProposalSent } from '@/lib/novu/workflows/creator';
 
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
 const APP_URL = process.env.NEXT_PUBLIC_URL || process.env.VERCEL_URL || 'http://localhost:3000';
@@ -231,23 +232,34 @@ export async function inviteCreatorToCampaign(
   ctx: GraphQLContext
 ) {
   await requireCampaignAccess(ctx, campaignId, Permission.INVITE_CREATOR);
-  
-  // Verify creator exists and is active
+
+  // Verify creator exists and is active - get email and display_name for notification
   const { data: creator, error: creatorError } = await supabaseAdmin
     .from('creators')
-    .select('agency_id')
+    .select('agency_id, email, display_name')
     .eq('id', creatorId)
     .eq('is_active', true)
     .single();
-  
+
   if (creatorError || !creator) {
     throw notFoundError('Creator', creatorId);
   }
-  
+
   // Verify creator belongs to the same agency as the campaign
   const agencyId = await getAgencyIdForCampaign(campaignId);
   if (!agencyId || creator.agency_id !== agencyId) {
     throw validationError('Creator must belong to the same agency as the campaign');
+  }
+
+  // Get campaign name for the notification
+  const { data: campaign, error: campaignError } = await supabaseAdmin
+    .from('campaigns')
+    .select('name')
+    .eq('id', campaignId)
+    .single();
+
+  if (campaignError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
   }
   
   // Check if creator is already in the campaign
@@ -303,7 +315,7 @@ export async function inviteCreatorToCampaign(
     campaignCreator = data;
   }
   
-  // Log activity
+  // Log activity for invite
   await logActivity({
     agencyId,
     entityType: 'campaign_creator',
@@ -311,10 +323,66 @@ export async function inviteCreatorToCampaign(
     action: 'invited',
     actorId: ctx.user!.id,
     actorType: 'user',
-    afterState: campaignCreator,
+    afterState: campaignCreator as unknown as Record<string, unknown>,
     metadata: { campaignId, creatorId },
   });
-  
+
+  // Create and send proposal automatically if creator has email
+  if (creator.email) {
+    // Create proposal version with state 'sent'
+    const { data: proposalVersion, error: proposalError } = await supabaseAdmin
+      .from('proposal_versions')
+      .insert({
+        campaign_creator_id: campaignCreator.id,
+        version_number: 1,
+        state: 'sent',
+        rate_amount: rateAmount || null,
+        rate_currency: rateCurrency || 'INR',
+        notes: notes?.trim() || null,
+        created_by: ctx.user!.id,
+        created_by_type: 'agency',
+      })
+      .select()
+      .single();
+
+    if (proposalError) {
+      console.error('[Proposal] Failed to create proposal version:', proposalError);
+    } else {
+      // Update campaign_creators with proposal state
+      await supabaseAdmin
+        .from('campaign_creators')
+        .update({ proposal_state: 'sent' })
+        .eq('id', campaignCreator.id);
+
+      // Log proposal sent activity
+      await logActivity({
+        agencyId,
+        entityType: 'proposal_version',
+        entityId: proposalVersion.id,
+        action: 'sent',
+        actorId: ctx.user!.id,
+        actorType: 'user',
+        afterState: proposalVersion as unknown as Record<string, unknown>,
+        metadata: { campaignId, creatorId, campaignCreatorId: campaignCreator.id },
+      });
+
+      // Send email notification to creator
+      try {
+        await notifyProposalSent({
+          agencyId,
+          creatorEmail: creator.email,
+          creatorName: creator.display_name,
+          campaignName: campaign.name,
+          campaignCreatorId: campaignCreator.id,
+          rateAmount: rateAmount,
+          rateCurrency: rateCurrency || 'INR',
+        });
+      } catch (err) {
+        console.error('[Novu] Failed to send proposal notification:', err);
+      }
+    }
+  }
+
   return campaignCreator;
 }
 
