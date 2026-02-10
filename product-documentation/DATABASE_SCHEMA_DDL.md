@@ -25,9 +25,11 @@ CREATE TABLE agencies (
   agency_code TEXT UNIQUE,
   billing_email TEXT,
   token_balance INTEGER DEFAULT 0,
+  premium_token_balance INTEGER DEFAULT 0,
   currency_code TEXT DEFAULT 'USD',
   timezone TEXT DEFAULT 'UTC',
   language_code TEXT DEFAULT 'en',
+  use_custom_smtp BOOLEAN DEFAULT false,
   status TEXT CHECK (status IN ('active','suspended')) DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -35,6 +37,8 @@ CREATE TABLE agencies (
 ```
 
 > **agency_code**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on insert via trigger; used by `joinAgencyByCode`. See migration `00010_agency_code_for_join.sql`.
+> **premium_token_balance**: Separate token balance for premium features (added in migration 00016).
+> **use_custom_smtp**: Toggle to enable custom SMTP. When true, Novu uses agency's `agency_email_config` integration instead of default Mailgun (migration 00028).
 
 ---
 
@@ -256,11 +260,19 @@ CREATE TABLE deliverables (
   deliverable_type TEXT,
   status TEXT CHECK (status IN ('pending','submitted','internal_review','client_review','approved','rejected')) DEFAULT 'pending',
   due_date DATE,
+  creator_id UUID REFERENCES creators(id) ON DELETE SET NULL,
+  proposal_version_id UUID REFERENCES proposal_versions(id) ON DELETE SET NULL,
   created_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE INDEX idx_deliverables_creator
+  ON deliverables(creator_id);
 ```
+
+> **creator_id**: Creator assigned to this deliverable (Phase 1).
+> **proposal_version_id**: Proposal version used when assigning this deliverable to creator.
 
 ---
 
@@ -372,7 +384,29 @@ CREATE INDEX idx_deliverable_tracking_urls_tracking_record_id
 
 ---
 
-### 5.6 campaign_attachments
+### 5.6 deliverable_comments (Phase 1 – Creator Portal)
+
+```sql
+CREATE TABLE deliverable_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deliverable_id UUID NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_by UUID REFERENCES users(id),
+  created_by_type TEXT CHECK (created_by_type IN ('agency','creator')) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_deliverable_comments_deliverable
+  ON deliverable_comments(deliverable_id);
+CREATE INDEX idx_deliverable_comments_created_at
+  ON deliverable_comments(created_at);
+```
+
+> **Rule**: Append-only timeline for deliverable feedback. Both agency and creator can add comments.
+
+---
+
+### 5.7 campaign_attachments
 
 ```sql
 CREATE TABLE campaign_attachments (
@@ -410,10 +444,13 @@ CREATE TABLE creators (
   linkedin_handle TEXT,
   notes TEXT,
   is_active BOOLEAN DEFAULT true,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+> **user_id**: Links creator account to authenticated user after first magic-link sign-in (Phase 1 Creator Portal). Initially NULL, set via `ensureCreatorUser` mutation.
 
 ---
 
@@ -449,10 +486,68 @@ CREATE TABLE campaign_creators (
   rate_amount DECIMAL(10,2),
   rate_currency TEXT DEFAULT 'INR',
   notes TEXT,
+  proposal_state TEXT CHECK (proposal_state IN ('draft','sent','countered','accepted','rejected')),
+  current_proposal_version INTEGER,
+  proposal_accepted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (campaign_id, creator_id)
 );
 ```
+
+> **proposal_state**: Tracks negotiation state. Proposals are append-only via `proposal_versions` table.
+> **current_proposal_version**: Version number of the latest proposal.
+> **proposal_accepted_at**: Timestamp when creator accepted final proposal.
+
+---
+
+### 6.4 proposal_versions (Phase 1 – Proposal Negotiation)
+
+```sql
+CREATE TABLE proposal_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_creator_id UUID NOT NULL REFERENCES campaign_creators(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  state TEXT CHECK (state IN ('draft','sent','countered','accepted','rejected')) NOT NULL,
+  rate_amount DECIMAL(10,2),
+  rate_currency TEXT DEFAULT 'INR',
+  deliverable_scopes JSONB,  -- array of {deliverableType, quantity, notes}
+  notes TEXT,
+  created_by UUID REFERENCES users(id),
+  created_by_type TEXT CHECK (created_by_type IN ('agency','creator')) DEFAULT 'agency',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (campaign_creator_id, version_number)
+);
+
+CREATE INDEX idx_proposal_versions_campaign_creator
+  ON proposal_versions(campaign_creator_id);
+CREATE INDEX idx_proposal_versions_state
+  ON proposal_versions(state);
+```
+
+> **Rule**: Immutable; represents frozen point in proposal negotiation. Each counter/update creates new version.
+> **deliverable_scopes**: JSON array with deliverable type breakdown and quantity per type.
+
+---
+
+### 6.5 proposal_notes (Phase 1 – Proposal Timeline)
+
+```sql
+CREATE TABLE proposal_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_creator_id UUID NOT NULL REFERENCES campaign_creators(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_by UUID REFERENCES users(id),
+  created_by_type TEXT CHECK (created_by_type IN ('agency','creator')) NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_proposal_notes_campaign_creator
+  ON proposal_notes(campaign_creator_id);
+CREATE INDEX idx_proposal_notes_created_at
+  ON proposal_notes(created_at);
+```
+
+> **Rule**: Append-only timeline for proposal negotiation messages. Both agency and creator can add notes.
 
 ---
 

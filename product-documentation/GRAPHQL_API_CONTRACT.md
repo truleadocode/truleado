@@ -382,6 +382,15 @@ type DeliverableTrackingUrl {
   displayOrder: Int!
   createdAt: DateTime!
 }
+
+type DeliverableComment {
+  id: ID!
+  deliverable: Deliverable!
+  message: String!
+  createdBy: User
+  createdByType: String!  # 'agency' | 'creator'
+  createdAt: DateTime!
+}
 ```
 
 ---
@@ -408,6 +417,15 @@ type ProposalVersion {
   createdByType: String!  # 'agency' | 'creator'
   createdAt: DateTime!
 }
+
+type ProposalNote {
+  id: ID!
+  campaignCreator: CampaignCreator!
+  message: String!
+  createdBy: User
+  createdByType: String!  # 'agency' | 'creator'
+  createdAt: DateTime!
+}
 ```
 
 > **ProposalState**: Tracks the lifecycle of a proposal negotiation. Proposals are **append-only** (immutable history via `proposal_versions` table). Transitions:
@@ -415,6 +433,8 @@ type ProposalVersion {
 > - `SENT` → `COUNTERED` (creator responds with different terms)
 > - `SENT`/`COUNTERED` → `ACCEPTED` (creator accepts)
 > - `SENT`/`COUNTERED` → `REJECTED` (creator declines)
+
+> **ProposalNote**: Timeline messages for proposal negotiation. Both agency and creator can add notes. Append-only history stored in `proposal_notes` table.
 
 ---
 
@@ -939,11 +959,17 @@ type Mutation {
     deliverableId: ID!
     urls: [String!]!
   ): DeliverableTrackingRecord!
+
+  addDeliverableComment(
+    deliverableId: ID!
+    message: String!
+  ): DeliverableComment!
 }
 ```
 
-- **Caption editing**: `updateDeliverableVersionCaption` updates the version’s caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
+- **Caption editing**: `updateDeliverableVersionCaption` updates the version's caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
 - **deleteDeliverableVersion**: Permanently deletes a deliverable version and its file in the `deliverables` storage bucket. **Allowed only when**: (1) the deliverable status is `PENDING` or `REJECTED`, (2) the user has `UPLOAD_VERSION` on the campaign, and (3) the version has no associated approvals. Throws if the version has been used in any approval. UI: delete button on the deliverable detail page (when status permits).
+- **addDeliverableComment**: Agency and creator can add timeline comments to a deliverable. Creates append-only entry in `deliverable_comments` table. Requires authenticated user with access to the deliverable.
 
 ---
 
@@ -1073,6 +1099,9 @@ type Mutation {
   # Counter a proposal with different terms (creator action - requires creator auth)
   counterProposal(input: CounterProposalInput!): ProposalVersion!
 
+  # Add a message/note to proposal timeline (creator or agency action - requires auth)
+  addProposalNote(campaignCreatorId: ID!, message: String!): ProposalNote!
+
   # Assign a deliverable to a creator with an accepted proposal (agency action)
   assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!
 }
@@ -1084,6 +1113,7 @@ type Mutation {
 - **rejectProposal**: Creator rejects proposal. Requires creator authentication. Changes state to `REJECTED`, updates `campaign_creators.status` to `DECLINED`. Sends `proposal-rejected` notification to agency.
 - **counterProposal**: Creator counters with different terms. Requires creator authentication. Creates new proposal version with state `COUNTERED`, preserving old version (append-only). Sends `proposal-countered` notification to agency.
 - **assignDeliverableToCreator**: Agency assigns deliverable to creator after proposal accepted. Verifies `campaign_creators.proposal_state === 'accepted'`. Updates `deliverables.creator_id` and `deliverables.proposal_version_id`. Sends `deliverable-assigned` notification to creator.
+- **addProposalNote**: Both agency and creator can add timeline messages to a proposal. Requires authenticated user (agency user or creator) with access to the proposal. Creates append-only entry in `proposal_notes` table. Used for communication during proposal negotiation.
 
 ---
 

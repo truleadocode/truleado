@@ -13,11 +13,12 @@ This folder contains the canonical documents that define Truleado. Any implement
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
 | [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Feb 2026 |
-| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 |
-| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 |
-| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 |
+| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 (Phase 1 Creator Portal) |
+| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 (Phase 1 Creator Portal) |
+| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 (Phase 1 Creator Portal) |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
-| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal | Feb 2026 |
+| [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal, creator portal | Feb 2026 |
+| [Novu Notification Templates](./NOVU_NOTIFICATION_TEMPLATES.md) | Email and in-app notification configurations | Feb 2026 |
 
 ---
 
@@ -67,7 +68,7 @@ Campaign Permission
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
 - [x] **Notifications (Phase 4/5)**: Novu in-app Inbox + email; agency SMTP at Settings → Notifications; workflows `approval-requested`, `approval-approved`, `approval-rejected`; sample script `scripts/trigger-sample-notification.js`
 - [x] Creator roster (incl. rates + social analytics tabs)
-- [x] **Creator Portal Phase 1 (MVP Foundation)**: Magic-link authentication at `/creator/login` and `/creator/verify`; `ensureCreatorUser` mutation; proposal system with immutable append-only versions; state machine (`DRAFT` → `SENT` → `ACCEPTED`/`REJECTED`/`COUNTERED`); mutations `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `assignDeliverableToCreator`; notifications `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned`; creator dashboard placeholder at `/creator/dashboard` with queries `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables`, `myCreatorProposal`.
+- [x] **Creator Portal Phase 1 (MVP Foundation)**: Magic-link authentication at `/creator/login` and `/creator/verify`; `ensureCreatorUser` mutation; proposal system with immutable append-only versions; state machine (`DRAFT` → `SENT` → `ACCEPTED`/`REJECTED`/`COUNTERED`); mutations `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `addProposalNote`, `assignDeliverableToCreator`, `addDeliverableComment`; notifications `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned`, `deliverable-comment`, `deliverable-rejected-creator`, `deliverable-approved-creator`; creator portal UI at `/creator/(portal)/` with pages dashboard, campaigns, proposals, deliverables; CreatorSidebar navigation component; creator queries `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables`, `myCreatorProposal`; database tables `proposal_versions`, `proposal_notes`, `deliverable_comments`; creators.user_id for authentication link.
 - [ ] Audit logs
 
 ### Excluded (Post-MVP)
@@ -99,6 +100,20 @@ When adding new features:
 ---
 
 ## Changelog
+
+### February 2026 (Phase 1 Creator Portal – Complete Implementation)
+- **Creator Portal UI Implementation**:
+  - Full creator portal directory structure at `/src/app/creator/(portal)/` with protected routes using auth guard layout.
+  - **Pages**: Dashboard (overview: campaigns, proposals, deliverables, revenue); Campaigns (campaign list with proposal status); Proposals (negotiation interface with proposal history); Deliverables (assigned deliverables with status tracking); Social Accounts (placeholder); Revenue (earnings tracking); Settings (account settings).
+  - **CreatorSidebar component** (`src/components/creator/CreatorSidebar.tsx`): Collapsible navigation sidebar with main nav items (Dashboard, Campaigns, Proposals, Deliverables, Social Accounts, Revenue), Settings at bottom, and user menu dropdown with sign out.
+  - **Database schema updates**: `creators.user_id` for authentication link (nullable, SET NULL on user delete); `campaign_creators.proposal_state`, `current_proposal_version`, `proposal_accepted_at` (denormalized tracking); `deliverables.creator_id`, `deliverables.proposal_version_id` (creator assignment); `use_custom_smtp` toggle on agencies table (migration 00028).
+  - **New database tables**: `proposal_versions` (append-only immutable proposal history), `proposal_notes` (timeline messages for negotiation), `deliverable_comments` (timeline messages for feedback).
+  - **GraphQL mutations**: `addProposalNote(campaignCreatorId, message)` for proposal timeline; `addDeliverableComment(deliverableId, message)` for deliverable feedback.
+  - **GraphQL types**: `ProposalNote` and `DeliverableComment` types with created_by, created_by_type (agency/creator), timestamps.
+  - **Notifications**: Full set of creator portal notifications (`deliverable-comment`, `deliverable-rejected-creator`, `deliverable-approved-creator` in addition to proposal notifications). All workflows pass baseUrl + actionUrl for proper CTA button functionality.
+  - **Proposal negotiation flow**: Complete workflow from agency sending proposal → creator counter/accept/reject → agency accepting counter → deliverable assignment → creator upload and iteration.
+  - **Migrations**: `00027_proposal_notes.sql`, `00028_agency_email_config_toggle.sql`, `00029_deliverable_comments.sql`.
+  - **Documentation**: Updated GRAPHQL_API_CONTRACT.md with new mutations and types; updated DATABASE_SCHEMA_DDL.md with new tables and schema fields; added comprehensive creator portal section to TECHNICAL_LLD.md (§6.4); created NOVU_NOTIFICATION_TEMPLATES.md with all 14 workflow templates (email + in-app).
 
 ### February 2026 (Continued)
 - **Creator Portal Phase 1 (Foundation)**:

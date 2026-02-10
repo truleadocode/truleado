@@ -305,6 +305,89 @@ Permission rules are defined in the **Permission Matrix (Canonical)**.
 
 ---
 
+### 6.4 Phase 1: Creator Portal (MVP Foundation)
+
+**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, manage account settings.
+
+**Directory Structure**:
+```
+src/app/creator/
+├── (portal)/                          # Protected routes group (requires auth)
+│   ├── layout.tsx                     # Portal layout + auth guard + sidebar
+│   ├── dashboard/page.tsx             # Overview: campaigns, proposals, deliverables, revenue
+│   ├── campaigns/[id]/page.tsx        # Campaign detail
+│   ├── proposals/[campaignCreatorId]/ # Proposal negotiation interface
+│   ├── deliverables/page.tsx          # List of assigned deliverables
+│   ├── deliverables/[id]/page.tsx     # Deliverable detail + upload
+│   ├── social-accounts/page.tsx       # Creator social profile management
+│   ├── revenue/page.tsx               # Earnings tracking
+│   └── settings/page.tsx              # Account settings
+├── login/page.tsx                     # Request magic link
+├── verify/page.tsx                    # Verify email link + ensureCreatorUser
+└── layout.tsx                         # Root layout
+```
+
+**Components**:
+- `CreatorSidebar` (`src/components/creator/CreatorSidebar.tsx`): Collapsible navigation sidebar with main nav (Dashboard, Campaigns, Proposals, Revenue), settings link, and user menu (dropdown with sign out).
+
+**Data Model (Phase 1)**:
+- `creators.user_id`: Links creator to authenticated user after first sign-in.
+- `campaign_creators.proposal_state`, `proposal_versions` (append-only), `proposal_notes`: Proposal negotiation history.
+- `deliverables.creator_id`, `deliverables.proposal_version_id`: Track creator assignment and associated proposal.
+- `deliverable_comments`: Append-only timeline for deliverable feedback from both agency and creator.
+
+**GraphQL Queries (Creator Portal)**:
+- `myCreatorProfile`: Fetch authenticated creator's profile.
+- `myCreatorCampaigns`: List campaigns the creator is invited/accepted to.
+- `myCreatorDeliverables(campaignId?)`: List assigned deliverables (filterable by campaign).
+- `myCreatorProposal(campaignCreatorId)`: Fetch current proposal details.
+
+**GraphQL Mutations (Creator Portal)**:
+- `acceptProposal(campaignCreatorId)`: Accept agency proposal.
+- `rejectProposal(campaignCreatorId, reason?)`: Decline proposal.
+- `counterProposal(input)`: Counter with alternative terms (rate, scope).
+- `addProposalNote(campaignCreatorId, message)`: Add timeline message.
+- `assignDeliverableToCreator(deliverableId, creatorId)`: Agency assigns deliverable to creator (after proposal accepted).
+- `addDeliverableComment(deliverableId, message)`: Add comment to deliverable (for creator/agency communication).
+
+**Notifications**:
+- `proposal-sent`: Creator notified when agency sends proposal (with rate and action link).
+- `proposal-accepted`: Agency notified when creator accepts.
+- `proposal-countered`: Agency notified when creator counters with different terms.
+- `proposal-rejected`: Agency notified when creator declines.
+- `deliverable-assigned`: Creator notified when assigned new deliverable.
+- `deliverable-comment`: Team notified when comment added to deliverable.
+- `deliverable-rejected-creator`: Creator notified of revision request.
+- `deliverable-approved-creator`: Creator notified of approval.
+
+**Proposal Negotiation Flow**:
+```
+Agency: inviteCreatorToCampaign(rate, scope)
+  ↓
+Agency: sendProposal
+  → Notification: proposal-sent (Creator)
+  ↓
+Creator: acceptProposal | rejectProposal | counterProposal
+  → Notification: proposal-accepted/rejected/countered (Agency)
+  ↓
+(If accepted) Agency: assignDeliverableToCreator
+  → Notification: deliverable-assigned (Creator)
+```
+
+**Deliverable Workflow (Creator Portal)**:
+- Creator views assigned deliverables on Deliverables page.
+- Can upload versions, add tracking URLs, submit for review.
+- Receives notifications on rejection (with feedback) and approval.
+- Can add comments during deliverable review cycle.
+
+**Security & Permissions**:
+- Creators can only view/edit their own campaigns, proposals, and deliverables.
+- Agency users cannot access creator portal (separate auth context).
+- Proposal and deliverable mutations require authenticated creator (`ctx.creator`).
+- All creator data is RLS-protected at row level.
+
+---
+
 ## 7. Workflow Engine (State Machines)
 
 ### 7.1 Campaign State Machine
