@@ -1211,102 +1211,105 @@ export default function CampaignDetailPage() {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Campaign Info Card */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <div className="h-20 w-20 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                    <Megaphone className="h-10 w-10 text-green-600" />
+            {/* Top row: Campaign Info and Approvers side by side */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Campaign Info Card */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex flex-col sm:flex-row gap-6">
+                    <div className="h-20 w-20 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                      <Megaphone className="h-10 w-10 text-green-600" />
+                    </div>
+                    <div className="flex-1 grid gap-4 grid-cols-2">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Client</p>
+                        <Link
+                          href={`/dashboard/clients/${campaign.project.client.id}`}
+                          className="font-medium hover:underline flex items-center gap-1 mt-1"
+                        >
+                          <Building2 className="h-4 w-4" />
+                          {campaign.project.client.name}
+                        </Link>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Project</p>
+                        <Link
+                          href={`/dashboard/projects/${campaign.project.id}`}
+                          className="font-medium hover:underline flex items-center gap-1 mt-1"
+                        >
+                          <Briefcase className="h-4 w-4" />
+                          {campaign.project.name}
+                        </Link>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Start Date</p>
+                        <p className="font-medium mt-1 flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {formatDate(campaign.startDate)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">End Date</p>
+                        <p className="font-medium mt-1 flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {formatDate(campaign.endDate)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 grid gap-4 sm:grid-cols-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Client</p>
-                      <Link
-                        href={`/dashboard/clients/${campaign.project.client.id}`}
-                        className="font-medium hover:underline flex items-center gap-1 mt-1"
-                      >
-                        <Building2 className="h-4 w-4" />
-                        {campaign.project.client.name}
-                      </Link>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Project</p>
-                      <Link
-                        href={`/dashboard/projects/${campaign.project.id}`}
-                        className="font-medium hover:underline flex items-center gap-1 mt-1"
-                      >
-                        <Briefcase className="h-4 w-4" />
-                        {campaign.project.name}
-                      </Link>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Start Date</p>
-                      <p className="font-medium mt-1 flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {formatDate(campaign.startDate)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">End Date</p>
-                      <p className="font-medium mt-1 flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {formatDate(campaign.endDate)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
 
-                {campaign.description && (
-                  <div className="mt-6 pt-6 border-t">
-                    <p className="text-sm text-muted-foreground mb-1">Description</p>
-                    <p>{campaign.description}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Campaign approvers */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Campaign Approvers
-                  </h2>
-                  {!isArchived && (
-                    <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
-                      <UserPlus className="mr-2 h-4 w-4" />
-                      Manage approvers
-                    </Button>
+                  {campaign.description && (
+                    <div className="mt-6 pt-6 border-t">
+                      <p className="text-sm text-muted-foreground mb-1">Description</p>
+                      <p>{campaign.description}</p>
+                    </div>
                   )}
-                </div>
-                <p className="text-sm text-muted-foreground mb-3">
-                  All selected approvers must approve deliverables at campaign level before project or client review.
-                </p>
-                {campaignApprovers.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {campaignApprovers.map((cu) => (
-                      <li
-                        key={cu.id}
-                        className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
-                      >
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback className="text-xs">
-                            {getInitials(cu.user.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm">{cu.user.name || cu.user.email}</span>
-                        {cu.user.email && cu.user.name && (
-                          <span className="text-xs text-muted-foreground">({cu.user.email})</span>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+
+              {/* Campaign approvers */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      Campaign Approvers
+                    </h2>
+                    {!isArchived && (
+                      <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Manage
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    All selected approvers must approve deliverables at campaign level before project or client review.
+                  </p>
+                  {campaignApprovers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {campaignApprovers.map((cu) => (
+                        <li
+                          key={cu.id}
+                          className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">
+                              {getInitials(cu.user.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm">{cu.user.name || cu.user.email}</span>
+                          {cu.user.email && cu.user.name && (
+                            <span className="text-xs text-muted-foreground">({cu.user.email})</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
 
             {/* Campaign Brief Section */}
             <Card>
