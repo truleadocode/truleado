@@ -946,6 +946,91 @@ export const queries = {
       }
     }
   `,
+
+  // Deliverable Analytics
+  campaignAnalyticsDashboard: `
+    query CampaignAnalyticsDashboard($campaignId: ID!) {
+      campaignAnalyticsDashboard(campaignId: $campaignId) {
+        campaignId
+        campaignName
+        totalDeliverablesTracked
+        totalUrlsTracked
+        totalViews
+        totalLikes
+        totalComments
+        totalShares
+        totalSaves
+        weightedEngagementRate
+        avgEngagementRate
+        avgSaveRate
+        avgViralityIndex
+        totalCreatorCost
+        costCurrency
+        cpv
+        cpe
+        viewsDelta
+        likesDelta
+        engagementRateDelta
+        platformBreakdown
+        creatorBreakdown
+        lastRefreshedAt
+        snapshotCount
+        latestJob {
+          id
+          status
+          totalUrls
+          completedUrls
+          failedUrls
+          errorMessage
+          createdAt
+          completedAt
+        }
+        deliverables {
+          deliverableId
+          deliverableTitle
+          creatorName
+          urls {
+            trackingUrlId
+            url
+            platform
+            latestMetrics {
+              views
+              likes
+              comments
+              shares
+              saves
+              calculatedMetrics
+              snapshotAt
+            }
+          }
+          totalViews
+          totalLikes
+          totalComments
+          totalShares
+          totalSaves
+          avgEngagementRate
+          lastFetchedAt
+        }
+      }
+    }
+  `,
+
+  analyticsFetchJob: `
+    query AnalyticsFetchJob($jobId: ID!) {
+      analyticsFetchJob(jobId: $jobId) {
+        id
+        campaignId
+        status
+        totalUrls
+        completedUrls
+        failedUrls
+        errorMessage
+        startedAt
+        completedAt
+        createdAt
+      }
+    }
+  `,
 };
 
 /**
@@ -1610,6 +1695,21 @@ export const mutations = {
         id
         message
         createdByType
+        createdAt
+      }
+    }
+  `,
+
+  // Deliverable Analytics
+  refreshCampaignAnalytics: `
+    mutation RefreshCampaignAnalytics($campaignId: ID!) {
+      refreshCampaignAnalytics(campaignId: $campaignId) {
+        id
+        campaignId
+        status
+        totalUrls
+        completedUrls
+        failedUrls
         createdAt
       }
     }

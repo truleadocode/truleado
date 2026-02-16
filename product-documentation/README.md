@@ -13,9 +13,9 @@ This folder contains the canonical documents that define Truleado. Any implement
 | Document | Description | Last Updated |
 |----------|-------------|--------------|
 | [Master PRD](./MASTER_PRD.md) | Product requirements and business logic | Feb 2026 |
-| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 (Phase 1 Creator Portal) |
-| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 (Phase 1 Creator Portal) |
-| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 (Phase 1 Creator Portal) |
+| [Technical LLD](./TECHNICAL_LLD.md) | Technical architecture and design decisions | Feb 2026 (Creator Portal, Deliverable Analytics) |
+| [GraphQL API Contract](./GRAPHQL_API_CONTRACT.md) | Complete API specification | Feb 2026 (Creator Portal, Deliverable Analytics) |
+| [Database Schema (DDL)](./DATABASE_SCHEMA_DDL.md) | Database tables and relationships | Feb 2026 (Creator Portal, Deliverable Analytics) |
 | [State Machines](./STATE_MACHINES.md) | Workflow state transitions | Jan 2026 |
 | [AI Handoff (ai-doc)](./ai-doc.md) | Context for new agents; notifications, Phase 4/5, client portal, creator portal | Feb 2026 |
 | [Novu Notification Templates](./NOVU_NOTIFICATION_TEMPLATES.md) | Email and in-app notification configurations | Feb 2026 |
@@ -71,8 +71,21 @@ Campaign Permission
 - [x] **Creator Portal Phase 1 (MVP Foundation)**: Magic-link authentication at `/creator/login` and `/creator/verify`; `ensureCreatorUser` mutation; proposal system with immutable append-only versions; state machine (`DRAFT` → `SENT` → `ACCEPTED`/`REJECTED`/`COUNTERED`); mutations `createProposal`, `sendProposal`, `acceptProposal`, `rejectProposal`, `counterProposal`, `addProposalNote`, `assignDeliverableToCreator`, `addDeliverableComment`; notifications `proposal-sent`, `proposal-accepted`, `proposal-countered`, `proposal-rejected`, `deliverable-assigned`, `deliverable-comment`, `deliverable-rejected-creator`, `deliverable-approved-creator`; creator portal UI at `/creator/(portal)/` with pages dashboard, campaigns, proposals, deliverables; CreatorSidebar navigation component; creator queries `myCreatorProfile`, `myCreatorCampaigns`, `myCreatorDeliverables`, `myCreatorProposal`; database tables `proposal_versions`, `proposal_notes`, `deliverable_comments`; creators.user_id for authentication link.
 - [ ] Audit logs
 
+#### Deliverable Analytics (Campaign Performance)
+
+- [x] Deliverable tracking for approved deliverables (immutable 1–10 URLs per deliverable).
+- [x] Background deliverable analytics fetch jobs (`analytics_fetch_jobs`) with ScrapeCreators (Instagram/TikTok) and YouTube Data API v3.
+- [x] Normalized, immutable time-series snapshots per URL (`deliverable_metrics`) and campaign-level aggregates (`campaign_analytics_aggregates`).
+- [x] GraphQL queries and mutations for deliverable analytics:
+  - `deliverableAnalytics`, `campaignAnalyticsDashboard`, `analyticsFetchJob`, `analyticsFetchJobs`
+  - `fetchDeliverableAnalytics`, `refreshCampaignAnalytics`
+- [x] Campaign Performance section on campaign detail page:
+  - "Refresh Analytics" button (token-gated, 1 token per URL)
+  - Progress bar while jobs run
+  - Summary metric cards (views, likes, comments, shares, saves, engagement rate, deliverables tracked, snapshots)
+  - Per-deliverable breakdown table (views/likes/comments/shares/saves/engagement rate per deliverable)
+
 ### Excluded (Post-MVP)
-- Post-campaign analytics
 - Paid media reporting
 - Token system for analytics
 - ROI dashboards

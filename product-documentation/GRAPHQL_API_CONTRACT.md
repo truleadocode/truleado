@@ -572,6 +572,94 @@ type CreatorSocialPost {
   publishedAt: DateTime
   createdAt: DateTime!
 }
+
+# Deliverable-level analytics (post-campaign, per tracking URL)
+type AnalyticsFetchJob {
+  id: ID!
+  campaignId: ID!
+  deliverableId: ID
+  status: String!
+  totalUrls: Int!
+  completedUrls: Int!
+  failedUrls: Int!
+  errorMessage: String
+  tokensConsumed: Int!
+  startedAt: DateTime
+  completedAt: DateTime
+  createdAt: DateTime!
+}
+
+type DeliverableMetricsSnapshot {
+  id: ID!
+  deliverableId: ID!
+  trackingUrlId: ID!
+  contentUrl: String!
+  platform: String!
+  views: Int
+  likes: Int
+  comments: Int
+  shares: Int
+  saves: Int
+  reach: Int
+  impressions: Int
+  platformMetrics: JSON
+  calculatedMetrics: JSON
+  creatorFollowersAtFetch: Int
+  snapshotAt: DateTime!
+  createdAt: DateTime!
+}
+
+type DeliverableUrlAnalytics {
+  trackingUrlId: ID!
+  url: String!
+  platform: String!
+  latestMetrics: DeliverableMetricsSnapshot
+  snapshotHistory: [DeliverableMetricsSnapshot!]!
+  snapshotCount: Int!
+}
+
+type DeliverableAnalytics {
+  deliverableId: ID!
+  deliverableTitle: String!
+  creatorName: String
+  urls: [DeliverableUrlAnalytics!]!
+  totalViews: Int
+  totalLikes: Int
+  totalComments: Int
+  totalShares: Int
+  totalSaves: Int
+  avgEngagementRate: Float
+  lastFetchedAt: DateTime
+}
+
+type CampaignAnalyticsDashboard {
+  campaignId: ID!
+  campaignName: String!
+  totalDeliverablesTracked: Int!
+  totalUrlsTracked: Int!
+  totalViews: Int
+  totalLikes: Int
+  totalComments: Int
+  totalShares: Int
+  totalSaves: Int
+  weightedEngagementRate: Float
+  avgEngagementRate: Float
+  avgSaveRate: Float
+  avgViralityIndex: Float
+  totalCreatorCost: Money
+  costCurrency: String
+  cpv: Float
+  cpe: Float
+  viewsDelta: Int
+  likesDelta: Int
+  engagementRateDelta: Float
+  platformBreakdown: JSON
+  creatorBreakdown: JSON
+  deliverables: [DeliverableAnalytics!]!
+  lastRefreshedAt: DateTime
+  snapshotCount: Int!
+  latestJob: AnalyticsFetchJob
+}
 ```
 
 ---
@@ -751,6 +839,22 @@ type Query {
 
   # Get proposal details for a specific campaign assignment
   myCreatorProposal(campaignCreatorId: ID!): ProposalVersion
+
+  # ---------------------------------------------
+  # Deliverable Analytics (Campaign Performance)
+  # ---------------------------------------------
+
+  # Get analytics for a specific deliverable (all tracked URLs)
+  deliverableAnalytics(deliverableId: ID!): DeliverableAnalytics
+
+  # Get campaign-level analytics dashboard (aggregates + per-deliverable breakdown)
+  campaignAnalyticsDashboard(campaignId: ID!): CampaignAnalyticsDashboard
+
+  # Get a specific analytics fetch job (for polling)
+  analyticsFetchJob(jobId: ID!): AnalyticsFetchJob
+
+  # Get analytics fetch job history for a campaign
+  analyticsFetchJobs(campaignId: ID!, limit: Int): [AnalyticsFetchJob!]!
 }
 ```
 
@@ -1147,14 +1251,24 @@ type Mutation {
     platform: String!
     jobType: String!
   ): SocialDataJob!
+
+  # ---------------------------------------------
+  # Deliverable Analytics (Token-Aware)
+  # ---------------------------------------------
+
+  # Fetch analytics for a single deliverable's tracked URLs (token-gated, 1 token per URL)
+  fetchDeliverableAnalytics(deliverableId: ID!): AnalyticsFetchJob!
+
+  # Refresh analytics for all tracked deliverables in a campaign (token-gated, 1 token per URL)
+  refreshCampaignAnalytics(campaignId: ID!): AnalyticsFetchJob!
 }
 ```
 
 **Rules:**
 - Role must be Admin / Account Manager / Operator
-- Agency token balance > 0 for pre-campaign analytics and social fetches
-- Token is deducted before API call
-- `triggerSocialFetch` creates a background job; status can be polled via `socialDataJob` query
+- Agency token balance > 0 for pre-campaign analytics, **deliverable analytics**, and social fetches
+- Token is deducted before external API calls (1 token per URL for deliverable analytics)
+- `triggerSocialFetch` and `refreshCampaignAnalytics` create background jobs; status can be polled via `socialDataJob` / `analyticsFetchJob` queries
 
 ---
 

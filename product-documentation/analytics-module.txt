@@ -1,0 +1,312 @@
+Analytics Module Implementation Plan
+(Status: Implemented — backend & frontend wired, Feb 2026)
+Context
+Truleado currently has stub analytics data (random numbers) for pre-campaign creator snapshots, and basic social profile scraping via Apify (Instagram) and YouTube Data API v3. There is no deliverable-level post analytics — agencies cannot see how their campaign content is actually performing after publication.
+
+This plan builds a complete analytics pipeline that fetches real metrics for each tracked deliverable URL, stores time-series snapshots, computes derived performance metrics, and exposes campaign-level dashboards via GraphQL.
+
+Key decisions:
+
+Apify stays for creator roster scraping; ScrapeCreators added for deliverable post analytics
+YouTube: Public Data API v3 only (no OAuth)
+Manual trigger only (no auto-scheduling)
+New env var: SCRAPECREATORS_API_KEY
+Implementation Order
+Step 1: Database Migration
+File: supabase/migrations/00030_deliverable_analytics.sql
+
+Create 4 new tables:
+
+analytics_fetch_jobs — Background job tracker (analogous to existing social_data_jobs)
+
+id, campaign_id (FK), deliverable_id (FK, nullable for campaign-wide), agency_id (FK)
+status ('pending'|'processing'|'completed'|'partial'|'failed')
+total_urls, completed_urls, failed_urls, error_message
+tokens_consumed, triggered_by (FK users), timestamps
+deliverable_analytics_raw — Immutable raw API responses (append-only, no UPDATE/DELETE)
+
+id, job_id (FK), tracking_url_id (FK deliverable_tracking_urls), deliverable_id, campaign_id, creator_id
+platform ('instagram'|'youtube'|'tiktok'), content_url, raw_response (JSONB)
+api_source ('scrapecreators'|'youtube_data_api'), fetch_status, credits_consumed, fetched_at
+deliverable_metrics — Normalized time-series snapshots (immutable)
+
+id, raw_id (FK to raw), tracking_url_id, deliverable_id, campaign_id, creator_id, platform, content_url
+Common metrics: views, likes, comments, shares, saves, reach, impressions
+platform_metrics (JSONB) — platform-specific extras
+calculated_metrics (JSONB) — engagement_rate, save_rate, virality_index, etc.
+creator_followers_at_fetch (for virality index denominator)
+snapshot_at
+campaign_analytics_aggregates — Upserted campaign rollups (UNIQUE on campaign_id)
+
+Totals: total_views, total_likes, total_comments, total_shares, total_saves
+Rates: weighted_engagement_rate, avg_engagement_rate, avg_save_rate, avg_virality_index
+Cost: total_creator_cost, cpv, cpe
+Breakdowns: platform_breakdown (JSONB), creator_breakdown (JSONB)
+Deltas: views_delta, likes_delta, engagement_rate_delta
+RLS: Agency-scoped via belongs_to_agency() for jobs, has_campaign_access() for metrics/raw/aggregates. No UPDATE/DELETE policies on immutable tables.
+
+Indexes: On campaign_id, deliverable_id, tracking_url_id, snapshot_at DESC.
+
+Reference patterns: supabase/migrations/00015_social_analytics.sql, supabase/migrations/00021_deliverable_tracking.sql
+
+Step 2: Platform URL Detector
+File: src/lib/analytics/platform-detector.ts
+
+Pure functions, no dependencies:
+
+detectPlatform(url) → 'instagram' | 'youtube' | 'tiktok' | null — hostname matching
+parseTrackingUrl(url) → { platform, originalUrl, normalizedUrl, contentId }
+extractInstagramShortcode(url) — regex /p/{code}/ and /reel/{code}/
+extractYouTubeVideoId(url) — handles ?v=, youtu.be/, /shorts/
+extractTikTokVideoUrl(url) — returns cleaned URL (SC takes full URL)
+Step 3: ScrapeCreators API Client
+File: src/lib/analytics/scrapecreators.ts
+
+Follows pattern of src/lib/social/youtube.ts (generic GET helper + typed wrappers).
+
+scGet(endpoint, params) — generic GET with x-api-key header, error handling
+fetchInstagramPost(url) → GET /v1/instagram/post?url=<url>
+Extracts: video_play_count, edge_media_preview_like.count (likes), edge_media_to_parent_comment.count (comments), taken_at_timestamp, owner.edge_followed_by.count
+fetchTikTokVideo(url) → GET /v2/tiktok/video?url=<url>
+Extracts from aweme_detail.statistics: play_count, digg_count, comment_count, share_count, collect_count, download_count
+Error handling: typed RateLimitError for 429s, descriptive errors for other failures
+Step 4: YouTube Video Fetcher
+File: src/lib/analytics/youtube-video.ts
+
+fetchYouTubeVideo(videoId) — calls videos?part=snippet,statistics,contentDetails&id={id}
+Reuses ytGet pattern from src/lib/social/youtube.ts
+Also fetches channel subscriber count for virality index
+Returns { video: YouTubeVideoData, channelFollowers, raw }
+Step 5: Response Normalizer
+File: src/lib/analytics/normalizer.ts
+
+Transforms raw platform responses into common shape:
+
+normalizeInstagramPost(raw) — maps IG fields to common metrics
+normalizeTikTokVideo(raw) — maps TikTok fields to common metrics
+normalizeYouTubeVideo(raw) — maps YT fields to common metrics
+normalizeRawResponse(platform, raw) — dispatch by platform
+Output: { views, likes, comments, shares, saves, reach, impressions, platform_metrics, creator_followers_at_fetch }
+
+Step 6: Metrics Calculator
+File: src/lib/analytics/metrics.ts
+
+Pure computation (no DB access):
+
+computeDerivedMetrics(metrics) → { engagement_rate, save_rate, comment_rate, share_rate, virality_index, like_rate }
+engagement_rate = (likes + comments + shares) / views
+virality_index = views / creatorFollowers
+Guards against zero denominators (returns null)
+computeGrowthVelocity(current, previous) → deltas + percentage changes
+Step 7: Campaign Aggregator
+File: src/lib/analytics/aggregator.ts
+
+aggregateCampaignMetrics(campaignId):
+Query latest snapshot per tracking_url_id (DISTINCT ON)
+Sum totals across all URLs
+Compute weighted engagement rate, platform/creator breakdowns
+Join campaign_creators for cost metrics (CPV, CPE)
+Compare with existing aggregate for growth deltas
+upsertCampaignAggregate(campaignId, result) — upsert into campaign_analytics_aggregates
+Step 8: Barrel Export
+File: src/lib/analytics/index.ts
+
+Re-exports all modules from steps 2-7.
+
+Step 9: Background Processing Route
+File: src/app/api/analytics-fetch/route.ts
+
+Follows pattern of src/app/api/social-fetch/route.ts:
+
+POST handler, runtime = 'nodejs', maxDuration = 120
+Auth via x-internal-secret header
+Flow per job:
+Load job + tracking URLs
+For each URL (sequential, 500ms delay between):
+detectPlatform(url)
+Fetch via ScrapeCreators or YouTube API
+Store raw in deliverable_analytics_raw
+Normalize → compute derived metrics → store in deliverable_metrics
+Update job progress
+On error: store error, increment failed_urls, continue
+Run aggregateCampaignMetrics after all URLs
+Mark job completed/partial/failed
+Exponential backoff for 429s (up to 3 retries, max 30s wait)
+Step 10: GraphQL Schema Extensions
+File: src/graphql/schema/typeDefs.ts
+
+New types:
+
+AnalyticsFetchJob — job status for polling
+DeliverableMetricsSnapshot — per-URL metrics snapshot
+DeliverableUrlAnalytics — latest + history for one URL
+DeliverableAnalytics — all URLs for a deliverable with totals
+CampaignAnalyticsDashboard — campaign-wide aggregates + per-deliverable breakdown
+New queries:
+
+deliverableAnalytics(deliverableId: ID!): DeliverableAnalytics
+campaignAnalyticsDashboard(campaignId: ID!): CampaignAnalyticsDashboard
+analyticsFetchJob(jobId: ID!): AnalyticsFetchJob
+analyticsFetchJobs(campaignId: ID!, limit: Int): [AnalyticsFetchJob!]!
+New mutations:
+
+fetchDeliverableAnalytics(deliverableId: ID!): AnalyticsFetchJob!
+refreshCampaignAnalytics(campaignId: ID!): AnalyticsFetchJob!
+Step 11: Mutation Resolvers
+File: src/graphql/resolvers/mutations/deliverable-analytics.ts
+
+Token-gated flow (pattern from src/graphql/resolvers/mutations/analytics.ts):
+
+fetchDeliverableAnalytics(deliverableId):
+
+requireAuth + requireCampaignAccess(Permission.FETCH_ANALYTICS)
+Load deliverable's tracking record + URLs
+Token check: agency.token_balance >= urlCount
+Deduct tokens, create analytics_fetch_jobs record
+Fire-and-forget POST to /api/analytics-fetch
+Log activity, return job
+refreshCampaignAnalytics(campaignId):
+
+Same auth + token flow
+Loads ALL tracking records/URLs across campaign
+Creates single campaign-wide job (deliverable_id = NULL)
+Register in: src/graphql/resolvers/mutations/index.ts (add import + object entries)
+
+Step 12: Query Resolvers
+Add to: src/graphql/resolvers/queries.ts
+
+deliverableAnalytics: Load tracking URLs → latest metrics per URL → totals
+campaignAnalyticsDashboard: Load aggregate row + per-deliverable breakdown + latest job
+analyticsFetchJob / analyticsFetchJobs: Simple DB lookups (pattern from socialDataJob)
+All queries use Permission.VIEW_ANALYTICS.
+
+Step 13: Type Resolvers
+File: src/graphql/resolvers/types.ts
+
+Add field resolvers for AnalyticsFetchJob and DeliverableMetricsSnapshot (snake_case → camelCase mapping).
+
+Step 14: Database Types
+File: src/lib/supabase/database.types.ts
+
+Add TypeScript types for all 4 new tables (Row, Insert, Update shapes).
+
+Critical Files Reference
+Purpose	File Path
+Token-gated mutation pattern	src/graphql/resolvers/mutations/analytics.ts
+Background job pattern	src/app/api/social-fetch/route.ts
+YouTube API client pattern	src/lib/social/youtube.ts
+Apify client pattern	src/lib/social/apify.ts
+DB types	src/lib/supabase/database.types.ts
+GraphQL schema	src/graphql/schema/typeDefs.ts
+Mutation registration	src/graphql/resolvers/mutations/index.ts
+Query resolvers	src/graphql/resolvers/queries.ts
+RBAC permissions	src/lib/rbac/permissions.ts (FETCH_ANALYTICS, VIEW_ANALYTICS exist)
+Tracking tables	supabase/migrations/00021_deliverable_tracking.sql
+Social analytics tables	supabase/migrations/00015_social_analytics.sql
+Verification
+Migration: Run supabase db reset or apply migration, verify tables exist
+Platform detector: Test with Instagram, YouTube, TikTok URLs + edge cases
+API clients: Test with real URLs (needs SCRAPECREATORS_API_KEY and YOUTUBE_API_KEY)
+Full pipeline: Create a campaign with an approved deliverable → start tracking with real URLs → call fetchDeliverableAnalytics → poll job → query deliverableAnalytics and campaignAnalyticsDashboard
+Token billing: Verify tokens deducted = number of URLs processed, refund on total failure
+TypeScript: npm run build passes with no type errors
+
+---------------
+
+
+FRONT END PLAN BELOW:
+
+Analytics Frontend Integration Plan
+Context
+The analytics backend is fully implemented (database tables, API clients, normalizers, GraphQL mutations/queries, background job processing) but there is zero frontend UI. The Campaign Performance section on the campaign detail page is a placeholder showing "—" for all metrics. We need to wire it up so users can click "Refresh Analytics", see job progress, and view real metrics.
+
+Files to Modify
+File	Action
+src/lib/graphql/client.ts	Add 2 queries + 1 mutation
+src/hooks/use-analytics-fetch.ts	Create — polling hook
+src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx	Wire up UI
+No backend changes needed — everything is already wired.
+
+Step 1: Add GraphQL queries & mutation to client
+File: src/lib/graphql/client.ts
+
+Add to queries object (before closing }; at line 949):
+
+campaignAnalyticsDashboard(campaignId) — fetches aggregated metrics, per-deliverable breakdown, latest job
+analyticsFetchJob(jobId) — for polling job status
+Add to mutations object (before closing }; at line 1617):
+
+refreshCampaignAnalytics(campaignId) — triggers campaign-wide analytics fetch
+Step 2: Create useAnalyticsFetch hook
+New file: src/hooks/use-analytics-fetch.ts
+
+Mirrors the existing src/hooks/use-social-fetch.ts pattern:
+
+Accepts campaignId and { onComplete, onError } callbacks
+Calls refreshCampaignAnalytics mutation to create a job
+Polls analyticsFetchJob every 3 seconds until job completes/fails
+Exposes: triggerRefresh(), activeJob, isRunning, progress (0-100%)
+Cleans up interval on unmount
+Step 3: Update campaign detail page
+File: src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx
+
+3a. Imports
+Add RefreshCw to lucide-react imports
+Import useAnalyticsFetch hook
+3b. Interfaces
+Add AnalyticsDashboard and DeliverableAnalyticsData TypeScript interfaces
+3c. State & Logic
+Add analyticsDashboard state + fetchAnalyticsDashboard callback
+Initialize useAnalyticsFetch hook with toast notifications on complete/error
+Fetch dashboard data on page load (separate useEffect)
+Add handleRefreshAnalytics click handler
+Add formatMetric, formatPercent, formatDelta helpers
+3d. Replace Campaign Performance section (lines 1408-1505)
+Replace the 12 placeholder cards with a data-driven section containing:
+
+Header with "Refresh Analytics" button + last updated timestamp
+Progress bar (visible only while job is running) — shows "X/Y URLs processed"
+Empty state message when no data yet
+8 metric cards: Views, Likes, Comments, Shares, Saves, Engagement Rate, Deliverables Tracked, Snapshots — with delta badges for views/likes/engagement rate
+Per-deliverable breakdown table — deliverable name, creator, views, likes, comments, shares, saves, engagement rate
+What the UX Looks Like
+User opens campaign page → dashboard loads automatically (shows cached data or empty state)
+User clicks "Refresh Analytics" → button shows loading spinner
+Progress bar appears: "Fetching analytics... 3/8 URLs processed"
+On completion → toast "Analytics updated", metrics populate with real numbers
+Delta badges show changes since last fetch (e.g., "+2.5K" in green)
+Per-deliverable table shows breakdown by deliverable
+Verification
+npm run build — should pass with no type errors
+Open a campaign with tracked deliverables → click Refresh Analytics → verify progress bar appears and metrics populate after job completes
+Open a campaign with NO tracked deliverables → click Refresh Analytics → verify error toast appears
+Verify empty state text shows when no analytics data exists yet
+
+
+FRONT END IMPLEMENTATION DETAILS:
+
+Changes Made
+1. client.ts — Added GraphQL queries & mutation
+queries.campaignAnalyticsDashboard — Fetches campaign-level aggregated metrics, per-deliverable breakdown, and latest job status
+queries.analyticsFetchJob — For polling a single job's progress
+mutations.refreshCampaignAnalytics — Triggers analytics fetch for all tracked deliverables in a campaign
+2. use-analytics-fetch.ts — New polling hook
+Mirrors the existing useSocialFetch pattern
+Calls refreshCampaignAnalytics mutation, then polls every 3 seconds
+Exposes triggerRefresh(), activeJob, isRunning, progress (0-100%)
+Handles completed, partial, and failed job statuses
+Fires onComplete/onError callbacks
+3. page.tsx — Campaign detail page
+"Refresh Analytics" button in the Campaign Performance header (with loading spinner)
+Progress bar showing "X/Y URLs processed" while job is running
+8 real metric cards: Views, Likes, Comments, Shares, Saves, Engagement Rate, Deliverables Tracked, Snapshots
+Delta badges showing growth since last fetch (e.g., "+2.5K" in green)
+Per-deliverable breakdown table with views, likes, comments, shares, saves, engagement rate per deliverable
+Empty state message guiding users to click Refresh Analytics
+Toast notifications on success and error
+How to Test
+Open a campaign that has deliverables with tracking URLs
+You should see the "Refresh Analytics" button in the Campaign Performance section
+Click it → progress bar appears, button shows loading spinner
+When complete → metrics populate, toast shows success
+Delta badges appear on subsequent refreshes showing changes

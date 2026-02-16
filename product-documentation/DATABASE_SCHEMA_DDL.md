@@ -596,6 +596,167 @@ CREATE TABLE post_metrics_snapshots (
 
 ---
 
+### 7.3 Deliverable Analytics (Deliverable-Level Post Metrics, Migration 00030)
+
+> Purpose: store immutable, URL-level post metrics for **approved deliverables**, and maintain campaign-level aggregates for the Campaign Performance dashboard.
+>
+> All tables in this section are **append-only** (no UPDATE/DELETE for raw and metrics), and are RLS-protected by campaign/agency.
+
+#### 7.3.1 analytics_fetch_jobs
+
+Background job tracking for deliverable analytics fetches. One row per fetch request (either **single deliverable** or **campaign-wide**).
+
+```sql
+CREATE TABLE analytics_fetch_jobs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  deliverable_id UUID REFERENCES deliverables(id) ON DELETE CASCADE, -- NULL = campaign-wide job
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('pending','processing','completed','partial','failed')) DEFAULT 'pending',
+  total_urls INTEGER NOT NULL DEFAULT 0,
+  completed_urls INTEGER NOT NULL DEFAULT 0,
+  failed_urls INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+  tokens_consumed INTEGER DEFAULT 0,
+  triggered_by UUID REFERENCES users(id),
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_analytics_fetch_jobs_campaign ON analytics_fetch_jobs(campaign_id);
+CREATE INDEX idx_analytics_fetch_jobs_agency ON analytics_fetch_jobs(agency_id);
+CREATE INDEX idx_analytics_fetch_jobs_status ON analytics_fetch_jobs(status);
+```
+
+> RLS: agency-scoped via `public.belongs_to_agency(analytics_fetch_jobs.agency_id)`. Insert/Update allowed only for rows that belong to the caller's agency.
+
+#### 7.3.2 deliverable_analytics_raw
+
+Immutable store of **raw API responses** from ScrapeCreators and YouTube Data API for each tracked URL and fetch job.
+
+```sql
+CREATE TABLE deliverable_analytics_raw (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  job_id UUID NOT NULL REFERENCES analytics_fetch_jobs(id) ON DELETE CASCADE,
+  tracking_url_id UUID NOT NULL REFERENCES deliverable_tracking_urls(id) ON DELETE CASCADE,
+  deliverable_id UUID NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  creator_id UUID REFERENCES creators(id) ON DELETE SET NULL,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok')),
+  content_url TEXT NOT NULL,
+  raw_response JSONB NOT NULL,
+  api_source TEXT NOT NULL CHECK (api_source IN ('scrapecreators','youtube_data_api')),
+  fetch_status TEXT NOT NULL CHECK (fetch_status IN ('success','error','rate_limited')) DEFAULT 'success',
+  error_message TEXT,
+  credits_consumed INTEGER NOT NULL DEFAULT 1,
+  fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_deliverable_analytics_raw_job ON deliverable_analytics_raw(job_id);
+CREATE INDEX idx_deliverable_analytics_raw_tracking_url ON deliverable_analytics_raw(tracking_url_id);
+CREATE INDEX idx_deliverable_analytics_raw_deliverable ON deliverable_analytics_raw(deliverable_id);
+CREATE INDEX idx_deliverable_analytics_raw_campaign ON deliverable_analytics_raw(campaign_id);
+CREATE INDEX idx_deliverable_analytics_raw_fetched ON deliverable_analytics_raw(fetched_at DESC);
+```
+
+> RLS: campaign-scoped via `public.has_campaign_access(deliverable_analytics_raw.campaign_id)`. **No UPDATE or DELETE**; raw rows are append-only.
+
+#### 7.3.3 deliverable_metrics
+
+Normalized, immutable **time-series snapshots** derived from `deliverable_analytics_raw`. Each row represents a single metric snapshot for one tracking URL at a specific time.
+
+```sql
+CREATE TABLE deliverable_metrics (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  raw_id UUID NOT NULL REFERENCES deliverable_analytics_raw(id) ON DELETE CASCADE,
+  tracking_url_id UUID NOT NULL REFERENCES deliverable_tracking_urls(id) ON DELETE CASCADE,
+  deliverable_id UUID NOT NULL REFERENCES deliverables(id) ON DELETE CASCADE,
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  creator_id UUID REFERENCES creators(id) ON DELETE SET NULL,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok')),
+  content_url TEXT NOT NULL,
+  -- Normalized common metrics
+  views INTEGER,
+  likes INTEGER,
+  comments INTEGER,
+  shares INTEGER,
+  saves INTEGER,
+  reach INTEGER,
+  impressions INTEGER,
+  -- Platform-specific extras
+  platform_metrics JSONB DEFAULT '{}',
+  -- Calculated derived metrics (engagement_rate, save_rate, virality_index, etc.)
+  calculated_metrics JSONB DEFAULT '{}',
+  -- Creator follower count at time of fetch (for virality index denominator)
+  creator_followers_at_fetch INTEGER,
+  -- Snapshot timestamp
+  snapshot_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_deliverable_metrics_tracking_url ON deliverable_metrics(tracking_url_id);
+CREATE INDEX idx_deliverable_metrics_deliverable ON deliverable_metrics(deliverable_id);
+CREATE INDEX idx_deliverable_metrics_campaign ON deliverable_metrics(campaign_id);
+CREATE INDEX idx_deliverable_metrics_creator ON deliverable_metrics(creator_id);
+CREATE INDEX idx_deliverable_metrics_snapshot ON deliverable_metrics(snapshot_at DESC);
+CREATE INDEX idx_deliverable_metrics_campaign_snapshot ON deliverable_metrics(campaign_id, snapshot_at DESC);
+```
+
+> RLS: campaign-scoped via `public.has_campaign_access(deliverable_metrics.campaign_id)`. **Insert-only**; no updates or deletes.
+
+#### 7.3.4 campaign_analytics_aggregates
+
+Upserted **campaign-level rollups** used by the Campaign Performance dashboard. Exactly one row per campaign.
+
+```sql
+CREATE TABLE campaign_analytics_aggregates (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  -- Totals
+  total_deliverables_tracked INTEGER NOT NULL DEFAULT 0,
+  total_urls_tracked INTEGER NOT NULL DEFAULT 0,
+  total_views BIGINT DEFAULT 0,
+  total_likes BIGINT DEFAULT 0,
+  total_comments BIGINT DEFAULT 0,
+  total_shares BIGINT DEFAULT 0,
+  total_saves BIGINT DEFAULT 0,
+  -- Weighted rates
+  weighted_engagement_rate NUMERIC(8,4),
+  avg_engagement_rate NUMERIC(8,4),
+  avg_save_rate NUMERIC(8,4),
+  avg_virality_index NUMERIC(10,4),
+  -- Cost metrics
+  total_creator_cost NUMERIC(12,2),
+  cost_currency TEXT,
+  cpv NUMERIC(10,4),
+  cpe NUMERIC(10,4),
+  -- Per-platform breakdown
+  platform_breakdown JSONB DEFAULT '{}',
+  -- Per-creator breakdown
+  creator_breakdown JSONB DEFAULT '{}',
+  -- Growth deltas (from previous aggregate)
+  views_delta BIGINT DEFAULT 0,
+  likes_delta BIGINT DEFAULT 0,
+  engagement_rate_delta NUMERIC(8,4) DEFAULT 0,
+  -- Metadata
+  last_refreshed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  snapshot_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (campaign_id)
+);
+
+CREATE INDEX idx_campaign_analytics_aggregates_campaign
+  ON campaign_analytics_aggregates(campaign_id);
+```
+
+> RLS: campaign-scoped via `public.has_campaign_access(campaign_analytics_aggregates.campaign_id)`. Rows are upserted by the **Campaign Analytics Aggregator** service after each analytics fetch job.
+
+---
+
 ## 8. Payments & Compliance
 
 ### 8.1 payments

@@ -514,6 +514,102 @@ export const typeDefs = gql`
   }
 
   # =============================================================================
+  # DELIVERABLE ANALYTICS
+  # =============================================================================
+
+  # Analytics fetch background job
+  type AnalyticsFetchJob {
+    id: ID!
+    campaignId: ID!
+    deliverableId: ID
+    status: String!
+    totalUrls: Int!
+    completedUrls: Int!
+    failedUrls: Int!
+    errorMessage: String
+    tokensConsumed: Int!
+    startedAt: DateTime
+    completedAt: DateTime
+    createdAt: DateTime!
+  }
+
+  # Per-URL metrics snapshot (time-series)
+  type DeliverableMetricsSnapshot {
+    id: ID!
+    deliverableId: ID!
+    trackingUrlId: ID!
+    contentUrl: String!
+    platform: String!
+    views: Int
+    likes: Int
+    comments: Int
+    shares: Int
+    saves: Int
+    reach: Int
+    impressions: Int
+    platformMetrics: JSON
+    calculatedMetrics: JSON
+    creatorFollowersAtFetch: Int
+    snapshotAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # Analytics for a single tracking URL (latest + history)
+  type DeliverableUrlAnalytics {
+    trackingUrlId: ID!
+    url: String!
+    platform: String!
+    latestMetrics: DeliverableMetricsSnapshot
+    snapshotHistory: [DeliverableMetricsSnapshot!]!
+    snapshotCount: Int!
+  }
+
+  # Analytics for a deliverable (all its tracking URLs)
+  type DeliverableAnalytics {
+    deliverableId: ID!
+    deliverableTitle: String!
+    creatorName: String
+    urls: [DeliverableUrlAnalytics!]!
+    totalViews: Int
+    totalLikes: Int
+    totalComments: Int
+    totalShares: Int
+    totalSaves: Int
+    avgEngagementRate: Float
+    lastFetchedAt: DateTime
+  }
+
+  # Campaign-level analytics dashboard
+  type CampaignAnalyticsDashboard {
+    campaignId: ID!
+    campaignName: String!
+    totalDeliverablesTracked: Int!
+    totalUrlsTracked: Int!
+    totalViews: Int
+    totalLikes: Int
+    totalComments: Int
+    totalShares: Int
+    totalSaves: Int
+    weightedEngagementRate: Float
+    avgEngagementRate: Float
+    avgSaveRate: Float
+    avgViralityIndex: Float
+    totalCreatorCost: Money
+    costCurrency: String
+    cpv: Float
+    cpe: Float
+    viewsDelta: Int
+    likesDelta: Int
+    engagementRateDelta: Float
+    platformBreakdown: JSON
+    creatorBreakdown: JSON
+    deliverables: [DeliverableAnalytics!]!
+    lastRefreshedAt: DateTime
+    snapshotCount: Int!
+    latestJob: AnalyticsFetchJob
+  }
+
+  # =============================================================================
   # SOCIAL MEDIA ANALYTICS
   # =============================================================================
 
@@ -734,6 +830,22 @@ export const typeDefs = gql`
 
     # All social data jobs for a creator
     socialDataJobs(creatorId: ID!): [SocialDataJob!]!
+
+    # ---------------------------------------------
+    # Deliverable Analytics Queries
+    # ---------------------------------------------
+
+    # Get analytics for a specific deliverable (all tracked URLs)
+    deliverableAnalytics(deliverableId: ID!): DeliverableAnalytics
+
+    # Get campaign-level analytics dashboard
+    campaignAnalyticsDashboard(campaignId: ID!): CampaignAnalyticsDashboard
+
+    # Get a specific analytics fetch job (for polling)
+    analyticsFetchJob(jobId: ID!): AnalyticsFetchJob
+
+    # Get analytics fetch job history for a campaign
+    analyticsFetchJobs(campaignId: ID!, limit: Int): [AnalyticsFetchJob!]!
 
     # ---------------------------------------------
     # Billing / Token Purchases
@@ -1072,7 +1184,17 @@ export const typeDefs = gql`
       platform: String!
       jobType: String!
     ): SocialDataJob!
-    
+
+    # ---------------------------------------------
+    # Deliverable Analytics Mutations (Token-Aware)
+    # ---------------------------------------------
+
+    # Fetch analytics for a single deliverable's tracked URLs (token-gated)
+    fetchDeliverableAnalytics(deliverableId: ID!): AnalyticsFetchJob!
+
+    # Refresh analytics for all tracked deliverables in a campaign (token-gated)
+    refreshCampaignAnalytics(campaignId: ID!): AnalyticsFetchJob!
+
     # ---------------------------------------------
     # Payment Mutations
     # ---------------------------------------------

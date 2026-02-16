@@ -421,7 +421,7 @@ Every transition emits an audit event.
 ### 8.1 Analytics Types
 
 - **Pre-campaign analytics** (token-based)
-- **Post-campaign analytics** (included)
+- **Post-campaign analytics** (deliverable-level, token-gated fetch; campaign dashboards built on top)
 
 ### 8.2 Analytics Fetch Flow
 
@@ -442,6 +442,174 @@ Store immutable snapshot
 - Snapshots are immutable
 - No automatic refresh
 - Retry consumes new token
+
+### 8.4 Deliverable Analytics Module (Campaign Performance)
+
+> Implements post-campaign, **deliverable-level** analytics for tracked URLs and exposes a **Campaign Performance** dashboard on the campaign detail page.
+
+#### 8.4.1 Data Model (Supabase, Migration 00030)
+
+- `analytics_fetch_jobs` – background job tracker for deliverable analytics fetches.  
+  - Keys: `campaign_id`, optional `deliverable_id` (NULL = campaign-wide job), `agency_id`, `status`, `total_urls`, `completed_urls`, `failed_urls`, `tokens_consumed`, `triggered_by`, timestamps.  
+  - RLS: agency-scoped via `belongs_to_agency(agency_id)`.
+
+- `deliverable_analytics_raw` – **append-only** raw API responses for each tracking URL and job.  
+  - Keys: `job_id`, `tracking_url_id`, `deliverable_id`, `campaign_id`, `creator_id`, `platform ('instagram'|'youtube'|'tiktok')`, `content_url`.  
+  - Fields: `raw_response` (JSONB), `api_source ('scrapecreators'|'youtube_data_api')`, `fetch_status`, `error_message`, `credits_consumed`, `fetched_at`.  
+  - RLS: campaign-scoped via `has_campaign_access(campaign_id)`; no UPDATE/DELETE.
+
+- `deliverable_metrics` – normalized, immutable time-series snapshots per tracking URL.  
+  - Keys: `raw_id`, `tracking_url_id`, `deliverable_id`, `campaign_id`, `creator_id`, `platform`, `content_url`.  
+  - Common metrics: `views`, `likes`, `comments`, `shares`, `saves`, `reach`, `impressions`.  
+  - Extras: `platform_metrics` (JSONB), `calculated_metrics` (JSONB; engagement/save/virality rates), `creator_followers_at_fetch`, `snapshot_at`.  
+  - RLS: campaign-scoped via `has_campaign_access(campaign_id)`; insert-only.
+
+- `campaign_analytics_aggregates` – **one row per campaign** with rollups used by the dashboard.  
+  - Totals: `total_deliverables_tracked`, `total_urls_tracked`, `total_views`, `total_likes`, `total_comments`, `total_shares`, `total_saves`.  
+  - Rates: `weighted_engagement_rate`, `avg_engagement_rate`, `avg_save_rate`, `avg_virality_index`.  
+  - Cost: `total_creator_cost`, `cost_currency`, `cpv`, `cpe`.  
+  - Breakdowns: `platform_breakdown` (per-platform views/likes/... + url_count), `creator_breakdown` (per-creator aggregates + deliverable_count + display_name).  
+  - Deltas: `views_delta`, `likes_delta`, `engagement_rate_delta`.  
+  - Metadata: `last_refreshed_at`, `snapshot_count`.  
+  - RLS: campaign-scoped via `has_campaign_access(campaign_id)`; upserted by aggregator.
+
+#### 8.4.2 Platform Detection & API Clients (src/lib/analytics)
+
+- `platform-detector.ts`  
+  - `detectPlatform(url)` → `'instagram' | 'youtube' | 'tiktok' | null` (hostname-based).  
+  - `parseTrackingUrl(url)` → `{ platform, originalUrl, normalizedUrl, contentId }`:
+    - Instagram: extracts shortcode from `/p/{code}`, `/reel/{code}`, `/reels/{code}`.  
+    - YouTube: handles `?v=`, `youtu.be/`, `/shorts/`, `/embed/`, `/v/`.  
+    - TikTok: normalizes URL (strips query) and extracts `contentId` from `/video/{id}`.
+
+- `scrapecreators.ts` (ScrapeCreators API client)  
+  - Env: `SCRAPECREATORS_API_KEY`.  
+  - Generic helper `scGet(endpoint, params)` with `x-api-key` header, typed `RateLimitError` for 429, `ScrapeCreatorsError` for other HTTP failures.  
+  - `fetchInstagramPost(url)` → `/v1/instagram/post` returning:
+    - `videoPlayCount` / `videoViewCount`, `likes`, `comments`, `takenAtTimestamp`, `ownerFollowers`, `shortcode`, `isVideo`.  
+  - `fetchTikTokVideo(url)` → `/v2/tiktok/video` returning:
+    - `playCount` (views), `diggCount` (likes), `commentCount`, `shareCount`, `collectCount` (saves), `downloadCount`, `whatsappShareCount`.
+
+- `youtube-video.ts` (YouTube single-video fetcher)  
+  - Env: `YOUTUBE_API_KEY`.  
+  - `fetchYouTubeVideo(videoId)`:
+    - Calls `videos?part=snippet,statistics,contentDetails&id={id}` for core metrics.  
+    - Calls `channels?part=statistics&id={channelId}` to fetch `subscriberCount` (used for virality index).  
+    - Returns `{ video, channelSubscribers, raw }`.
+
+#### 8.4.3 Normalization & Derived Metrics
+
+- `normalizer.ts`  
+  - `normalizeInstagramPost(raw)`:
+    - `views` from `video_play_count` (fallback `video_view_count`).  
+    - `likes` from `edge_media_preview_like.count`, `comments` from `edge_media_to_parent_comment.count`.  
+    - `creatorFollowersAtFetch` from `owner.edge_followed_by.count`.  
+    - `platformMetrics` includes shortcode, caption, timestamps, `isVideo`, `productType`, `videoDuration`.  
+  - `normalizeTikTokVideo(raw)`:
+    - `views` from `play_count`, `likes` from `digg_count`, `comments` from `comment_count`, `shares` from `share_count`, `saves` from `collect_count`.  
+    - `creatorFollowersAtFetch` from `author.follower_count`.  
+    - `platformMetrics` includes download/repost counts, description, duration, music info, etc.  
+  - `normalizeYouTubeVideo(raw)`:
+    - `views` / `likes` / `comments` from `statistics`, `creatorFollowersAtFetch` from channel subscribers.  
+    - `platformMetrics` includes duration, publishedAt, title, channelId/channelTitle, categoryId, tags.  
+  - `normalizeRawResponse(platform, raw)` dispatches to the appropriate helper and always returns a complete `NormalizedSnapshot`.
+
+- `metrics.ts`  
+  - `computeDerivedMetrics({ views, likes, comments, shares, saves, creatorFollowers })`:
+    - `engagement_rate = (likes + comments + shares) / views` (guards against zero).  
+    - `like_rate`, `comment_rate`, `share_rate`, `save_rate` as per-metric per-view rates.  
+    - `virality_index = views / creatorFollowers` when both are > 0.  
+  - `computeGrowthVelocity(current, previous)`:
+    - Deltas for views/likes/comments/shares/saves.  
+    - Percent growth for views/likes.  
+    - `engagement_rate_delta` between current and previous snapshots.
+
+#### 8.4.4 Campaign Aggregator (src/lib/analytics/aggregator.ts)
+
+- `aggregateCampaignMetrics(campaignId)`:
+  - Loads all `deliverable_metrics` rows for the campaign ordered by `snapshot_at DESC`.  
+  - Deduplicates to latest snapshot **per `tracking_url_id`**.  
+  - Sums totals and builds:
+    - `platform_breakdown[platform]` with views/likes/comments/shares/saves + `url_count`.  
+    - `creator_breakdown[creator_id]` with views/likes/comments/shares/saves + `deliverable_count`.  
+  - Computes:
+    - `weighted_engagement_rate` from total engagement / total views.  
+    - `avg_engagement_rate`, `avg_save_rate` across URLs.  
+    - `avg_virality_index` from `calculated_metrics.virality_index` per snapshot.  
+  - Enriches creator breakdown with display names via `campaign_creators` / `creators`.  
+  - Fetches accepted proposal rates from `campaign_creators` to compute `total_creator_cost`, `cost_currency`, `cpv`, `cpe`.  
+  - Compares against existing `campaign_analytics_aggregates` row (if any) to derive `views_delta`, `likes_delta`, `engagement_rate_delta`.
+
+#### 8.4.5 Background Job Processor (src/app/api/analytics-fetch/route.ts)
+
+- Route: `POST /api/analytics-fetch` (Node.js runtime, `maxDuration = 120`).  
+- Auth: `x-internal-secret` header (`INTERNAL_API_SECRET` env).  
+- Flow:
+  1. Validate `jobId` and load `analytics_fetch_jobs` row (`status` must be `pending`).  
+  2. Mark job `processing`, set `started_at`.  
+  3. Load all `deliverable_tracking_urls` for the campaign (and optional `deliverable_id`) via `deliverable_tracking_records`.  
+  4. For each URL (sequential, with 500ms delay between URLs):
+     - Use `parseTrackingUrl` to detect platform and content identifiers.  
+     - Fetch raw metrics:
+       - Instagram/TikTok via `fetchInstagramPost` / `fetchTikTokVideo` (ScrapeCreators).  
+       - YouTube via `fetchYouTubeVideo` (Data API v3).  
+       - Retries on `RateLimitError` with exponential backoff (max 3 attempts, capped at 30s).  
+     - Insert into `deliverable_analytics_raw`.  
+     - Normalize + compute derived metrics and insert into `deliverable_metrics`.  
+     - Increment `completed_urls` or `failed_urls` on the job.
+  5. After processing URLs, call `aggregateCampaignMetrics(campaign_id)` and `upsertCampaignAggregate(campaign_id, result)`.  
+  6. Set final job `status`:
+     - `completed` (no failures), `failed` (all failed), or `partial` (mixed).  
+     - Set `completed_at` and a summary `error_message` on the job.
+
+#### 8.4.6 GraphQL & RBAC
+
+- Schema extensions (`src/graphql/schema/typeDefs.ts`):
+  - Types: `AnalyticsFetchJob`, `DeliverableMetricsSnapshot`, `DeliverableUrlAnalytics`, `DeliverableAnalytics`, `CampaignAnalyticsDashboard`.  
+  - Queries:
+    - `deliverableAnalytics(deliverableId: ID!): DeliverableAnalytics`  
+    - `campaignAnalyticsDashboard(campaignId: ID!): CampaignAnalyticsDashboard`  
+    - `analyticsFetchJob(jobId: ID!): AnalyticsFetchJob`  
+    - `analyticsFetchJobs(campaignId: ID!, limit: Int): [AnalyticsFetchJob!]!`  
+  - Mutations:
+    - `fetchDeliverableAnalytics(deliverableId: ID!): AnalyticsFetchJob!`  
+    - `refreshCampaignAnalytics(campaignId: ID!): AnalyticsFetchJob!`
+
+- Resolvers:
+  - Mutations (`src/graphql/resolvers/mutations/deliverable-analytics.ts`):
+    - Token-gated using `Permission.FETCH_ANALYTICS` and `agencies.token_balance`.  
+    - Computes token cost as **number of tracking URLs** (1 token per URL).  
+    - Deducts tokens up front; refunds on job creation failure.  
+    - Inserts `analytics_fetch_jobs` row and **fire-and-forget** calls `/api/analytics-fetch`.  
+    - Logs activity via `activity_logs` (entity_type `analytics_fetch_job`).
+  - Queries (`src/graphql/resolvers/queries.ts`):
+    - `deliverableAnalytics`:
+      - Validates access via `Permission.VIEW_ANALYTICS`.  
+      - Loads tracking URLs + all `deliverable_metrics` for the deliverable.  
+      - Builds per-URL history and deliverable totals + avg engagement rate.  
+    - `campaignAnalyticsDashboard`:
+      - Loads `campaign_analytics_aggregates` row and tracking records.  
+      - Builds per-deliverable summaries from latest metrics, plus `latestJob`.  
+    - `analyticsFetchJob` / `analyticsFetchJobs`:
+      - Enforce agency/campaign access, return job(s) for polling.
+  - Type resolvers (`src/graphql/resolvers/types.ts`): map snake_case DB fields to camelCase GraphQL fields for all new types.
+
+#### 8.4.7 Frontend Integration
+
+- GraphQL client (`src/lib/graphql/client.ts`):
+  - Queries:
+    - `campaignAnalyticsDashboard(campaignId)`  
+    - `analyticsFetchJob(jobId)`  
+  - Mutations:
+    - `refreshCampaignAnalytics(campaignId)`
+
+- Hook (`src/hooks/use-analytics-fetch.ts`):
+  - Input: `campaignId` and optional `{ onComplete, onError }`.  
+  - `triggerRefresh()` calls `refreshCampaignAnalytics` and stores returned job.  
+  - Polls `analyticsFetchJob(jobId)` every 3 seconds until job is `completed` / `partial` / `failed`.  
+  - Exposes `{ triggerRefresh, activeJob, isRunning, polling, progress }`.
+
+> UI details for the Campaign Performance section are covered in §10.4.
 
 ---
 
@@ -519,12 +687,63 @@ Attached at:
 
 ---
 
-## 10.4 Campaign Detail – Campaign Performance (Placeholder)
+## 10.4 Campaign Detail – Campaign Performance (Deliverable Analytics)
 
-- On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign Performance** section is rendered at the bottom.
-- Purpose: placeholder for future campaign-level social media analytics.
-- Placeholder metrics (no live data yet): Overall deliverables, Likes, Comments, Reshares, Saves, Engagement, Clicks, Conversions, Impressions, Reach, Engagement rate, Video views.
-- Each metric is shown in a small card with icon and label; value is placeholder ("—") until analytics are connected.
+On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign Performance** section at the bottom now renders **live analytics** backed by the deliverable analytics module.
+
+### 10.4.1 UX & Behavior
+
+- Header:
+  - Title: "Campaign Performance" with chart icon.  
+  - Optional **Last updated** timestamp (from `CampaignAnalyticsDashboard.lastRefreshedAt`).  
+  - **"Refresh Analytics"** button:
+    - Calls `useAnalyticsFetch(campaignId).triggerRefresh()`.  
+    - Shows loading state while a job is running.
+
+- Progress:
+  - While `isRunning` and `activeJob` is present, show a progress bar:  
+    - Label: `"Fetching analytics... X/Y URLs processed"`.  
+    - Width derived from `completedUrls / totalUrls` (`progress` from the hook).
+
+- Empty state:
+  - When no snapshots exist and no job is running:
+    - Message: "No analytics data yet. Click “Refresh Analytics” to fetch metrics for tracked deliverables."
+
+- Summary metrics grid (cards):
+  - Views (`totalViews` + `viewsDelta` since last fetch).  
+  - Likes (`totalLikes` + `likesDelta`).  
+  - Comments (`totalComments`).  
+  - Shares (`totalShares`).  
+  - Saves (`totalSaves`).  
+  - Engagement Rate (`avgEngagementRate` + `engagementRateDelta`).  
+  - Deliverables Tracked (`totalDeliverablesTracked`).  
+  - Snapshots (`snapshotCount`).  
+  - Formatting helpers:
+    - `formatMetric` for numeric totals (K/M suffixes).  
+    - `formatPercent` for rates.  
+    - `formatDelta` for +/- deltas with K/M suffixes and green/red color.
+
+- Per-deliverable breakdown table:
+  - One row per deliverable with tracking (`CampaignAnalyticsDashboard.deliverables`).  
+  - Columns: Deliverable title, Creator name, Views, Likes, Comments, Shares, Saves, Engagement Rate.  
+  - Values sourced from per-deliverable totals and `avgEngagementRate`.
+
+### 10.4.2 Permissions & Tokens
+
+- Only users with `Permission.VIEW_ANALYTICS` can read analytics; only users with `Permission.FETCH_ANALYTICS` can trigger refreshes.  
+- **Token model**:
+  - Token cost = number of tracking URLs processed (`1 token per URL`).  
+  - Tokens are deducted on `fetchDeliverableAnalytics` / `refreshCampaignAnalytics` mutations before calling `/api/analytics-fetch`.  
+  - On job-creation failure, tokens are refunded; on partial URL failures, tokens are **not** refunded (credits_consumed is tracked per raw row).
+
+### 10.4.3 Failure Modes
+
+- If a refresh is triggered for a campaign with **no tracking records** or **no tracking URLs**, mutations throw with a descriptive error surfaced via toast in the UI.  
+- Individual URL failures:
+  - Do not abort the job.  
+  - Are recorded as `deliverable_analytics_raw` rows with `fetch_status = 'error'` or `'rate_limited'`.  
+  - Contribute to `failed_urls` and a summary `error_message` on the job.  
+- Aggregation failures are logged server-side but do not cause the job to fail; the previous aggregate remains until the next successful run.
 
 ---
 
