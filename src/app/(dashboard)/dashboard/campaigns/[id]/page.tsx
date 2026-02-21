@@ -30,18 +30,18 @@ import {
   Heart,
   MessageCircle,
   Share2,
-  MousePointerClick,
-  Target,
   Eye,
   TrendingUp,
   Bookmark,
   UserPlus,
   ChevronRight,
+  RefreshCw,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +69,7 @@ import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
 import { ApproverPicker } from '@/components/approver-picker'
 import { ProposalTimelineSheet } from './components/proposal-timeline-sheet'
+import { useAnalyticsFetch } from '@/hooks/use-analytics-fetch'
 
 interface DeliverableVersion {
   id: string
@@ -194,6 +195,75 @@ interface Campaign {
   users: CampaignUser[]
 }
 
+interface UrlMetricsSnapshot {
+  views: number | null
+  likes: number | null
+  comments: number | null
+  shares: number | null
+  saves: number | null
+  calculatedMetrics: { engagement_rate?: number; [key: string]: unknown } | null
+  snapshotAt: string
+}
+
+interface UrlAnalyticsData {
+  trackingUrlId: string
+  url: string
+  platform: string
+  latestMetrics: UrlMetricsSnapshot | null
+}
+
+interface DeliverableAnalyticsData {
+  deliverableId: string
+  deliverableTitle: string
+  creatorName: string | null
+  urls: UrlAnalyticsData[]
+  totalViews: number | null
+  totalLikes: number | null
+  totalComments: number | null
+  totalShares: number | null
+  totalSaves: number | null
+  avgEngagementRate: number | null
+  lastFetchedAt: string | null
+}
+
+interface AnalyticsDashboard {
+  campaignId: string
+  campaignName: string
+  totalDeliverablesTracked: number
+  totalUrlsTracked: number
+  totalViews: number | null
+  totalLikes: number | null
+  totalComments: number | null
+  totalShares: number | null
+  totalSaves: number | null
+  weightedEngagementRate: number | null
+  avgEngagementRate: number | null
+  avgSaveRate: number | null
+  avgViralityIndex: number | null
+  totalCreatorCost: number | null
+  costCurrency: string | null
+  cpv: number | null
+  cpe: number | null
+  viewsDelta: number | null
+  likesDelta: number | null
+  engagementRateDelta: number | null
+  platformBreakdown: unknown
+  creatorBreakdown: unknown
+  deliverables: DeliverableAnalyticsData[]
+  lastRefreshedAt: string | null
+  snapshotCount: number
+  latestJob: {
+    id: string
+    status: string
+    totalUrls: number
+    completedUrls: number
+    failedUrls: number
+    errorMessage: string | null
+    createdAt: string
+    completedAt: string | null
+  } | null
+}
+
 // Campaign state machine
 const STATUS_TRANSITIONS: Record<string, { next: string; action: string; icon: React.ReactNode; color: string }> = {
   draft: { next: 'active', action: 'Activate Campaign', icon: <Play className="h-4 w-4" />, color: 'bg-green-600 hover:bg-green-700' },
@@ -261,6 +331,9 @@ export default function CampaignDetailPage() {
   const [assignNotes, setAssignNotes] = useState('')
   const [assigning, setAssigning] = useState(false)
 
+  // Analytics state
+  const [analyticsDashboard, setAnalyticsDashboard] = useState<AnalyticsDashboard | null>(null)
+
   const fetchCampaign = useCallback(async () => {
     try {
       const data = await graphqlRequest<{ campaign: Campaign }>(
@@ -278,6 +351,51 @@ export default function CampaignDetailPage() {
   useEffect(() => {
     fetchCampaign()
   }, [fetchCampaign])
+
+  // Analytics dashboard
+  const fetchAnalyticsDashboard = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ campaignAnalyticsDashboard: AnalyticsDashboard | null }>(
+        queries.campaignAnalyticsDashboard,
+        { campaignId }
+      )
+      setAnalyticsDashboard(data.campaignAnalyticsDashboard)
+    } catch {
+      // Analytics is optional - don't error the page
+    }
+  }, [campaignId])
+
+  const {
+    triggerRefresh: triggerAnalyticsRefresh,
+    activeJob: analyticsJob,
+    isRunning: analyticsRefreshing,
+    progress: analyticsProgress,
+  } = useAnalyticsFetch(campaignId, {
+    onComplete: async () => {
+      await fetchAnalyticsDashboard()
+      toast({ title: 'Analytics updated', description: 'Campaign performance data has been refreshed.' })
+    },
+    onError: (error) => {
+      toast({ title: 'Analytics refresh failed', description: error, variant: 'destructive' })
+    },
+  })
+
+  useEffect(() => {
+    if (campaignId) fetchAnalyticsDashboard()
+  }, [fetchAnalyticsDashboard, campaignId])
+
+  const handleRefreshAnalytics = async () => {
+    try {
+      await triggerAnalyticsRefresh()
+      toast({ title: 'Analytics refresh started', description: 'Fetching latest metrics for all tracked deliverables...' })
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to start analytics refresh',
+        variant: 'destructive',
+      })
+    }
+  }
 
   // Initialize edit forms when campaign loads
   useEffect(() => {
@@ -893,6 +1011,26 @@ export default function CampaignDetailPage() {
     }
   }
 
+  const formatMetric = (value: number | null | undefined): string => {
+    if (value == null) return '\u2014'
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
+    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
+    return value.toLocaleString()
+  }
+
+  const formatPercent = (value: number | null | undefined): string => {
+    if (value == null) return '\u2014'
+    return `${(value * 100).toFixed(2)}%`
+  }
+
+  const formatDelta = (value: number | null | undefined): string | null => {
+    if (value == null || value === 0) return null
+    const prefix = value > 0 ? '+' : ''
+    if (Math.abs(value) >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(1)}M`
+    if (Math.abs(value) >= 1_000) return `${prefix}${(value / 1_000).toFixed(1)}K`
+    return `${prefix}${value.toLocaleString()}`
+  }
+
   const formatRate = (amount: number | null, currency: string | null) => {
     if (!amount) return null
     const currencyCode = currency || 'INR'
@@ -1061,201 +1199,173 @@ export default function CampaignDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Campaign Info Card */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-6">
-              <div className="h-20 w-20 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                <Megaphone className="h-10 w-10 text-green-600" />
-              </div>
-              <div className="flex-1 grid gap-4 sm:grid-cols-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Client</p>
-                  <Link 
-                    href={`/dashboard/clients/${campaign.project.client.id}`}
-                    className="font-medium hover:underline flex items-center gap-1 mt-1"
-                  >
-                    <Building2 className="h-4 w-4" />
-                    {campaign.project.client.name}
-                  </Link>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Project</p>
-                  <Link 
-                    href={`/dashboard/projects/${campaign.project.id}`}
-                    className="font-medium hover:underline flex items-center gap-1 mt-1"
-                  >
-                    <Briefcase className="h-4 w-4" />
-                    {campaign.project.name}
-                  </Link>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Start Date</p>
-                  <p className="font-medium mt-1 flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {formatDate(campaign.startDate)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">End Date</p>
-                  <p className="font-medium mt-1 flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    {formatDate(campaign.endDate)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            
-            {campaign.description && (
-              <div className="mt-6 pt-6 border-t">
-                <p className="text-sm text-muted-foreground mb-1">Description</p>
-                <p>{campaign.description}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Tabs Container */}
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList className="grid w-full grid-cols-5">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
+            <TabsTrigger value="creators">Creators</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+            <TabsTrigger value="attachments">Attachments</TabsTrigger>
+          </TabsList>
 
-        {/* Campaign approvers */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Campaign approvers
-              </h2>
-              {!isArchived && (
-                <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Manage approvers
-                </Button>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground mb-3">
-              All selected approvers must approve deliverables at campaign level before project or client review.
-            </p>
-            {campaignApprovers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {campaignApprovers.map((cu) => (
-                  <li
-                    key={cu.id}
-                    className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(cu.user.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-sm">{cu.user.name || cu.user.email}</span>
-                    {cu.user.email && cu.user.name && (
-                      <span className="text-xs text-muted-foreground">({cu.user.email})</span>
+          {/* Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            {/* Top row: Campaign Info and Approvers side by side */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Campaign Info Card */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex flex-col sm:flex-row gap-6">
+                    <div className="h-20 w-20 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
+                      <Megaphone className="h-10 w-10 text-green-600" />
+                    </div>
+                    <div className="flex-1 grid gap-4 grid-cols-2">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Client</p>
+                        <Link
+                          href={`/dashboard/clients/${campaign.project.client.id}`}
+                          className="font-medium hover:underline flex items-center gap-1 mt-1"
+                        >
+                          <Building2 className="h-4 w-4" />
+                          {campaign.project.client.name}
+                        </Link>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Project</p>
+                        <Link
+                          href={`/dashboard/projects/${campaign.project.id}`}
+                          className="font-medium hover:underline flex items-center gap-1 mt-1"
+                        >
+                          <Briefcase className="h-4 w-4" />
+                          {campaign.project.name}
+                        </Link>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">Start Date</p>
+                        <p className="font-medium mt-1 flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {formatDate(campaign.startDate)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-muted-foreground">End Date</p>
+                        <p className="font-medium mt-1 flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {formatDate(campaign.endDate)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {campaign.description && (
+                    <div className="mt-6 pt-6 border-t">
+                      <p className="text-sm text-muted-foreground mb-1">Description</p>
+                      <p>{campaign.description}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Campaign approvers */}
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-semibold flex items-center gap-2">
+                      <Users className="h-5 w-5" />
+                      Campaign Approvers
+                    </h2>
+                    {!isArchived && (
+                      <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        Manage
+                      </Button>
                     )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Campaign Brief Section */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Campaign Brief
-              </h2>
-              {!isArchived && (
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => briefEditing ? handleSaveBrief() : setBriefEditing(true)}
-                  disabled={saving}
-                >
-                  {briefEditing ? (saving ? 'Saving...' : 'Save Brief') : 'Edit Brief'}
-                </Button>
-              )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    All selected approvers must approve deliverables at campaign level before project or client review.
+                  </p>
+                  {campaignApprovers.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {campaignApprovers.map((cu) => (
+                        <li
+                          key={cu.id}
+                          className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
+                        >
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="text-xs">
+                              {getInitials(cu.user.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm">{cu.user.name || cu.user.email}</span>
+                          {cu.user.email && cu.user.name && (
+                            <span className="text-xs text-muted-foreground">({cu.user.email})</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-            
-            {briefEditing ? (
-              <div className="space-y-3">
-                <RichTextEditor
-                  content={editBrief}
-                  onChange={setEditBrief}
-                  placeholder="Write your campaign brief here... Include objectives, target audience, key messages, etc."
-                />
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => {
-                    setEditBrief(campaign.brief || '')
-                    setBriefEditing(false)
-                  }}>
-                    Cancel
-                  </Button>
+
+            {/* Campaign Brief Section */}
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    Campaign Brief
+                  </h2>
+                  {!isArchived && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => briefEditing ? handleSaveBrief() : setBriefEditing(true)}
+                      disabled={saving}
+                    >
+                      {briefEditing ? (saving ? 'Saving...' : 'Save Brief') : 'Edit Brief'}
+                    </Button>
+                  )}
                 </div>
-              </div>
-            ) : campaign.brief ? (
-              <RichTextContent content={campaign.brief} />
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                <p>No campaign brief yet</p>
-                {!isArchived && (
-                  <Button variant="outline" size="sm" className="mt-3" onClick={() => setBriefEditing(true)}>
-                    Add Brief
-                  </Button>
+
+                {briefEditing ? (
+                  <div className="space-y-3">
+                    <RichTextEditor
+                      content={editBrief}
+                      onChange={setEditBrief}
+                      placeholder="Write your campaign brief here... Include objectives, target audience, key messages, etc."
+                    />
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        setEditBrief(campaign.brief || '')
+                        setBriefEditing(false)
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : campaign.brief ? (
+                  <RichTextContent content={campaign.brief} />
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                    <p>No campaign brief yet</p>
+                    {!isArchived && (
+                      <Button variant="outline" size="sm" className="mt-3" onClick={() => setBriefEditing(true)}>
+                        Add Brief
+                      </Button>
+                    )}
+                  </div>
                 )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Attachments Section */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
-                <Paperclip className="h-5 w-5" />
-                Attachments
-              </h2>
-            </div>
-            
-            {/* File Upload Area */}
-            {!isArchived && (
-              <FileUpload 
-                onUpload={handleFileUpload}
-                maxSize={50 * 1024 * 1024} // 50MB
-                className="mb-4"
-              />
-            )}
-            
-            {/* Existing Attachments */}
-            {campaign.attachments.length === 0 ? (
-              !isArchived ? null : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                  <p>No attachments</p>
-                </div>
-              )
-            ) : (
-              <div className="space-y-2">
-                {campaign.attachments.map((attachment) => (
-                  <FileItem
-                    key={attachment.id}
-                    fileName={attachment.fileName}
-                    fileSize={attachment.fileSize}
-                    onDownload={() => handleDownloadFile(attachment.fileUrl, attachment.fileName)}
-                    onRemove={!isArchived ? () => handleRemoveAttachment(attachment.id) : undefined}
-                  />
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Deliverables Section */}
-          <div>
+          {/* Deliverables Tab */}
+          <TabsContent value="deliverables" className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Deliverables</h2>
               {!isArchived && (
@@ -1326,10 +1436,10 @@ export default function CampaignDetailPage() {
                 ))}
               </div>
             )}
-          </div>
+          </TabsContent>
 
-          {/* Creators Section */}
-          <div>
+          {/* Creators Tab */}
+          <TabsContent value="creators" className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Creators</h2>
               {!isArchived && (
@@ -1402,107 +1512,252 @@ export default function CampaignDetailPage() {
                 ))}
               </div>
             )}
-          </div>
-        </div>
+          </TabsContent>
 
-        {/* Campaign Performance (placeholder) */}
-        <Card>
+          {/* Campaign Performance Tab */}
+          <TabsContent value="performance" className="space-y-6">
+            <Card>
           <CardContent className="p-6">
-            <div className="flex items-center gap-2 mb-6">
-              <BarChart3 className="h-5 w-5 text-muted-foreground" />
-              <h2 className="text-lg font-semibold">Campaign Performance</h2>
+            {/* Header with refresh button */}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-muted-foreground" />
+                <h2 className="text-lg font-semibold">Campaign Performance</h2>
+                {analyticsDashboard?.lastRefreshedAt && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    Last updated {new Date(analyticsDashboard.lastRefreshedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                loading={analyticsRefreshing}
+                onClick={handleRefreshAnalytics}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Refresh Analytics
+              </Button>
             </div>
-            <p className="text-sm text-muted-foreground mb-6">
-              Aggregated social media metrics for this campaign. Data will appear when analytics are connected.
-            </p>
+
+            {/* Job progress bar */}
+            {analyticsRefreshing && (
+              <div className="mb-6 rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-4">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="font-medium text-blue-700 dark:text-blue-300">
+                    {analyticsJob ? 'Fetching analytics...' : 'Starting analytics fetch...'}
+                  </span>
+                  {analyticsJob && (
+                    <span className="text-blue-600 dark:text-blue-400">
+                      {analyticsJob.completedUrls + analyticsJob.failedUrls}/{analyticsJob.totalUrls} URLs processed
+                    </span>
+                  )}
+                </div>
+                <div className="h-2 w-full rounded-full bg-blue-100 dark:bg-blue-900">
+                  <div
+                    className="h-full rounded-full bg-blue-600 transition-all duration-500"
+                    style={{ width: `${analyticsProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!analyticsDashboard?.snapshotCount && !analyticsRefreshing && (
+              <p className="text-sm text-muted-foreground mb-6">
+                No analytics data yet. Click &quot;Refresh Analytics&quot; to fetch metrics for tracked deliverables.
+              </p>
+            )}
+
+            {/* Summary metrics grid */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <FileCheck className="h-4 w-4" />
-                  Overall deliverables
+                  <Eye className="h-4 w-4" />
+                  Views
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMetric(analyticsDashboard?.totalViews)}
+                </p>
+                {formatDelta(analyticsDashboard?.viewsDelta) && (
+                  <span className={`text-xs font-medium ${(analyticsDashboard?.viewsDelta ?? 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatDelta(analyticsDashboard?.viewsDelta)} since last fetch
+                  </span>
+                )}
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <Heart className="h-4 w-4" />
                   Likes
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMetric(analyticsDashboard?.totalLikes)}
+                </p>
+                {formatDelta(analyticsDashboard?.likesDelta) && (
+                  <span className={`text-xs font-medium ${(analyticsDashboard?.likesDelta ?? 0) > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {formatDelta(analyticsDashboard?.likesDelta)} since last fetch
+                  </span>
+                )}
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <MessageCircle className="h-4 w-4" />
                   Comments
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMetric(analyticsDashboard?.totalComments)}
+                </p>
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <Share2 className="h-4 w-4" />
-                  Reshares
+                  Shares
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMetric(analyticsDashboard?.totalShares)}
+                </p>
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <Bookmark className="h-4 w-4" />
                   Saves
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMetric(analyticsDashboard?.totalSaves)}
+                </p>
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
                   <TrendingUp className="h-4 w-4" />
-                  Engagement
+                  Engagement Rate
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatPercent(analyticsDashboard?.avgEngagementRate)}
+                </p>
+                {analyticsDashboard?.engagementRateDelta != null && analyticsDashboard.engagementRateDelta !== 0 && (
+                  <span className={`text-xs font-medium ${analyticsDashboard.engagementRateDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {analyticsDashboard.engagementRateDelta > 0 ? '+' : ''}{(analyticsDashboard.engagementRateDelta * 100).toFixed(2)}%
+                  </span>
+                )}
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <MousePointerClick className="h-4 w-4" />
-                  Clicks
+                  <FileCheck className="h-4 w-4" />
+                  Deliverables Tracked
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {analyticsDashboard?.totalDeliverablesTracked ?? '\u2014'}
+                </p>
               </div>
               <div className="rounded-lg border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <Target className="h-4 w-4" />
-                  Conversions
+                  <Activity className="h-4 w-4" />
+                  Snapshots
                 </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <Eye className="h-4 w-4" />
-                  Impressions
-                </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <Users className="h-4 w-4" />
-                  Reach
-                </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <BarChart3 className="h-4 w-4" />
-                  Engagement rate
-                </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
-              </div>
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
-                  <Play className="h-4 w-4" />
-                  Video views
-                </div>
-                <p className="text-2xl font-semibold tabular-nums">—</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {analyticsDashboard?.snapshotCount ?? '\u2014'}
+                </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Per-deliverable breakdown */}
+            {analyticsDashboard?.deliverables && analyticsDashboard.deliverables.length > 0 && (
+              <div className="mt-8">
+                <h3 className="text-sm font-semibold text-muted-foreground mb-4">Per-URL Breakdown</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-muted-foreground">
+                        <th className="pb-2 pr-4 font-medium">URL</th>
+                        <th className="pb-2 pr-4 font-medium">Deliverable</th>
+                        <th className="pb-2 pr-4 font-medium">Platform</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Views</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Likes</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Comments</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Shares</th>
+                        <th className="pb-2 pr-4 font-medium text-right">Saves</th>
+                        <th className="pb-2 font-medium text-right">Eng. Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analyticsDashboard.deliverables.flatMap((d) =>
+                        (d.urls || []).map((u) => (
+                          <tr key={u.trackingUrlId} className="border-b last:border-0">
+                            <td className="py-3 pr-4 max-w-[250px]">
+                              <a
+                                href={u.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline truncate block"
+                                title={u.url}
+                              >
+                                {u.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 45)}{u.url.replace(/^https?:\/\/(www\.)?/, '').length > 45 ? '...' : ''}
+                              </a>
+                            </td>
+                            <td className="py-3 pr-4 text-muted-foreground">{d.deliverableTitle}</td>
+                            <td className="py-3 pr-4">
+                              <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted capitalize">
+                                {u.platform}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{formatMetric(u.latestMetrics?.views)}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{formatMetric(u.latestMetrics?.likes)}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{formatMetric(u.latestMetrics?.comments)}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{formatMetric(u.latestMetrics?.shares)}</td>
+                            <td className="py-3 pr-4 text-right tabular-nums">{formatMetric(u.latestMetrics?.saves)}</td>
+                            <td className="py-3 text-right tabular-nums">
+                              {formatPercent(u.latestMetrics?.calculatedMetrics?.engagement_rate ?? null)}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Attachments Tab */}
+          <TabsContent value="attachments" className="space-y-4">
+            <Card>
+              <CardContent className="p-6">
+                {/* File Upload Area */}
+                {!isArchived && (
+                  <FileUpload
+                    onUpload={handleFileUpload}
+                    maxSize={50 * 1024 * 1024} // 50MB
+                    className="mb-4"
+                  />
+                )}
+
+                {/* Existing Attachments */}
+                {campaign.attachments.length === 0 ? (
+                  !isArchived ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
+                      <p>No attachments yet</p>
+                    </div>
+                  ) : null
+                ) : (
+                  <div className="space-y-2">
+                    {campaign.attachments.map((attachment) => (
+                      <FileItem
+                        key={attachment.id}
+                        fileName={attachment.fileName}
+                        fileSize={attachment.fileSize}
+                        onDownload={() => handleDownloadFile(attachment.fileUrl, attachment.fileName)}
+                        onRemove={!isArchived ? () => handleRemoveAttachment(attachment.id) : undefined}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Edit Campaign Dialog */}

@@ -21,6 +21,7 @@ import {
   requireClientApproverDeliverableAccess,
   hasCreatorDeliverableAccess,
   AgencyRole,
+  Permission,
 } from '@/lib/rbac';
 import { notFoundError, forbiddenError } from '../errors';
 import {
@@ -713,6 +714,379 @@ export const queryResolvers = {
       .limit(50);
 
     if (error) throw new Error('Failed to fetch token purchases');
+    return data || [];
+  },
+
+  // =============================================================================
+  // DELIVERABLE ANALYTICS QUERIES
+  // =============================================================================
+
+  /**
+   * Get analytics for a single deliverable (all tracked URLs + latest metrics)
+   */
+  deliverableAnalytics: async (
+    _: unknown,
+    { deliverableId }: { deliverableId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    // Load deliverable
+    const { data: deliverable, error: delError } = await supabaseAdmin
+      .from('deliverables')
+      .select('id, title, campaign_id, creator_id')
+      .eq('id', deliverableId)
+      .single();
+
+    if (delError || !deliverable) {
+      throw notFoundError('Deliverable', deliverableId);
+    }
+
+    await requireCampaignAccess(ctx, deliverable.campaign_id, Permission.VIEW_ANALYTICS);
+
+    // Load tracking record + URLs
+    const { data: trackingRecord } = await supabaseAdmin
+      .from('deliverable_tracking_records')
+      .select('id')
+      .eq('deliverable_id', deliverableId)
+      .single();
+
+    if (!trackingRecord) {
+      // No tracking — return empty analytics
+      return {
+        deliverable_id: deliverableId,
+        deliverable_title: deliverable.title,
+        creator_name: null,
+        urls: [],
+        total_views: null,
+        total_likes: null,
+        total_comments: null,
+        total_shares: null,
+        total_saves: null,
+        avg_engagement_rate: null,
+        last_fetched_at: null,
+      };
+    }
+
+    // Load creator name if assigned
+    let creatorName: string | null = null;
+    if (deliverable.creator_id) {
+      const { data: creator } = await supabaseAdmin
+        .from('creators')
+        .select('display_name')
+        .eq('id', deliverable.creator_id)
+        .single();
+      creatorName = creator?.display_name ?? null;
+    }
+
+    // Load tracking URLs
+    const { data: trackingUrls } = await supabaseAdmin
+      .from('deliverable_tracking_urls')
+      .select('id, url')
+      .eq('tracking_record_id', trackingRecord.id)
+      .order('display_order', { ascending: true });
+
+    if (!trackingUrls?.length) {
+      return {
+        deliverable_id: deliverableId,
+        deliverable_title: deliverable.title,
+        creator_name: creatorName,
+        urls: [],
+        total_views: null,
+        total_likes: null,
+        total_comments: null,
+        total_shares: null,
+        total_saves: null,
+        avg_engagement_rate: null,
+        last_fetched_at: null,
+      };
+    }
+
+    // Load all metrics for this deliverable
+    const { data: allMetrics } = await supabaseAdmin
+      .from('deliverable_metrics')
+      .select('*')
+      .eq('deliverable_id', deliverableId)
+      .order('snapshot_at', { ascending: false });
+
+    // Group by tracking_url_id
+    const metricsByUrl = new Map<string, typeof allMetrics>();
+    for (const m of allMetrics || []) {
+      const existing = metricsByUrl.get(m.tracking_url_id) || [];
+      existing.push(m);
+      metricsByUrl.set(m.tracking_url_id, existing);
+    }
+
+    // Build per-URL analytics
+    const urls = trackingUrls.map((tu: { id: string; url: string }) => {
+      const snapshots = metricsByUrl.get(tu.id) || [];
+      const latest = snapshots[0] || null;
+      return {
+        tracking_url_id: tu.id,
+        url: tu.url,
+        platform: latest?.platform || 'unknown',
+        latest_metrics: latest,
+        snapshot_history: snapshots,
+        snapshot_count: snapshots.length,
+      };
+    });
+
+    // Compute totals from latest snapshots
+    let totalViews = 0;
+    let totalLikes = 0;
+    let totalComments = 0;
+    let totalShares = 0;
+    let totalSaves = 0;
+    let engRateSum = 0;
+    let engRateCount = 0;
+    let lastFetchedAt: string | null = null;
+
+    for (const u of urls) {
+      if (u.latest_metrics) {
+        totalViews += u.latest_metrics.views || 0;
+        totalLikes += u.latest_metrics.likes || 0;
+        totalComments += u.latest_metrics.comments || 0;
+        totalShares += u.latest_metrics.shares || 0;
+        totalSaves += u.latest_metrics.saves || 0;
+        const calc = u.latest_metrics.calculated_metrics as Record<string, number> | null;
+        if (calc?.engagement_rate) {
+          engRateSum += calc.engagement_rate;
+          engRateCount++;
+        }
+        if (!lastFetchedAt || u.latest_metrics.snapshot_at > lastFetchedAt) {
+          lastFetchedAt = u.latest_metrics.snapshot_at;
+        }
+      }
+    }
+
+    const hasMetrics = urls.some((u: { latest_metrics: unknown }) => u.latest_metrics);
+
+    return {
+      deliverable_id: deliverableId,
+      deliverable_title: deliverable.title,
+      creator_name: creatorName,
+      urls,
+      total_views: hasMetrics ? totalViews : null,
+      total_likes: hasMetrics ? totalLikes : null,
+      total_comments: hasMetrics ? totalComments : null,
+      total_shares: hasMetrics ? totalShares : null,
+      total_saves: hasMetrics ? totalSaves : null,
+      avg_engagement_rate: engRateCount > 0 ? engRateSum / engRateCount : null,
+      last_fetched_at: lastFetchedAt,
+    };
+  },
+
+  /**
+   * Get campaign-level analytics dashboard (aggregates + per-deliverable breakdown)
+   */
+  campaignAnalyticsDashboard: async (
+    _: unknown,
+    { campaignId }: { campaignId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_ANALYTICS);
+
+    // Load campaign
+    const { data: campaign, error: campError } = await supabaseAdmin
+      .from('campaigns')
+      .select('id, name')
+      .eq('id', campaignId)
+      .single();
+
+    if (campError || !campaign) {
+      throw notFoundError('Campaign', campaignId);
+    }
+
+    // Load aggregate
+    const { data: aggregate } = await supabaseAdmin
+      .from('campaign_analytics_aggregates')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .maybeSingle();
+
+    // Load latest job
+    const { data: latestJob } = await supabaseAdmin
+      .from('analytics_fetch_jobs')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Load per-deliverable breakdown
+    const { data: trackingRecords } = await supabaseAdmin
+      .from('deliverable_tracking_records')
+      .select('id, deliverable_id, deliverable_name')
+      .eq('campaign_id', campaignId);
+
+    // Build per-deliverable analytics summaries
+    const deliverableAnalyticsList = [];
+    for (const rec of trackingRecords || []) {
+      // Load tracking URLs for this deliverable
+      const { data: tUrls } = await supabaseAdmin
+        .from('deliverable_tracking_urls')
+        .select('id, url')
+        .eq('tracking_record_id', rec.id)
+        .order('display_order', { ascending: true });
+
+      if (!tUrls?.length) continue;
+
+      // Load latest metric per URL
+      const urlIds = tUrls.map((u: { id: string }) => u.id);
+      const { data: metrics } = await supabaseAdmin
+        .from('deliverable_metrics')
+        .select('*')
+        .in('tracking_url_id', urlIds)
+        .order('snapshot_at', { ascending: false });
+
+      // Deduplicate: keep latest per tracking_url_id
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const latestPerUrl = new Map<string, any>();
+      for (const m of metrics || []) {
+        if (!latestPerUrl.has(m.tracking_url_id)) {
+          latestPerUrl.set(m.tracking_url_id, m);
+        }
+      }
+
+      // Build URL analytics
+      const urls = tUrls.map((tu: { id: string; url: string }) => {
+        const latest = latestPerUrl.get(tu.id) || null;
+        // For dashboard, only include latest metrics (no full history)
+        return {
+          tracking_url_id: tu.id,
+          url: tu.url,
+          platform: latest?.platform || 'unknown',
+          latest_metrics: latest,
+          snapshot_history: latest ? [latest] : [],
+          snapshot_count: latest ? 1 : 0,
+        };
+      });
+
+      // Totals for this deliverable
+      let dViews = 0, dLikes = 0, dComments = 0, dShares = 0, dSaves = 0;
+      let dEngSum = 0, dEngCount = 0;
+      let dLastFetched: string | null = null;
+
+      for (const lm of latestPerUrl.values()) {
+        dViews += lm.views || 0;
+        dLikes += lm.likes || 0;
+        dComments += lm.comments || 0;
+        dShares += lm.shares || 0;
+        dSaves += lm.saves || 0;
+        const calc = lm.calculated_metrics as Record<string, number> | null;
+        if (calc?.engagement_rate) { dEngSum += calc.engagement_rate; dEngCount++; }
+        if (!dLastFetched || lm.snapshot_at > dLastFetched) dLastFetched = lm.snapshot_at;
+      }
+
+      // Load creator name
+      const { data: del } = await supabaseAdmin
+        .from('deliverables')
+        .select('creator_id')
+        .eq('id', rec.deliverable_id)
+        .single();
+      let cName: string | null = null;
+      if (del?.creator_id) {
+        const { data: cr } = await supabaseAdmin
+          .from('creators')
+          .select('display_name')
+          .eq('id', del.creator_id)
+          .single();
+        cName = cr?.display_name ?? null;
+      }
+
+      const hasData = latestPerUrl.size > 0;
+
+      deliverableAnalyticsList.push({
+        deliverable_id: rec.deliverable_id,
+        deliverable_title: rec.deliverable_name,
+        creator_name: cName,
+        urls,
+        total_views: hasData ? dViews : null,
+        total_likes: hasData ? dLikes : null,
+        total_comments: hasData ? dComments : null,
+        total_shares: hasData ? dShares : null,
+        total_saves: hasData ? dSaves : null,
+        avg_engagement_rate: dEngCount > 0 ? dEngSum / dEngCount : null,
+        last_fetched_at: dLastFetched,
+      });
+    }
+
+    return {
+      campaign_id: campaignId,
+      campaign_name: campaign.name,
+      total_deliverables_tracked: aggregate?.total_deliverables_tracked ?? 0,
+      total_urls_tracked: aggregate?.total_urls_tracked ?? 0,
+      total_views: aggregate?.total_views ?? null,
+      total_likes: aggregate?.total_likes ?? null,
+      total_comments: aggregate?.total_comments ?? null,
+      total_shares: aggregate?.total_shares ?? null,
+      total_saves: aggregate?.total_saves ?? null,
+      weighted_engagement_rate: aggregate?.weighted_engagement_rate ?? null,
+      avg_engagement_rate: aggregate?.avg_engagement_rate ?? null,
+      avg_save_rate: aggregate?.avg_save_rate ?? null,
+      avg_virality_index: aggregate?.avg_virality_index ?? null,
+      total_creator_cost: aggregate?.total_creator_cost ?? null,
+      cost_currency: aggregate?.cost_currency ?? null,
+      cpv: aggregate?.cpv ?? null,
+      cpe: aggregate?.cpe ?? null,
+      views_delta: aggregate?.views_delta ?? null,
+      likes_delta: aggregate?.likes_delta ?? null,
+      engagement_rate_delta: aggregate?.engagement_rate_delta ?? null,
+      platform_breakdown: aggregate?.platform_breakdown ?? null,
+      creator_breakdown: aggregate?.creator_breakdown ?? null,
+      deliverables: deliverableAnalyticsList,
+      last_refreshed_at: aggregate?.last_refreshed_at ?? null,
+      snapshot_count: aggregate?.snapshot_count ?? 0,
+      latest_job: latestJob ?? null,
+    };
+  },
+
+  /**
+   * Get a single analytics fetch job by ID
+   */
+  analyticsFetchJob: async (
+    _: unknown,
+    { jobId }: { jobId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+
+    const { data: job, error } = await supabaseAdmin
+      .from('analytics_fetch_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
+
+    if (error || !job) {
+      throw notFoundError('AnalyticsFetchJob', jobId);
+    }
+
+    // Verify agency membership
+    requireAgencyMembership(ctx, job.agency_id);
+
+    return job;
+  },
+
+  /**
+   * Get analytics fetch jobs for a campaign
+   */
+  analyticsFetchJobs: async (
+    _: unknown,
+    { campaignId, limit }: { campaignId: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_ANALYTICS);
+
+    const { data, error } = await supabaseAdmin
+      .from('analytics_fetch_jobs')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .limit(limit || 20);
+
+    if (error) throw new Error('Failed to fetch analytics jobs');
     return data || [];
   },
 

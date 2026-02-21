@@ -151,11 +151,17 @@ All of these markdowns are now aligned with the current implementation:
 
 - `MASTER_PRD.md` – product vision and requirements.
   - Updated deliverables section to reflect multi-file deliverables, per-file versioning, and optional caption/copy per version.
+  - Analytics model extended to include **deliverable-level post-campaign analytics** and token-based pricing for analytics fetches.
 - `TECHNICAL_LLD.md` – architecture and detailed technical design.
   - Storage section updated to describe:
     - Private Supabase buckets (`campaign-attachments`, `deliverables`).
     - `/api/upload` and `/api/download` flow using Firebase + Supabase service role.
   - Deliverables section updated for multi-file deliverables and `(deliverable_id, file_name, version_number)` versioning.
+  - Analytics section (§8.4) documents the deliverable analytics pipeline:
+    - `analytics_fetch_jobs`, `deliverable_analytics_raw`, `deliverable_metrics`, `campaign_analytics_aggregates`.
+    - Platform detector and ScrapeCreators/YouTube API clients.
+    - Campaign aggregator and `/api/analytics-fetch` background route.
+    - Campaign Performance UX on the campaign detail page.
 - `GRAPHQL_API_CONTRACT.md` – **now matches current `typeDefs.ts` for the implemented areas**:
   - `Campaign.brief`, `Campaign.attachments`.
   - `CampaignAttachment.fileUrl: String!` (storage path).
@@ -169,6 +175,10 @@ All of these markdowns are now aligned with the current implementation:
     - `approveDeliverable`, `rejectDeliverable`, `updateDeliverableVersionCaption(deliverableVersionId, caption)` (audited).
     - **`deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!`**: Allowed when deliverable `PENDING`/`REJECTED`, user has `UPLOAD_VERSION`, version has no approvals; removes file from storage and DB.
   - `DeliverableVersion` includes `captionAudits`; type `DeliverableVersionCaptionAudit`.
+  - Deliverable analytics types and operations:
+    - Types: `AnalyticsFetchJob`, `DeliverableMetricsSnapshot`, `DeliverableUrlAnalytics`, `DeliverableAnalytics`, `CampaignAnalyticsDashboard`.
+    - Queries: `deliverableAnalytics`, `campaignAnalyticsDashboard`, `analyticsFetchJob`, `analyticsFetchJobs`.
+    - Mutations: `fetchDeliverableAnalytics`, `refreshCampaignAnalytics`.
 - `TECHNICAL_LLD.md` – **§4.5 Client Portal & Magic-Link Auth**: flow, API routes, `ensureClientUser`, redirect logic, “email already in use” handling, Firebase Email Link setup.
 - `DATABASE_SCHEMA_DDL.md` – **extended with post-migration shape**:
   - `campaigns.brief TEXT`.
@@ -177,6 +187,7 @@ All of these markdowns are now aligned with the current implementation:
   - `deliverable_version_caption_audit` table (migration `00009`): append-only audit for caption edits (`deliverable_version_id`, `old_caption`, `new_caption`, `changed_at`, `changed_by`).
   - `approvals` table uses `approval_level` and `decision` with NOT NULL constraints where implemented.
   - **auth_identities**: Provider `firebase_email_link` for client portal magic-link users (see TECHNICAL_LLD §4.5).
+  - Deliverable analytics tables: `analytics_fetch_jobs`, `deliverable_analytics_raw`, `deliverable_metrics`, `campaign_analytics_aggregates` (migration `00030_deliverable_analytics.sql`).
 - `STATE_MACHINES.md` – matches implemented Campaign and Deliverable workflows.
 
 ## 4. Migrations & Buckets (Run Order)
@@ -298,10 +309,11 @@ These Supabase migrations exist and should be applied in order:
     - Uses `FileUpload` component and `/api/upload` route.
     - Metadata stored in `campaign_attachments` and surfaced via GraphQL.
     - Downloads use `/api/download` with signed URLs.
-  - **Campaign Performance** (placeholder):
-    - Section at bottom of campaign detail page.
-    - Placeholder metrics (no live data yet): Overall deliverables, Likes, Comments, Reshares, Saves, Engagement, Clicks, Conversions, Impressions, Reach, Engagement rate, Video views.
-    - Each metric shown in a small card with icon and label; value placeholder (“—”) until analytics are connected.
+  - **Campaign Performance** (deliverable analytics):
+    - Section at bottom of campaign detail page backed by deliverable analytics tables.
+    - Shows summary metric cards: Views, Likes, Comments, Shares, Saves, Engagement Rate, Deliverables Tracked, Snapshots.
+    - Includes a per-deliverable breakdown table with views/likes/comments/shares/saves/engagement rate per deliverable.
+    - "Refresh Analytics" button triggers a token-gated background job; progress bar shows `completedUrls/totalUrls` while running.
 
 ### 5.5 Deliverables & Approvals (Current Focus)
 
@@ -406,8 +418,8 @@ These are **not yet implemented**, but are implied by PRD/LLD or recent conversa
    - Track payment status
    - Accept/decline campaign invitations
 5. **Reporting & Analytics UI**
-   - Surfaces for creator analytics snapshots and post metrics.
-   - Campaign performance dashboards
+  - Additional surfaces for creator analytics snapshots and post metrics (beyond existing creator social analytics tabs).
+  - Extended campaign and project/client-level reporting built on top of the deliverable analytics module.
 
 ## 8. How to Safely Resume Work
 

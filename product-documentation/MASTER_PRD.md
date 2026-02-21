@@ -289,8 +289,12 @@ Truleado supports global agencies and must format pricing and time consistently:
 - Used for proposals and validation
 
 #### B. Post-Campaign Analytics
-- Post-level metrics (views, likes, comments, etc.)
+- Post-level metrics (views, likes, comments, saves, shares, etc.)
 - Used for ROI and reporting
+- Implemented as **deliverable-level analytics** for tracked URLs:
+  - Per-URL time-series snapshots (views/likes/comments/shares/saves)
+  - Per-deliverable aggregates (across all tracked URLs on a deliverable)
+  - Campaign-level aggregates (Campaign Performance dashboard)
 
 ### 11.2 Analytics Snapshots
 - All analytics are stored as immutable snapshots
@@ -326,6 +330,7 @@ Some analytics incur third-party costs and are charged via tokens.
 - Influencer profile analytics
 - Pre-campaign influencer reports
 - Social account analytics fetches
+- Deliverable analytics fetches for tracked URLs (1 token per URL per fetch)
 
 #### Rules
 - 1 fetch = 1 token
@@ -334,9 +339,9 @@ Some analytics incur third-party costs and are charged via tokens.
 - Tracked at agency level
 
 #### Included in Subscription (Free)
-- Post-campaign post-level analytics
-- Campaign ROI calculations
-- Aggregated project/client reports
+- Post-campaign analytics **dashboards and reporting surfaces** (ROI views, rollups, exports)
+- Campaign ROI calculations (CPV, CPE, virality indices)
+- Aggregated project/client reports built on top of stored snapshots
 
 ### 12.3 Optional Analytics Usage
 - Influencer analytics are never mandatory
