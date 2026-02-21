@@ -60,6 +60,7 @@ AGENCY
             ├── Creators (optional)
             ├── Analytics Snapshots
             ├── Payments
+            ├── Finance (Budget, Expenses, Agreements)
             └── Reports
 ```
 
@@ -363,14 +364,103 @@ Roles that may view and trigger analytics (subject to tokens):
 
 ---
 
-## 13. Payments & Compliance (Influencer Campaigns)
+## 13. Finance Module (Campaign Financial Management)
+
+The Finance Module provides agencies with full campaign-level financial oversight: budget planning, multi-currency expense tracking, creator agreement management, and financial audit trails. All financial data resolves at the campaign level.
+
+### 13.1 Campaign Budget
+
+Each campaign can optionally have a budget configured by Agency Admin or Account Manager:
+
+| Field | Description |
+|-------|-------------|
+| **Total Budget** | Total approved spend for the campaign |
+| **Budget Control Type** | `SOFT` (warnings only) or `HARD` (blocks overspend) |
+| **Client Contract Value** | Revenue billed to the client for this campaign |
+| **Default Currency** | Campaign-level currency (defaults to agency currency) |
+
+**Budget Control Behaviour:**
+- **SOFT control**: Expenses may exceed budget; system warns but does not block.
+- **HARD control**: New expenses that would breach the budget are rejected server-side.
+
+### 13.2 Expense Tracking
+
+Campaign-level expenses are logged by agency users. Each expense supports:
+
+- **Multi-currency**: Original currency + amount recorded; auto-converted to campaign currency using FX rates.
+- **Categories**: `ad_spend`, `travel`, `shipping`, `production`, `platform_fees`, `miscellaneous`.
+- **Receipt upload**: Optional receipt URL (stored in Supabase Storage).
+- **Status lifecycle**: `pending_receipt` → `approved` / `rejected`.
+
+Expenses roll up into the campaign Finance Overview as total spend vs. budget.
+
+### 13.3 Creator Agreements
+
+For influencer campaigns, agencies log the agreed compensation per creator per campaign:
+
+- **Committed Amount**: Currency-denominated amount agreed with the creator.
+- **Status**: `committed` → `paid` (terminal) or `committed` → `cancelled` (terminal).
+- **Relationship**: One creator agreement per creator per campaign (unique constraint).
+- **FX Conversion**: Amounts converted to campaign currency for unified finance summary.
+
+Creator agreements are separate from the legacy `payments` system (which handles Razorpay invoices and TDS/GST metadata). Creator agreements are internal tracking records for financial planning.
+
+### 13.4 Finance Summary (Campaign Overview)
+
+The Finance Overview tab on a campaign provides a real-time summary:
+
+| Metric | Source |
+|--------|--------|
+| Total Budget | `campaigns.total_budget` |
+| Total Spent | Sum of approved `campaign_expenses` |
+| Creator Commitments | Sum of committed/paid `creator_agreements` |
+| Client Contract Value | `campaigns.client_contract_value` |
+| Gross Margin | Contract value minus total spent |
+| Budget Remaining | Budget minus total spent |
+| Budget Utilisation % | Total spent / total budget × 100 |
+
+### 13.5 FX Rate Service
+
+All finance amounts are stored in their original currency and converted for summary calculations:
+
+- FX rates fetched at expense/agreement creation time.
+- Rates cached in memory (1-hour TTL) to reduce external API calls.
+- If FX fetch fails, fallback rate of 1.0 is used (same-currency assumption).
+- All converted amounts stored alongside original amounts for auditability.
+
+### 13.6 Finance Audit Log
+
+Every finance action (budget set, expense created, agreement updated, status change) is recorded in `campaign_finance_logs`:
+
+- Action type, campaign ID, actor, timestamp, before/after metadata.
+- Immutable — finance logs cannot be modified or deleted.
+- Visible to Agency Admin and Account Manager only.
+
+### 13.7 RBAC for Finance Operations
+
+| Action | Allowed Roles |
+|--------|---------------|
+| Set / Update Campaign Budget | Admin, Account Manager |
+| View Finance Summary | Admin, Account Manager, Operator |
+| Create / Edit Expense | Admin, Account Manager, Operator |
+| Approve / Reject Expense | Admin, Account Manager |
+| Create Creator Agreement | Admin, Account Manager |
+| Mark Agreement Paid | Admin, Account Manager |
+| Cancel Agreement | Admin, Account Manager |
+| View Finance Audit Log | Admin, Account Manager |
+
+### 13.8 Legacy Payments (Influencer Campaigns)
+
+The original payments system remains for Razorpay-based creator payouts:
 
 - Campaign-level payments
 - Milestone-based payouts
-- Payment status tracking
+- Payment status tracking (PENDING → PAID)
 - Invoice uploads
 - GST / TDS metadata
 - Creator payment history
+
+Finance Module and legacy Payments coexist. Payments handle external payment processing; Finance Module handles internal budget tracking and financial planning.
 
 ---
 
@@ -410,6 +500,11 @@ Roles that may view and trigger analytics (subject to tokens):
 - Multiple rejection cycles
 - Client rejection after internal approval
 - Creator drop-off mid-campaign
+- Campaigns with no budget set (finance summary shows zeros; no hard block enforcement)
+- Multi-currency campaigns (all amounts stored in original + converted currency)
+- FX rate fetch failure (system uses 1.0 fallback; does not block expense creation)
+- Hard budget breach attempt (expense creation blocked server-side; validation error returned)
+- Creator agreements for the same creator on the same campaign (unique constraint enforced; returns existing record)
 
 ---
 

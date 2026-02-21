@@ -72,7 +72,7 @@ export function validateBudgetControlType(
   type: string | undefined | null,
   fieldName = 'budgetControlType'
 ): void {
-  if (type != null && type !== 'soft' && type !== 'hard') {
+  if (type != null && type.toLowerCase() !== 'soft' && type.toLowerCase() !== 'hard') {
     throw validationError(`${fieldName} must be "soft" or "hard"`, fieldName);
   }
 }

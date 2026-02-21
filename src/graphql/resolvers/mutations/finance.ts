@@ -154,7 +154,7 @@ export async function setCampaignBudget(
     .update({
       total_budget: totalBudget,
       currency: campaignCurrency,
-      budget_control_type: budgetControlType || existing.budget_control_type || 'soft',
+      budget_control_type: (budgetControlType?.toLowerCase()) || existing.budget_control_type || 'soft',
       client_contract_value: clientContractValue ?? existing.client_contract_value,
     })
     .eq('id', campaignId)
@@ -175,7 +175,7 @@ export async function setCampaignBudget(
     },
     new: {
       total_budget: totalBudget,
-      budget_control_type: budgetControlType || existing.budget_control_type || 'soft',
+      budget_control_type: (budgetControlType?.toLowerCase()) || existing.budget_control_type || 'soft',
       client_contract_value: clientContractValue ?? existing.client_contract_value,
     },
   });
