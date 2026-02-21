@@ -1091,6 +1091,164 @@ export const queryResolvers = {
   },
 
   // -----------------------------------------------
+  // Finance Module Queries
+  // -----------------------------------------------
+
+  /**
+   * Get financial summary for a campaign (computed metrics)
+   */
+  campaignFinanceSummary: async (
+    _: unknown,
+    { campaignId }: { campaignId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_PAYMENTS);
+
+    // Get campaign budget config
+    const { data: campaign, error: campError } = await supabaseAdmin
+      .from('campaigns')
+      .select('id, total_budget, currency, budget_control_type, client_contract_value')
+      .eq('id', campaignId)
+      .single();
+
+    if (campError || !campaign) {
+      throw notFoundError('Campaign', campaignId);
+    }
+
+    // Get all creator agreements
+    const { data: agreements } = await supabaseAdmin
+      .from('creator_agreements')
+      .select('converted_amount, status')
+      .eq('campaign_id', campaignId)
+      .neq('status', 'cancelled');
+
+    // Get all expenses
+    const { data: expenses } = await supabaseAdmin
+      .from('campaign_expenses')
+      .select('converted_amount, status')
+      .eq('campaign_id', campaignId);
+
+    const { calculateFinanceSummary } = await import('@/lib/finance/calculations');
+
+    const summary = calculateFinanceSummary(
+      {
+        total_budget: campaign.total_budget,
+        currency: campaign.currency,
+        budget_control_type: campaign.budget_control_type,
+        client_contract_value: campaign.client_contract_value,
+      },
+      (agreements || []).map((a: { converted_amount: number; status: string }) => ({
+        converted_amount: Number(a.converted_amount),
+        status: a.status as 'committed' | 'paid' | 'cancelled',
+      })),
+      (expenses || []).map((e: { converted_amount: number; status: string }) => ({
+        converted_amount: Number(e.converted_amount),
+        status: e.status as 'unpaid' | 'paid',
+      }))
+    );
+
+    return {
+      campaignId,
+      ...summary,
+    };
+  },
+
+  /**
+   * Get creator agreements for a campaign
+   */
+  creatorAgreements: async (
+    _: unknown,
+    { campaignId }: { campaignId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_PAYMENTS);
+
+    const { data, error } = await supabaseAdmin
+      .from('creator_agreements')
+      .select(`
+        *,
+        creators(id, display_name, email),
+        campaign_creators(id, creator_id, status, rate_amount, rate_currency),
+        users!creator_agreements_created_by_fkey(id, name, email)
+      `)
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch creator agreements');
+    return data || [];
+  },
+
+  /**
+   * Get manual expenses for a campaign
+   */
+  campaignExpenses: async (
+    _: unknown,
+    {
+      campaignId,
+      category,
+      status,
+    }: { campaignId: string; category?: string; status?: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_PAYMENTS);
+
+    let query = supabaseAdmin
+      .from('campaign_expenses')
+      .select(`
+        *,
+        users!campaign_expenses_created_by_fkey(id, name, email)
+      `)
+      .eq('campaign_id', campaignId);
+
+    if (category) {
+      query = query.eq('category', category.toLowerCase());
+    }
+    if (status) {
+      query = query.eq('status', status.toLowerCase());
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch campaign expenses');
+    return data || [];
+  },
+
+  /**
+   * Get finance audit log for a campaign
+   */
+  campaignFinanceLogs: async (
+    _: unknown,
+    {
+      campaignId,
+      limit,
+      offset,
+    }: { campaignId: string; limit?: number; offset?: number },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireCampaignAccess(ctx, campaignId, Permission.VIEW_PAYMENTS);
+
+    const queryLimit = limit || 50;
+    const queryOffset = offset || 0;
+
+    const { data, error } = await supabaseAdmin
+      .from('campaign_finance_logs')
+      .select(`
+        *,
+        users!campaign_finance_logs_performed_by_fkey(id, name, email)
+      `)
+      .eq('campaign_id', campaignId)
+      .order('created_at', { ascending: false })
+      .range(queryOffset, queryOffset + queryLimit - 1);
+
+    if (error) throw new Error('Failed to fetch finance logs');
+    return data || [];
+  },
+
+  // -----------------------------------------------
   // Creator Portal Queries
   // -----------------------------------------------
 

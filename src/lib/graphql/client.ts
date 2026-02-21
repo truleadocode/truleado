@@ -620,6 +620,10 @@ export const queries = {
         campaignType
         startDate
         endDate
+        totalBudget
+        currency
+        budgetControlType
+        clientContractValue
         createdAt
         project {
           id
@@ -1031,6 +1035,96 @@ export const queries = {
       }
     }
   `,
+
+  // Finance Module
+  campaignFinanceSummary: `
+    query CampaignFinanceSummary($campaignId: ID!) {
+      campaignFinanceSummary(campaignId: $campaignId) {
+        campaignId
+        totalBudget
+        currency
+        budgetControlType
+        clientContractValue
+        committed
+        paid
+        otherExpenses
+        totalSpend
+        remainingBudget
+        profit
+        marginPercent
+        budgetUtilization
+        warningLevel
+      }
+    }
+  `,
+
+  creatorAgreements: `
+    query CreatorAgreements($campaignId: ID!) {
+      creatorAgreements(campaignId: $campaignId) {
+        id
+        campaignId
+        campaignCreator {
+          id
+          creator {
+            id
+            displayName
+            email
+          }
+        }
+        originalAmount
+        originalCurrency
+        fxRate
+        convertedAmount
+        convertedCurrency
+        status
+        paidAt
+        cancelledAt
+        notes
+        createdAt
+      }
+    }
+  `,
+
+  campaignExpenses: `
+    query CampaignExpenses($campaignId: ID!, $category: ExpenseCategory, $status: ExpenseStatus) {
+      campaignExpenses(campaignId: $campaignId, category: $category, status: $status) {
+        id
+        campaignId
+        name
+        category
+        originalAmount
+        originalCurrency
+        fxRate
+        convertedAmount
+        convertedCurrency
+        receiptUrl
+        status
+        paidAt
+        notes
+        createdBy {
+          id
+          name
+        }
+        createdAt
+      }
+    }
+  `,
+
+  campaignFinanceLogs: `
+    query CampaignFinanceLogs($campaignId: ID!, $limit: Int, $offset: Int) {
+      campaignFinanceLogs(campaignId: $campaignId, limit: $limit, offset: $offset) {
+        id
+        campaignId
+        actionType
+        metadataJson
+        performedBy {
+          id
+          name
+        }
+        createdAt
+      }
+    }
+  `,
 };
 
 /**
@@ -1206,12 +1300,14 @@ export const mutations = {
   `,
   
   createCampaign: `
-    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String, $approverUserIds: [ID!]!) {
-      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description, approverUserIds: $approverUserIds) {
+    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String, $approverUserIds: [ID!]!, $totalBudget: Money, $budgetControlType: BudgetControlType, $clientContractValue: Money) {
+      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description, approverUserIds: $approverUserIds, totalBudget: $totalBudget, budgetControlType: $budgetControlType, clientContractValue: $clientContractValue) {
         id
         name
         status
         campaignType
+        totalBudget
+        budgetControlType
         createdAt
       }
     }
@@ -1711,6 +1807,91 @@ export const mutations = {
         completedUrls
         failedUrls
         createdAt
+      }
+    }
+  `,
+
+  // Finance Module
+  setCampaignBudget: `
+    mutation SetCampaignBudget($campaignId: ID!, $totalBudget: Money!, $budgetControlType: BudgetControlType, $clientContractValue: Money) {
+      setCampaignBudget(campaignId: $campaignId, totalBudget: $totalBudget, budgetControlType: $budgetControlType, clientContractValue: $clientContractValue) {
+        id
+        totalBudget
+        currency
+        budgetControlType
+        clientContractValue
+      }
+    }
+  `,
+
+  createCampaignExpense: `
+    mutation CreateCampaignExpense($campaignId: ID!, $name: String!, $category: ExpenseCategory!, $originalAmount: Money!, $originalCurrency: String, $receiptUrl: String, $notes: String) {
+      createCampaignExpense(campaignId: $campaignId, name: $name, category: $category, originalAmount: $originalAmount, originalCurrency: $originalCurrency, receiptUrl: $receiptUrl, notes: $notes) {
+        id
+        campaignId
+        name
+        category
+        originalAmount
+        originalCurrency
+        fxRate
+        convertedAmount
+        convertedCurrency
+        receiptUrl
+        status
+        notes
+        createdAt
+      }
+    }
+  `,
+
+  updateCampaignExpense: `
+    mutation UpdateCampaignExpense($expenseId: ID!, $name: String, $category: ExpenseCategory, $originalAmount: Money, $originalCurrency: String, $receiptUrl: String, $notes: String) {
+      updateCampaignExpense(expenseId: $expenseId, name: $name, category: $category, originalAmount: $originalAmount, originalCurrency: $originalCurrency, receiptUrl: $receiptUrl, notes: $notes) {
+        id
+        name
+        category
+        originalAmount
+        originalCurrency
+        convertedAmount
+        receiptUrl
+        status
+        notes
+      }
+    }
+  `,
+
+  deleteCampaignExpense: `
+    mutation DeleteCampaignExpense($expenseId: ID!) {
+      deleteCampaignExpense(expenseId: $expenseId)
+    }
+  `,
+
+  markExpensePaid: `
+    mutation MarkExpensePaid($expenseId: ID!) {
+      markExpensePaid(expenseId: $expenseId) {
+        id
+        status
+        paidAt
+      }
+    }
+  `,
+
+  markAgreementPaid: `
+    mutation MarkAgreementPaid($agreementId: ID!) {
+      markAgreementPaid(agreementId: $agreementId) {
+        id
+        status
+        paidAt
+      }
+    }
+  `,
+
+  cancelCreatorAgreement: `
+    mutation CancelCreatorAgreement($agreementId: ID!, $reason: String) {
+      cancelCreatorAgreement(agreementId: $agreementId, reason: $reason) {
+        id
+        status
+        cancelledAt
       }
     }
   `,

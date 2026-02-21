@@ -24,6 +24,7 @@ import {
   notifyProposalRejected,
   notifyDeliverableAssigned,
 } from '@/lib/novu/workflows/creator';
+import { getFxRate, convertAmount, checkBudgetLimit } from '@/lib/finance';
 
 // Valid proposal state transitions
 const VALID_TRANSITIONS: Record<string, string[]> = {
@@ -398,6 +399,69 @@ export async function acceptProposal(
     );
   }
 
+  // Get campaign for budget enforcement
+  const campaigns = campaignCreator.campaigns as {
+    id: string;
+    name?: string;
+    project_id: string;
+    projects: { client_id: string; clients: { agency_id: string } };
+  };
+  const campaignId = campaigns.id;
+
+  // Budget enforcement: check if accepting this proposal would exceed hard budget
+  if (latestProposal.rate_amount != null) {
+    const { data: campaignBudget } = await supabaseAdmin
+      .from('campaigns')
+      .select('total_budget, currency, budget_control_type')
+      .eq('id', campaignId)
+      .single();
+
+    if (campaignBudget?.total_budget != null) {
+      const campaignCurrency = campaignBudget.currency || 'INR';
+      const proposalCurrency = latestProposal.rate_currency || campaignCurrency;
+      const fxRate = await getFxRate(proposalCurrency, campaignCurrency);
+      const convertedProposalAmount = convertAmount(Number(latestProposal.rate_amount), fxRate);
+
+      // Get current committed totals
+      const { data: existingAgreements } = await supabaseAdmin
+        .from('creator_agreements')
+        .select('converted_amount')
+        .eq('campaign_id', campaignId)
+        .eq('status', 'committed');
+
+      const currentCommitted = (existingAgreements || []).reduce(
+        (sum: number, a: { converted_amount: number }) => sum + Number(a.converted_amount),
+        0
+      );
+
+      const { data: existingExpenses } = await supabaseAdmin
+        .from('campaign_expenses')
+        .select('converted_amount')
+        .eq('campaign_id', campaignId);
+
+      const currentExpenses = (existingExpenses || []).reduce(
+        (sum: number, e: { converted_amount: number }) => sum + Number(e.converted_amount),
+        0
+      );
+
+      const budgetError = checkBudgetLimit(
+        {
+          total_budget: campaignBudget.total_budget,
+          currency: campaignCurrency,
+          budget_control_type: campaignBudget.budget_control_type,
+          client_contract_value: null,
+        },
+        currentCommitted,
+        currentExpenses,
+        convertedProposalAmount
+      );
+
+      if (budgetError) {
+        throw invalidStateError(budgetError);
+      }
+    }
+  }
+
   // Get next version number
   const versionNumber = await getNextVersionNumber(campaignCreatorId);
 
@@ -428,6 +492,52 @@ export async function acceptProposal(
     .update({ status: 'accepted' })
     .eq('id', campaignCreatorId);
 
+  // Create creator agreement (financial commitment)
+  if (latestProposal.rate_amount != null) {
+    const campaignCurrency = (await supabaseAdmin
+      .from('campaigns')
+      .select('currency')
+      .eq('id', campaignId)
+      .single()).data?.currency || 'INR';
+
+    const proposalCurrency = latestProposal.rate_currency || campaignCurrency;
+    const fxRate = await getFxRate(proposalCurrency, campaignCurrency);
+    const convertedAmt = convertAmount(Number(latestProposal.rate_amount), fxRate);
+
+    await supabaseAdmin.from('creator_agreements').insert({
+      campaign_id: campaignId,
+      campaign_creator_id: campaignCreatorId,
+      creator_id: creator.id,
+      proposal_version_id: proposal.id,
+      original_amount: Number(latestProposal.rate_amount),
+      original_currency: proposalCurrency,
+      fx_rate: fxRate,
+      converted_amount: convertedAmt,
+      converted_currency: campaignCurrency,
+      status: 'committed',
+      created_by: ctx.user!.id,
+    });
+
+    // Log finance action
+    try {
+      await supabaseAdmin.from('campaign_finance_logs').insert({
+        campaign_id: campaignId,
+        action_type: 'proposal_accepted',
+        metadata_json: {
+          campaignCreatorId,
+          creatorId: creator.id,
+          originalAmount: Number(latestProposal.rate_amount),
+          originalCurrency: proposalCurrency,
+          convertedAmount: convertedAmt,
+          fxRate,
+        },
+        performed_by: ctx.user!.id,
+      });
+    } catch (err) {
+      console.error('[Finance] Failed to log proposal acceptance:', err);
+    }
+  }
+
   // Log activity
   await logActivity({
     agencyId,
@@ -443,7 +553,6 @@ export async function acceptProposal(
 
   // Notify agency team
   try {
-    const campaigns = campaignCreator.campaigns as { id: string; name?: string };
     const creators = campaignCreator.creators as { display_name: string };
     await notifyProposalAccepted({
       agencyId,
