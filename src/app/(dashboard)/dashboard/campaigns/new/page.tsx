@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, AlertCircle, Megaphone } from 'lucide-react'
+import { ArrowLeft, AlertCircle, Megaphone, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -59,6 +59,10 @@ export default function NewCampaignPage() {
   const [loadingUsers, setLoadingUsers] = useState(true)
   const [selectedApproverIds, setSelectedApproverIds] = useState<string[]>([])
   const [approverError, setApproverError] = useState<string | null>(null)
+  const [showBudgetFields, setShowBudgetFields] = useState(false)
+  const [totalBudget, setTotalBudget] = useState('')
+  const [budgetControlType, setBudgetControlType] = useState('soft')
+  const [clientContractValue, setClientContractValue] = useState('')
 
   const {
     register,
@@ -153,6 +157,9 @@ export default function NewCampaignPage() {
           campaignType: data.campaignType,
           description: data.description || null,
           approverUserIds: selectedApproverIds,
+          totalBudget: totalBudget ? Number(totalBudget) : undefined,
+          budgetControlType: totalBudget ? budgetControlType.toUpperCase() : undefined,
+          clientContractValue: clientContractValue ? Number(clientContractValue) : undefined,
         }
       )
       
@@ -287,9 +294,68 @@ export default function NewCampaignPage() {
                 )}
               </div>
 
+              {/* Optional Budget Fields */}
+              <div className="border rounded-lg">
+                <button
+                  type="button"
+                  className="flex items-center justify-between w-full p-4 text-sm font-medium text-left"
+                  onClick={() => setShowBudgetFields(!showBudgetFields)}
+                >
+                  <span>Budget Settings (Optional)</span>
+                  {showBudgetFields ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+                {showBudgetFields && (
+                  <div className="px-4 pb-4 space-y-4 border-t pt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="totalBudget">Total Budget</Label>
+                      <Input
+                        id="totalBudget"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. 100000"
+                        value={totalBudget}
+                        onChange={(e) => setTotalBudget(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="budgetControlType">Budget Control Type</Label>
+                      <select
+                        id="budgetControlType"
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        value={budgetControlType}
+                        onChange={(e) => setBudgetControlType(e.target.value)}
+                      >
+                        <option value="soft">Soft Limit — Allow overspend with warnings</option>
+                        <option value="hard">Hard Limit — Block overspend actions</option>
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="clientContractValue">Client Contract Value (Revenue)</Label>
+                      <Input
+                        id="clientContractValue"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="e.g. 150000"
+                        value={clientContractValue}
+                        onChange={(e) => setClientContractValue(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Used to calculate profit and margin. Can be set later.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-muted/50 rounded-lg p-4">
                 <p className="text-sm text-muted-foreground">
-                  <strong>Note:</strong> Campaigns start in <span className="font-medium text-gray-700">Draft</span> status. 
+                  <strong>Note:</strong> Campaigns start in <span className="font-medium text-gray-700">Draft</span> status.
                   You can add deliverables and creators, then activate it when ready.
                 </p>
               </div>

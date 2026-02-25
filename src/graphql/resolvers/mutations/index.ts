@@ -65,6 +65,15 @@ import {
   addProposalNote,
   assignDeliverableToCreator,
 } from './proposal';
+import {
+  setCampaignBudget,
+  createCampaignExpense,
+  updateCampaignExpense,
+  deleteCampaignExpense,
+  markExpensePaid,
+  markAgreementPaid,
+  cancelCreatorAgreement,
+} from './finance';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -154,4 +163,13 @@ export const mutationResolvers = {
   reopenProposal,
   addProposalNote,
   assignDeliverableToCreator,
+
+  // Finance
+  setCampaignBudget,
+  createCampaignExpense,
+  updateCampaignExpense,
+  deleteCampaignExpense,
+  markExpensePaid,
+  markAgreementPaid,
+  cancelCreatorAgreement,
 };

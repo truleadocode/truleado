@@ -220,7 +220,94 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 
 ---
 
-## 5. Implementation Guidelines
+## 5. Creator Agreement Status
+
+Creator agreements track the compensation committed to a creator for a specific campaign. They are internal financial planning records (not Razorpay payments).
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `committed` | Agreement created; amount locked for planning purposes |
+| `paid` | Creator has been paid; terminal state |
+| `cancelled` | Agreement cancelled before payment; terminal state |
+
+### Valid Transitions
+
+```
+┌───────────┐
+│ committed │
+└─────┬─────┘
+      │
+      ├────────────────────────┐
+      │                        │
+      ▼                        ▼
+┌──────┐               ┌───────────┐
+│ paid │ (terminal)    │ cancelled │ (terminal)
+└──────┘               └───────────┘
+```
+
+### Transition Matrix
+
+| From | To | Mutation | Required Role |
+|------|----|----------|---------------|
+| committed | paid | `markCreatorAgreementPaid` | Admin, Account Manager |
+| committed | cancelled | `cancelCreatorAgreement` | Admin, Account Manager |
+
+### Rules
+
+- Only one agreement per creator per campaign (unique constraint: `campaign_id` + `creator_id`).
+- Paid and cancelled agreements are immutable.
+- All transitions are recorded in `campaign_finance_logs`.
+- Cancelling an agreement does not affect `campaign_expenses` or legacy `payments`.
+
+---
+
+## 6. Campaign Expense Status
+
+Expenses represent actual cash outflows against a campaign budget.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `pending_receipt` | Expense logged; awaiting receipt upload for verification |
+| `approved` | Expense verified and counted against budget |
+| `rejected` | Expense rejected and excluded from budget calculations |
+
+### Valid Transitions
+
+```
+┌─────────────────┐
+│ pending_receipt │
+└────────┬────────┘
+         │
+         ├──────────────────────────┐
+         │                          │
+         ▼                          ▼
+┌──────────┐                 ┌──────────┐
+│ approved │ (terminal)      │ rejected │ (terminal)
+└──────────┘                 └──────────┘
+```
+
+### Transition Matrix
+
+| From | To | Mutation | Required Role |
+|------|----|----------|---------------|
+| pending_receipt | approved | `approveExpense` | Admin, Account Manager |
+| pending_receipt | rejected | `rejectExpense` | Admin, Account Manager |
+
+### Rules
+
+- Only `approved` expenses count toward budget utilisation and finance summary totals.
+- `pending_receipt` expenses are visible in the expense list but do not reduce available budget.
+- Hard budget enforcement checks the sum of `approved` expenses only.
+- All status transitions are recorded in `campaign_finance_logs`.
+- Rejected expenses cannot be re-submitted; a new expense must be created.
+
+---
+
+## 7. Implementation Guidelines
 
 ### Server-Side Validation
 

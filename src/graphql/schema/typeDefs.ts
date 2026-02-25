@@ -101,6 +101,31 @@ export const typeDefs = gql`
     REJECTED
   }
 
+  enum BudgetControlType {
+    SOFT
+    HARD
+  }
+
+  enum ExpenseCategory {
+    AD_SPEND
+    TRAVEL
+    SHIPPING
+    PRODUCTION
+    PLATFORM_FEES
+    MISCELLANEOUS
+  }
+
+  enum ExpenseStatus {
+    UNPAID
+    PAID
+  }
+
+  enum AgreementStatus {
+    COMMITTED
+    PAID
+    CANCELLED
+  }
+
   # =============================================================================
   # OBJECT TYPES
   # =============================================================================
@@ -224,6 +249,11 @@ export const typeDefs = gql`
     status: CampaignStatus!
     startDate: DateTime
     endDate: DateTime
+    # Finance fields
+    totalBudget: Money
+    currency: String
+    budgetControlType: BudgetControlType
+    clientContractValue: Money
     deliverables: [Deliverable!]!
     creators: [CampaignCreator!]!
     users: [CampaignUser!]!
@@ -497,6 +527,85 @@ export const typeDefs = gql`
     beforeState: JSON
     afterState: JSON
     metadata: JSON
+    createdAt: DateTime!
+  }
+
+  # =============================================================================
+  # FINANCE MODULE
+  # =============================================================================
+
+  # Campaign budget configuration
+  type CampaignBudget {
+    totalBudget: Money
+    currency: String
+    budgetControlType: BudgetControlType
+    clientContractValue: Money
+  }
+
+  # Creator agreement (financial commitment from accepted proposal)
+  type CreatorAgreement {
+    id: ID!
+    campaignId: ID!
+    campaignCreator: CampaignCreator!
+    creator: Creator!
+    proposalVersionId: ID
+    originalAmount: Money!
+    originalCurrency: String!
+    fxRate: Float!
+    convertedAmount: Money!
+    convertedCurrency: String!
+    status: AgreementStatus!
+    paidAt: DateTime
+    cancelledAt: DateTime
+    notes: String
+    createdBy: User
+    createdAt: DateTime!
+  }
+
+  # Manual campaign expense
+  type CampaignExpense {
+    id: ID!
+    campaignId: ID!
+    name: String!
+    category: ExpenseCategory!
+    originalAmount: Money!
+    originalCurrency: String!
+    fxRate: Float!
+    convertedAmount: Money!
+    convertedCurrency: String!
+    receiptUrl: String
+    status: ExpenseStatus!
+    paidAt: DateTime
+    notes: String
+    createdBy: User
+    createdAt: DateTime!
+  }
+
+  # Financial summary (computed server-side)
+  type CampaignFinanceSummary {
+    campaignId: ID!
+    totalBudget: Money
+    currency: String
+    budgetControlType: BudgetControlType
+    clientContractValue: Money
+    committed: Money!
+    paid: Money!
+    otherExpenses: Money!
+    totalSpend: Money!
+    remainingBudget: Money
+    profit: Money
+    marginPercent: Float
+    budgetUtilization: Float
+    warningLevel: String!
+  }
+
+  # Immutable finance audit log entry
+  type CampaignFinanceLog {
+    id: ID!
+    campaignId: ID!
+    actionType: String!
+    metadataJson: JSON
+    performedBy: User
     createdAt: DateTime!
   }
 
@@ -848,6 +957,22 @@ export const typeDefs = gql`
     analyticsFetchJobs(campaignId: ID!, limit: Int): [AnalyticsFetchJob!]!
 
     # ---------------------------------------------
+    # Finance Module Queries
+    # ---------------------------------------------
+
+    # Get financial summary for a campaign (computed metrics)
+    campaignFinanceSummary(campaignId: ID!): CampaignFinanceSummary
+
+    # Get creator agreements for a campaign
+    creatorAgreements(campaignId: ID!): [CreatorAgreement!]!
+
+    # Get manual expenses for a campaign
+    campaignExpenses(campaignId: ID!, category: ExpenseCategory, status: ExpenseStatus): [CampaignExpense!]!
+
+    # Get finance audit log for a campaign
+    campaignFinanceLogs(campaignId: ID!, limit: Int, offset: Int): [CampaignFinanceLog!]!
+
+    # ---------------------------------------------
     # Billing / Token Purchases
     # ---------------------------------------------
 
@@ -960,6 +1085,9 @@ export const typeDefs = gql`
       campaignType: CampaignType!
       description: String
       approverUserIds: [ID!]!
+      totalBudget: Money
+      budgetControlType: BudgetControlType
+      clientContractValue: Money
     ): Campaign!
     
     # Campaign updates (specific, not generic)
@@ -1194,6 +1322,52 @@ export const typeDefs = gql`
 
     # Refresh analytics for all tracked deliverables in a campaign (token-gated)
     refreshCampaignAnalytics(campaignId: ID!): AnalyticsFetchJob!
+
+    # ---------------------------------------------
+    # Finance Module Mutations
+    # ---------------------------------------------
+
+    # Set or update campaign budget configuration
+    setCampaignBudget(
+      campaignId: ID!
+      totalBudget: Money!
+      budgetControlType: BudgetControlType
+      clientContractValue: Money
+    ): Campaign!
+
+    # Create a manual campaign expense
+    createCampaignExpense(
+      campaignId: ID!
+      name: String!
+      category: ExpenseCategory!
+      originalAmount: Money!
+      originalCurrency: String
+      receiptUrl: String
+      notes: String
+    ): CampaignExpense!
+
+    # Update a manual campaign expense (unpaid only)
+    updateCampaignExpense(
+      expenseId: ID!
+      name: String
+      category: ExpenseCategory
+      originalAmount: Money
+      originalCurrency: String
+      receiptUrl: String
+      notes: String
+    ): CampaignExpense!
+
+    # Delete a manual campaign expense (unpaid only)
+    deleteCampaignExpense(expenseId: ID!): Boolean!
+
+    # Mark a manual expense as paid
+    markExpensePaid(expenseId: ID!): CampaignExpense!
+
+    # Mark a creator agreement as paid
+    markAgreementPaid(agreementId: ID!): CreatorAgreement!
+
+    # Cancel a creator agreement
+    cancelCreatorAgreement(agreementId: ID!, reason: String): CreatorAgreement!
 
     # ---------------------------------------------
     # Payment Mutations

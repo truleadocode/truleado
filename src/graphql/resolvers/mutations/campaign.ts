@@ -109,12 +109,18 @@ export async function createCampaign(
     campaignType,
     description,
     approverUserIds,
+    totalBudget,
+    budgetControlType,
+    clientContractValue,
   }: {
     projectId: string;
     name: string;
     campaignType: 'INFLUENCER' | 'SOCIAL';
     description?: string;
     approverUserIds: string[];
+    totalBudget?: number;
+    budgetControlType?: string;
+    clientContractValue?: number;
   },
   ctx: GraphQLContext
 ) {
@@ -145,6 +151,17 @@ export async function createCampaign(
     throw validationError('Campaign name must be at least 2 characters', 'name');
   }
   
+  // Get agency currency for budget
+  let campaignCurrency: string | null = null;
+  if (totalBudget != null) {
+    const { data: agency } = await supabaseAdmin
+      .from('agencies')
+      .select('currency_code')
+      .eq('id', clients.agency_id)
+      .single();
+    campaignCurrency = agency?.currency_code || 'INR';
+  }
+
   const { data: campaign, error } = await supabaseAdmin
     .from('campaigns')
     .insert({
@@ -154,6 +171,15 @@ export async function createCampaign(
       description: description?.trim() || null,
       status: 'draft',
       created_by: user.id,
+      // Finance fields (optional at creation)
+      ...(totalBudget != null && {
+        total_budget: totalBudget,
+        currency: campaignCurrency,
+        budget_control_type: budgetControlType?.toLowerCase() || 'soft',
+      }),
+      ...(clientContractValue != null && {
+        client_contract_value: clientContractValue,
+      }),
     })
     .select()
     .single();

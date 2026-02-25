@@ -321,6 +321,11 @@ export const typeResolvers = {
     startDate: (parent: { start_date: string | null }) => parent.start_date,
     endDate: (parent: { end_date: string | null }) => parent.end_date,
     createdAt: (parent: { created_at: string }) => parent.created_at,
+    // Finance field mappings
+    totalBudget: (parent: { total_budget: number | null }) => parent.total_budget,
+    budgetControlType: (parent: { budget_control_type: string | null }) =>
+      parent.budget_control_type?.toUpperCase() ?? null,
+    clientContractValue: (parent: { client_contract_value: number | null }) => parent.client_contract_value,
     project: async (parent: UserRow) => {
       const { data } = await supabaseAdmin
         .from('projects')
@@ -419,6 +424,99 @@ export const typeResolvers = {
         .from('users')
         .select('*')
         .eq('id', parent.user_id)
+        .single();
+      return data;
+    },
+  },
+
+  // Finance type resolvers
+  CampaignExpense: {
+    campaignId: (parent: { campaign_id: string }) => parent.campaign_id,
+    originalAmount: (parent: { original_amount: number }) => parent.original_amount,
+    originalCurrency: (parent: { original_currency: string }) => parent.original_currency,
+    fxRate: (parent: { fx_rate: number }) => parent.fx_rate,
+    convertedAmount: (parent: { converted_amount: number }) => parent.converted_amount,
+    convertedCurrency: (parent: { converted_currency: string }) => parent.converted_currency,
+    receiptUrl: (parent: { receipt_url: string | null }) => parent.receipt_url,
+    paidAt: (parent: { paid_at: string | null }) => parent.paid_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createdBy: async (parent: any) => {
+      if (parent.users) return parent.users;
+      if (!parent.created_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+  },
+
+  CreatorAgreement: {
+    campaignId: (parent: { campaign_id: string }) => parent.campaign_id,
+    proposalVersionId: (parent: { proposal_version_id: string | null }) => parent.proposal_version_id,
+    originalAmount: (parent: { original_amount: number }) => parent.original_amount,
+    originalCurrency: (parent: { original_currency: string }) => parent.original_currency,
+    fxRate: (parent: { fx_rate: number }) => parent.fx_rate,
+    convertedAmount: (parent: { converted_amount: number }) => parent.converted_amount,
+    convertedCurrency: (parent: { converted_currency: string }) => parent.converted_currency,
+    paidAt: (parent: { paid_at: string | null }) => parent.paid_at,
+    cancelledAt: (parent: { cancelled_at: string | null }) => parent.cancelled_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    campaignCreator: async (parent: any) => {
+      if (parent.campaign_creators) return parent.campaign_creators;
+      if (!parent.campaign_creator_id) return null;
+      const { data } = await supabaseAdmin
+        .from('campaign_creators')
+        .select('*')
+        .eq('id', parent.campaign_creator_id)
+        .single();
+      return data;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    creator: async (parent: any) => {
+      if (parent.creators) return parent.creators;
+      if (!parent.creator_id) return null;
+      const { data } = await supabaseAdmin
+        .from('creators')
+        .select('*')
+        .eq('id', parent.creator_id)
+        .single();
+      return data;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createdBy: async (parent: any) => {
+      if (parent.users) return parent.users;
+      if (!parent.created_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+  },
+
+  CampaignFinanceSummary: {
+    budgetControlType: (parent: { budgetControlType: string | null }) =>
+      parent.budgetControlType?.toUpperCase() ?? null,
+  },
+
+  CampaignFinanceLog: {
+    campaignId: (parent: { campaign_id: string }) => parent.campaign_id,
+    actionType: (parent: { action_type: string }) => parent.action_type,
+    metadataJson: (parent: { metadata_json: unknown }) => parent.metadata_json,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    performedBy: async (parent: any) => {
+      if (parent.users) return parent.users;
+      if (!parent.performed_by) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.performed_by)
         .single();
       return data;
     },

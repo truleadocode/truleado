@@ -854,6 +854,120 @@ Audit logs are immutable.
 
 ---
 
+---
+
+## 16. Finance Module — Technical Design
+
+> Added: February 2026. Implements campaign-level financial management as described in `product-documentation/finance-module.md`.
+
+### 16.1 File Structure
+
+```
+src/
+├── lib/finance/
+│   ├── calculations.ts      # Pure financial calculation engine (server-side only)
+│   ├── fx-rates.ts          # FX rate fetching with 24h in-memory cache
+│   ├── validators.ts        # Input validators (amounts, currencies, categories)
+│   └── index.ts             # Barrel exports
+├── graphql/
+│   ├── schema/typeDefs.ts   # Finance enums, types, queries, mutations added
+│   ├── resolvers/
+│   │   ├── queries.ts       # 4 finance queries added
+│   │   ├── mutations/
+│   │   │   └── finance.ts   # 7 finance mutations
+│   │   └── types.ts         # Type resolvers for CampaignExpense, CreatorAgreement,
+│   │                        #   CampaignFinanceSummary, CampaignFinanceLog + Campaign finance fields
+└── components/finance/
+    ├── finance-overview-card.tsx   # 8 metric cards + Recharts donut + utilization bar
+    ├── budget-config-dialog.tsx    # Set/edit budget dialog
+    ├── expense-dialog.tsx          # Create/edit expense dialog
+    ├── expenses-table.tsx          # Expenses table with filters + actions
+    ├── creator-payments-table.tsx  # Creator agreements table
+    └── finance-audit-log.tsx       # Timeline audit log
+```
+
+### 16.2 Calculations Engine (`src/lib/finance/calculations.ts`)
+
+All calculations are **server-side only**. No financial logic on the frontend.
+
+```
+Committed       = Sum of creator_agreements WHERE status = 'committed'
+Paid            = Sum of creator_agreements WHERE status = 'paid'
+                + Sum of campaign_expenses WHERE status = 'paid'
+Other Expenses  = Sum of ALL campaign_expenses (paid + unpaid)
+Total Spend     = Paid agreements + Paid expenses
+Remaining       = total_budget - (Committed + Other Expenses)
+Profit          = client_contract_value - Total Spend
+Margin %        = (Profit / client_contract_value) * 100
+Utilization %   = (Committed + Other Expenses) / total_budget * 100
+Warning Level   = 'none' | 'warning' (≥80%) | 'critical' (≥100%)
+```
+
+Rounding: Banker's rounding to 2 decimal places via `roundToTwo()`.
+
+### 16.3 FX Rate Service (`src/lib/finance/fx-rates.ts`)
+
+- Source: `exchangerate-api.com` (configured via `FX_RATE_API_KEY` env var)
+- Cache: In-memory 24-hour cache, keyed by currency pair
+- Fallback: Returns 1:1 rate on fetch failure (never throws)
+- Stored: FX rate captured at time of proposal acceptance — never recalculated
+
+### 16.4 Budget Enforcement Flow
+
+```
+acceptProposal mutation
+  → getFxRate(proposalCurrency, campaignCurrency)
+  → convertAmount(proposalAmount, fxRate)
+  → getCurrentFinanceTotals(campaignId)  // currentCommitted + currentExpenses
+  → checkBudgetLimit(budget, currentCommitted, currentExpenses, newAmount)
+       if budget_control_type = 'hard' AND totalAfter > total_budget
+         → throw invalidStateError("Budget exceeded...")
+  → insert creator_agreement (status = 'committed')
+  → logFinanceAction(campaignId, 'proposal_accepted', ...)
+
+createCampaignExpense mutation
+  → (same enforcement flow)
+  → insert campaign_expenses
+  → logFinanceAction(campaignId, 'expense_added', ...)
+```
+
+### 16.5 Type Resolver Requirement
+
+**Critical**: GraphQL Apollo Server does not auto-convert snake_case DB fields to camelCase. Every finance type needs explicit field resolvers in `src/graphql/resolvers/types.ts`:
+
+| Type | Key mappings |
+|------|-------------|
+| `Campaign` | `total_budget→totalBudget`, `budget_control_type→budgetControlType` (+ uppercase), `client_contract_value→clientContractValue` |
+| `CampaignExpense` | `campaign_id→campaignId`, `original_amount→originalAmount`, `fx_rate→fxRate`, `converted_amount→convertedAmount`, `converted_currency→convertedCurrency`, `receipt_url→receiptUrl`, `paid_at→paidAt` |
+| `CreatorAgreement` | `campaign_id→campaignId`, `proposal_version_id→proposalVersionId`, all amount/currency/date fields, nested `creators→creator`, `campaign_creators→campaignCreator` |
+| `CampaignFinanceSummary` | `budgetControlType` uppercased to match `BudgetControlType` enum |
+| `CampaignFinanceLog` | `campaign_id→campaignId`, `action_type→actionType`, `metadata_json→metadataJson` |
+
+### 16.6 Frontend Integration
+
+The Finance tab is integrated into `src/app/(dashboard)/dashboard/campaigns/[id]/page.tsx`:
+
+- Finance data loaded in parallel via `fetchFinanceData()` (non-blocking — failures don't break the page)
+- Finance tab added as 6th tab: Overview / Deliverables / Creators / **Finance** / Performance / Attachments
+- Finance overview card shown on Overview tab when budget is set (backward-compatible: hidden when no budget)
+- Campaign creation form has optional "Budget Settings" collapsible section
+
+### 16.7 Campaign Creation with Budget
+
+`createCampaign` mutation accepts optional budget fields:
+- `totalBudget`, `budgetControlType`, `clientContractValue`
+- Currency auto-set from agency `currency_code`
+
+### 16.8 Audit Logging Pattern
+
+Finance actions use dual logging:
+1. **`campaign_finance_logs`** — immutable, queryable financial audit trail (in Finance tab)
+2. **`activity_logs`** — general activity feed (existing system)
+
+Both use fire-and-forget pattern (`logFinanceAction()`) — never throws.
+
+---
+
 ## 17. Security Considerations
 
 - RLS enforced at DB level

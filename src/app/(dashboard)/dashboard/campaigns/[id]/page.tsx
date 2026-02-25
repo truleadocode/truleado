@@ -70,6 +70,11 @@ import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
 import { ApproverPicker } from '@/components/approver-picker'
 import { ProposalTimelineSheet } from './components/proposal-timeline-sheet'
 import { useAnalyticsFetch } from '@/hooks/use-analytics-fetch'
+import { FinanceOverviewCard } from '@/components/finance/finance-overview-card'
+import { BudgetConfigDialog } from '@/components/finance/budget-config-dialog'
+import { ExpensesTable } from '@/components/finance/expenses-table'
+import { CreatorPaymentsTable } from '@/components/finance/creator-payments-table'
+import { FinanceAuditLog } from '@/components/finance/finance-audit-log'
 
 interface DeliverableVersion {
   id: string
@@ -175,6 +180,11 @@ interface Campaign {
   campaignType: string
   startDate: string | null
   endDate: string | null
+  // Finance fields
+  totalBudget: number | null
+  currency: string | null
+  budgetControlType: string | null
+  clientContractValue: number | null
   createdAt: string
   project: {
     id: string
@@ -291,6 +301,30 @@ export default function CampaignDetailPage() {
   const [transitioning, setTransitioning] = useState(false)
   const [archiving, setArchiving] = useState(false)
   
+  // Finance state
+  const [financeSummary, setFinanceSummary] = useState<{
+    campaignId: string
+    totalBudget: number | null
+    currency: string | null
+    budgetControlType: string | null
+    clientContractValue: number | null
+    committed: number
+    paid: number
+    otherExpenses: number
+    totalSpend: number
+    remainingBudget: number | null
+    profit: number | null
+    marginPercent: number | null
+    budgetUtilization: number | null
+    warningLevel: string
+  } | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [creatorAgreements, setCreatorAgreements] = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [campaignExpenses, setCampaignExpenses] = useState<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [financeLogs, setFinanceLogs] = useState<any[]>([])
+
   // Edit dialogs state
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [datesDialogOpen, setDatesDialogOpen] = useState(false)
@@ -348,9 +382,44 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId])
 
+  // Finance data fetching
+  const fetchFinanceData = useCallback(async () => {
+    if (!campaignId) return
+    try {
+      const [summaryRes, agreementsRes, expensesRes, logsRes] = await Promise.all([
+        graphqlRequest<{ campaignFinanceSummary: typeof financeSummary }>(
+          queries.campaignFinanceSummary,
+          { campaignId }
+        ).catch(() => null),
+        graphqlRequest<{ creatorAgreements: typeof creatorAgreements }>(
+          queries.creatorAgreements,
+          { campaignId }
+        ).catch(() => null),
+        graphqlRequest<{ campaignExpenses: typeof campaignExpenses }>(
+          queries.campaignExpenses,
+          { campaignId }
+        ).catch(() => null),
+        graphqlRequest<{ campaignFinanceLogs: typeof financeLogs }>(
+          queries.campaignFinanceLogs,
+          { campaignId, limit: 50 }
+        ).catch(() => null),
+      ])
+      if (summaryRes?.campaignFinanceSummary) setFinanceSummary(summaryRes.campaignFinanceSummary)
+      if (agreementsRes?.creatorAgreements) setCreatorAgreements(agreementsRes.creatorAgreements)
+      if (expensesRes?.campaignExpenses) setCampaignExpenses(expensesRes.campaignExpenses)
+      if (logsRes?.campaignFinanceLogs) setFinanceLogs(logsRes.campaignFinanceLogs)
+    } catch {
+      // Finance data is supplementary; don't block the page on failure
+    }
+  }, [campaignId])
+
   useEffect(() => {
     fetchCampaign()
   }, [fetchCampaign])
+
+  useEffect(() => {
+    fetchFinanceData()
+  }, [fetchFinanceData])
 
   // Analytics dashboard
   const fetchAnalyticsDashboard = useCallback(async () => {
@@ -1201,10 +1270,11 @@ export default function CampaignDetailPage() {
 
         {/* Tabs Container */}
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
             <TabsTrigger value="creators">Creators</TabsTrigger>
+            <TabsTrigger value="finance">Finance</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
             <TabsTrigger value="attachments">Attachments</TabsTrigger>
           </TabsList>
@@ -1310,6 +1380,11 @@ export default function CampaignDetailPage() {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Finance Overview (above brief) */}
+            {financeSummary && financeSummary.totalBudget != null && (
+              <FinanceOverviewCard summary={financeSummary} />
+            )}
 
             {/* Campaign Brief Section */}
             <Card>
@@ -1718,6 +1793,47 @@ export default function CampaignDetailPage() {
             )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* Finance Tab */}
+          <TabsContent value="finance" className="space-y-6">
+            {/* Budget config header */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Campaign Finance</h2>
+              <BudgetConfigDialog
+                campaignId={campaign.id}
+                currentBudget={campaign.totalBudget}
+                currentControlType={campaign.budgetControlType}
+                currentContractValue={campaign.clientContractValue}
+                onBudgetUpdated={() => {
+                  fetchCampaign()
+                  fetchFinanceData()
+                }}
+              />
+            </div>
+
+            {/* Finance summary */}
+            {financeSummary && (
+              <FinanceOverviewCard summary={financeSummary} />
+            )}
+
+            {/* Creator Payments */}
+            <CreatorPaymentsTable
+              agreements={creatorAgreements}
+              campaignCurrency={campaign.currency || 'INR'}
+              onRefresh={() => fetchFinanceData()}
+            />
+
+            {/* Manual Expenses */}
+            <ExpensesTable
+              campaignId={campaign.id}
+              expenses={campaignExpenses}
+              campaignCurrency={campaign.currency || 'INR'}
+              onRefresh={() => fetchFinanceData()}
+            />
+
+            {/* Audit Log */}
+            <FinanceAuditLog logs={financeLogs} />
           </TabsContent>
 
           {/* Attachments Tab */}

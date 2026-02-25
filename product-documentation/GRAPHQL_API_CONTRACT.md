@@ -1318,6 +1318,232 @@ type Mutation {
 
 ---
 
+---
+
+## 12. Finance Module API
+
+> Added: February 2026. All finance operations are campaign-scoped and enforce RBAC via `MANAGE_PAYMENTS` / `VIEW_PAYMENTS` permissions.
+
+### 12.1 Enums
+
+```graphql
+enum BudgetControlType {
+  SOFT   # Warn on overspend, allow action
+  HARD   # Block actions that exceed budget
+}
+
+enum ExpenseCategory {
+  AD_SPEND
+  TRAVEL
+  SHIPPING
+  PRODUCTION
+  PLATFORM_FEES
+  MISCELLANEOUS
+}
+
+enum ExpenseStatus {
+  UNPAID
+  PAID
+}
+
+enum AgreementStatus {
+  COMMITTED
+  PAID
+  CANCELLED
+}
+```
+
+### 12.2 Finance Types
+
+```graphql
+# Fields added to Campaign type
+type Campaign {
+  # ...existing fields...
+  totalBudget: Money
+  currency: String
+  budgetControlType: BudgetControlType
+  clientContractValue: Money
+}
+
+# Auto-created on proposal acceptance
+type CreatorAgreement {
+  id: ID!
+  campaignId: ID!
+  campaignCreator: CampaignCreator!
+  creator: Creator!
+  proposalVersionId: ID
+  originalAmount: Money!
+  originalCurrency: String!
+  fxRate: Float!
+  convertedAmount: Money!
+  convertedCurrency: String!
+  status: AgreementStatus!
+  paidAt: DateTime
+  cancelledAt: DateTime
+  notes: String
+  createdBy: User
+  createdAt: DateTime!
+}
+
+# Manually entered non-creator campaign cost
+type CampaignExpense {
+  id: ID!
+  campaignId: ID!
+  name: String!
+  category: ExpenseCategory!
+  originalAmount: Money!
+  originalCurrency: String!
+  fxRate: Float!
+  convertedAmount: Money!
+  convertedCurrency: String!
+  receiptUrl: String
+  status: ExpenseStatus!
+  paidAt: DateTime
+  notes: String
+  createdBy: User
+  createdAt: DateTime!
+}
+
+# Server-computed financial summary
+type CampaignFinanceSummary {
+  campaignId: ID!
+  totalBudget: Money
+  currency: String
+  budgetControlType: BudgetControlType
+  clientContractValue: Money
+  committed: Money!      # Sum of accepted, unpaid creator agreements
+  paid: Money!           # Sum of paid agreements + paid expenses
+  otherExpenses: Money!  # Sum of all manual expenses
+  totalSpend: Money!     # paid agreements + paid expenses
+  remainingBudget: Money # totalBudget - (committed + otherExpenses)
+  profit: Money          # clientContractValue - totalSpend
+  marginPercent: Float   # (profit / revenue) * 100
+  budgetUtilization: Float # (committed + otherExpenses) / totalBudget * 100
+  warningLevel: String!  # "none" | "warning" (80-99%) | "critical" (100%+)
+}
+
+# Immutable audit entry
+type CampaignFinanceLog {
+  id: ID!
+  campaignId: ID!
+  actionType: String!
+  metadataJson: JSON
+  performedBy: User
+  createdAt: DateTime!
+}
+```
+
+### 12.3 Finance Queries
+
+```graphql
+type Query {
+  # Computed financial summary for a campaign — requires VIEW_PAYMENTS
+  campaignFinanceSummary(campaignId: ID!): CampaignFinanceSummary
+
+  # Creator payment agreements — requires VIEW_PAYMENTS
+  creatorAgreements(campaignId: ID!): [CreatorAgreement!]!
+
+  # Manual expenses — requires VIEW_PAYMENTS
+  campaignExpenses(
+    campaignId: ID!
+    category: ExpenseCategory
+    status: ExpenseStatus
+  ): [CampaignExpense!]!
+
+  # Immutable finance audit log — requires VIEW_PAYMENTS
+  campaignFinanceLogs(
+    campaignId: ID!
+    limit: Int
+    offset: Int
+  ): [CampaignFinanceLog!]!
+}
+```
+
+### 12.4 Finance Mutations
+
+```graphql
+type Mutation {
+  # Set or update campaign budget — requires MANAGE_PAYMENTS
+  setCampaignBudget(
+    campaignId: ID!
+    totalBudget: Money!
+    budgetControlType: BudgetControlType
+    clientContractValue: Money
+  ): Campaign!
+
+  # Add a manual expense — requires MANAGE_PAYMENTS
+  # Enforces hard budget limit if set
+  createCampaignExpense(
+    campaignId: ID!
+    name: String!
+    category: ExpenseCategory!
+    originalAmount: Money!
+    originalCurrency: String
+    receiptUrl: String
+    notes: String
+  ): CampaignExpense!
+
+  # Edit an unpaid expense — requires MANAGE_PAYMENTS
+  updateCampaignExpense(
+    expenseId: ID!
+    name: String
+    category: ExpenseCategory
+    originalAmount: Money
+    originalCurrency: String
+    receiptUrl: String
+    notes: String
+  ): CampaignExpense!
+
+  # Delete an unpaid expense — requires MANAGE_PAYMENTS
+  deleteCampaignExpense(expenseId: ID!): Boolean!
+
+  # Mark expense as paid — requires MANAGE_PAYMENTS
+  markExpensePaid(expenseId: ID!): CampaignExpense!
+
+  # Mark creator agreement as paid — requires MANAGE_PAYMENTS
+  markAgreementPaid(agreementId: ID!): CreatorAgreement!
+
+  # Cancel a creator agreement — requires MANAGE_PAYMENTS
+  cancelCreatorAgreement(agreementId: ID!, reason: String): CreatorAgreement!
+}
+```
+
+### 12.5 Finance RBAC Rules
+
+| Operation | Required Permission |
+|-----------|-------------------|
+| View summary, agreements, expenses, logs | `VIEW_PAYMENTS` |
+| Set/edit budget | `MANAGE_PAYMENTS` |
+| Create/edit/delete expense | `MANAGE_PAYMENTS` |
+| Mark expense paid | `MANAGE_PAYMENTS` |
+| Mark agreement paid | `MANAGE_PAYMENTS` |
+| Cancel agreement | `MANAGE_PAYMENTS` |
+
+Roles mapping: `AGENCY_ADMIN` and `ACCOUNT_MANAGER` have `MANAGE_PAYMENTS`. `OPERATOR` and `INTERNAL_APPROVER` have `VIEW_PAYMENTS` only.
+
+### 12.6 Finance Business Rules
+
+1. **Budget enforcement happens server-side** in mutation resolvers, never client-side
+2. **Hard limit** blocks `createCampaignExpense` and `acceptProposal` if they would exceed budget
+3. **Soft limit** returns a `warningLevel` of `"warning"` (80-99%) or `"critical"` (100%+)
+4. **FX rates** fetched at time of proposal acceptance, stored permanently — never recalculated
+5. **Creator agreements** are auto-created by `acceptProposal` — no separate mutation
+6. **`budgetControlType`** is stored as lowercase (`soft`/`hard`) in DB, returned as uppercase enum (`SOFT`/`HARD`) via type resolver
+7. **Finance logs are append-only** — no update/delete allowed
+8. **Paid expenses cannot be edited or deleted** — `invalidStateError` is thrown
+
+### 12.7 Key Implementation Note: Type Resolvers
+
+The finance types require explicit field resolvers in `src/graphql/resolvers/types.ts` for snake_case → camelCase mapping:
+
+- `CampaignExpense`: maps `campaign_id`, `original_amount`, `fx_rate`, `converted_amount`, etc.
+- `CreatorAgreement`: maps all amount/currency/date fields + resolves nested `creator`, `campaignCreator`
+- `CampaignFinanceSummary`: maps `budgetControlType` to uppercase enum value
+- `CampaignFinanceLog`: maps `campaign_id`, `action_type`, `metadata_json`
+- `Campaign`: maps `total_budget`, `budget_control_type`, `client_contract_value`
+
+---
+
 ## 13. Error Handling Conventions
 
 Resolvers throw structured errors:

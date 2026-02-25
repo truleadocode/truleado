@@ -997,7 +997,107 @@ CREATE TABLE token_purchases (
 
 ---
 
-## 11. Hard Rules (Enforced by Design)
+---
+
+## 11. Finance Module (Migration: 00031_finance_module.sql)
+
+> Added: February 2026. Enables campaign-level financial tracking, budget enforcement, creator payment management, manual expenses, and immutable audit logs.
+
+### 11.1 campaigns table — Finance Fields Added
+
+```sql
+ALTER TABLE campaigns
+  ADD COLUMN IF NOT EXISTS total_budget NUMERIC(15,2),
+  ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'INR',
+  ADD COLUMN IF NOT EXISTS budget_control_type TEXT CHECK (budget_control_type IN ('soft', 'hard')) DEFAULT 'soft',
+  ADD COLUMN IF NOT EXISTS client_contract_value NUMERIC(15,2);
+```
+
+- `total_budget`: Maximum spend limit for the campaign (nullable — unset campaigns have no budget)
+- `currency`: ISO 4217 code, locked to agency default on first set
+- `budget_control_type`: `soft` = warn on overspend; `hard` = block actions that exceed budget
+- `client_contract_value`: Revenue from client; used to calculate profit and margin
+
+### 11.2 creator_agreements
+
+Financial commitment records auto-created when a creator proposal is accepted.
+
+```sql
+CREATE TABLE creator_agreements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  campaign_creator_id UUID NOT NULL REFERENCES campaign_creators(id) ON DELETE CASCADE,
+  creator_id UUID NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+  proposal_version_id UUID REFERENCES proposal_versions(id),
+  original_amount NUMERIC(15,2) NOT NULL,
+  original_currency TEXT NOT NULL,
+  fx_rate NUMERIC(10,6) NOT NULL DEFAULT 1,
+  converted_amount NUMERIC(15,2) NOT NULL,
+  converted_currency TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('committed', 'paid', 'cancelled')) DEFAULT 'committed',
+  paid_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  notes TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Status transitions**: `committed → paid` | `committed → cancelled`
+
+**RLS**: Agency-scoped via `has_campaign_access()` function.
+
+### 11.3 campaign_expenses
+
+Manual (non-creator) campaign costs entered by agency users.
+
+```sql
+CREATE TABLE campaign_expenses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL CHECK (category IN ('ad_spend', 'travel', 'shipping', 'production', 'platform_fees', 'miscellaneous')),
+  original_amount NUMERIC(15,2) NOT NULL,
+  original_currency TEXT NOT NULL,
+  fx_rate NUMERIC(10,6) NOT NULL DEFAULT 1,
+  converted_amount NUMERIC(15,2) NOT NULL,
+  converted_currency TEXT NOT NULL,
+  receipt_url TEXT,
+  status TEXT NOT NULL CHECK (status IN ('unpaid', 'paid')) DEFAULT 'unpaid',
+  paid_at TIMESTAMPTZ,
+  notes TEXT,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Business rules**:
+- Only `unpaid` expenses can be edited or deleted
+- Budget enforcement runs before insert (hard limit blocks, soft limit warns)
+- Receipts stored in `campaign-receipts` Supabase Storage bucket
+
+### 11.4 campaign_finance_logs
+
+Immutable append-only audit trail for all financial actions.
+
+```sql
+CREATE TABLE campaign_finance_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL,
+  metadata_json JSONB,
+  performed_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+```
+
+**Tracked action types**: `budget_created`, `budget_edited`, `expense_added`, `expense_edited`, `expense_deleted`, `expense_marked_paid`, `agreement_marked_paid`, `agreement_cancelled`, `proposal_accepted`
+
+**Design rules**: No UPDATE or DELETE on this table. Append-only enforced at application layer.
+
+---
+
+## 12. Hard Rules (Enforced by Design)
 
 - Authentication handled via Firebase
 - Identity handled via `users` + `auth_identities`
@@ -1007,6 +1107,9 @@ CREATE TABLE token_purchases (
 - Archived campaigns are read-only
 - Social data jobs are token-gated (consumes agency tokens)
 - Token purchases are processed via Razorpay
+- Finance audit logs (`campaign_finance_logs`) are append-only and never modified
+- Budget enforcement (hard limit) is server-side only — never client-side
+- FX rates are stored at time of commitment and never recalculated
 
 ---
 
