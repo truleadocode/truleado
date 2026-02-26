@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useMemo } from 'react'
 import { Plus, Megaphone, Search, Filter, MoreHorizontal, Building2, Briefcase, FileCheck, Users } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { queries } from '@/lib/graphql/client'
+import { useGraphQLQuery } from '@/hooks/use-graphql-query'
 import { getCampaignStatusLabel } from '@/lib/campaign-status'
 
 interface Campaign {
@@ -38,95 +39,34 @@ interface Campaign {
   creators: { id: string; creator: { id: string; displayName: string } }[]
 }
 
-interface Project {
-  id: string
-  name: string
-  client: { id: string; name: string }
-  campaigns: Campaign[]
-}
-
-interface Client {
-  id: string
-  name: string
-}
-
 export default function CampaignsPage() {
   const { currentAgency } = useAuth()
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
 
-  const fetchCampaigns = useCallback(async () => {
-    if (!currentAgency?.id) return
-    
-    setLoading(true)
-    setError(null)
-    
-    try {
-      // First get all clients
-      const clientsData = await graphqlRequest<{ clients: Client[] }>(
-        queries.clients,
-        { agencyId: currentAgency.id }
-      )
-      
-      // Then fetch projects for each client
-      const allCampaigns: Campaign[] = []
-      for (const client of clientsData.clients) {
-        try {
-          const projectsData = await graphqlRequest<{ projects: Project[] }>(
-            queries.projects,
-            { clientId: client.id }
-          )
-          
-          // Fetch campaigns for each project
-          for (const project of projectsData.projects) {
-            try {
-              const campaignsData = await graphqlRequest<{ campaigns: Campaign[] }>(
-                queries.campaigns,
-                { projectId: project.id }
-              )
-              allCampaigns.push(...campaignsData.campaigns)
-            } catch (err) {
-              console.error(`Failed to fetch campaigns for project ${project.id}:`, err)
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to fetch projects for client ${client.id}:`, err)
-        }
-      }
-      
-      setCampaigns(allCampaigns)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load campaigns')
-    } finally {
-      setLoading(false)
-    }
-  }, [currentAgency?.id])
+  const { data, isLoading: loading, error: queryError } = useGraphQLQuery<{ allCampaigns: Campaign[] }>(
+    ['allCampaigns', currentAgency?.id],
+    queries.allCampaigns,
+    { agencyId: currentAgency?.id },
+    { enabled: !!currentAgency?.id }
+  )
 
-  useEffect(() => {
-    fetchCampaigns()
-  }, [fetchCampaigns])
+  const campaigns = data?.allCampaigns ?? []
+  const error = queryError?.message ?? null
 
-  const filteredCampaigns = campaigns.filter((campaign) => {
-    const matchesSearch = 
-      campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      campaign.project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      campaign.project.client.name.toLowerCase().includes(searchQuery.toLowerCase())
-    
-    const matchesStatus = statusFilter === 'all' || campaign.status.toUpperCase() === statusFilter
-    
-    return matchesSearch && matchesStatus
-  })
+  const filteredCampaigns = useMemo(() =>
+    campaigns.filter((campaign) => {
+      const matchesSearch =
+        campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        campaign.project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        campaign.project.client.name.toLowerCase().includes(searchQuery.toLowerCase())
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
+      const matchesStatus = statusFilter === 'all' || campaign.status.toUpperCase() === statusFilter
+
+      return matchesSearch && matchesStatus
+    }),
+    [campaigns, searchQuery, statusFilter]
+  )
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -140,11 +80,14 @@ export default function CampaignsPage() {
     return colors[status.toUpperCase()] || 'bg-gray-100 text-gray-700'
   }
 
-  const statusCounts = campaigns.reduce((acc, c) => {
-    const status = c.status.toUpperCase()
-    acc[status] = (acc[status] || 0) + 1
-    return acc
-  }, {} as Record<string, number>)
+  const statusCounts = useMemo(() =>
+    campaigns.reduce((acc, c) => {
+      const status = c.status.toUpperCase()
+      acc[status] = (acc[status] || 0) + 1
+      return acc
+    }, {} as Record<string, number>),
+    [campaigns]
+  )
 
   return (
     <>

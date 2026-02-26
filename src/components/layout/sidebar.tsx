@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -49,7 +49,7 @@ const bottomNavigation = [
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const pathname = usePathname()
   const { user, agencies, currentAgency, setCurrentAgency, signOut } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -311,4 +311,4 @@ export function Sidebar() {
       </aside>
     </TooltipProvider>
   )
-}
+})

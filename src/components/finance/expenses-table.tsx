@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, memo } from "react"
 import {
   Table,
   TableBody,
@@ -64,7 +64,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   miscellaneous: "Miscellaneous",
 }
 
-export function ExpensesTable({
+export const ExpensesTable = memo(function ExpensesTable({
   campaignId,
   expenses,
   campaignCurrency,
@@ -256,4 +256,4 @@ export function ExpensesTable({
       )}
     </div>
   )
-}
+})

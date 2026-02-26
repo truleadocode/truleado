@@ -357,6 +357,39 @@ export const queries = {
       }
     }
   `,
+
+  allCampaigns: `
+    query GetAllCampaigns($agencyId: ID!) {
+      allCampaigns(agencyId: $agencyId) {
+        id
+        name
+        description
+        status
+        campaignType
+        startDate
+        endDate
+        createdAt
+        project {
+          id
+          name
+          client {
+            id
+            name
+          }
+        }
+        deliverables {
+          id
+        }
+        creators {
+          id
+          creator {
+            id
+            displayName
+          }
+        }
+      }
+    }
+  `,
   
   deliverable: `
     query GetDeliverable($id: ID!) {

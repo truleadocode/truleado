@@ -292,21 +292,30 @@ export const queryResolvers = {
   },
 
   /**
-   * Get a campaign by ID
+   * Get a campaign by ID.
+   * Uses Supabase joins to eagerly load related data in a single query,
+   * avoiding N+1 DB calls from type resolvers.
    */
   campaign: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
     await requireCampaignAccess(ctx, id);
-    
+
     const { data, error } = await supabaseAdmin
       .from('campaigns')
-      .select('*')
+      .select(`
+        *,
+        projects!inner(*, clients!inner(*)),
+        deliverables(*),
+        campaign_creators(*, creators(*)),
+        campaign_users(*, users(*)),
+        campaign_attachments(*)
+      `)
       .eq('id', id)
       .single();
-    
+
     if (error || !data) {
       throw notFoundError('Campaign', id);
     }
-    
+
     return data;
   },
 
@@ -330,8 +339,52 @@ export const queryResolvers = {
     if (error) {
       throw new Error('Failed to fetch campaigns');
     }
-    
+
     return data || [];
+  },
+
+  /**
+   * Get all non-archived campaigns for an agency in a single query.
+   * Joins through projects → clients to resolve the agency scope.
+   * Operators only see campaigns under projects they are assigned to.
+   */
+  allCampaigns: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    const user = requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data, error } = await supabaseAdmin
+      .from('campaigns')
+      .select('*, projects!inner(*, clients!inner(*))')
+      .eq('projects.clients.agency_id', agencyId)
+      .neq('status', 'archived')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error('Failed to fetch campaigns');
+    }
+
+    let campaigns = data || [];
+
+    // Operators only see campaigns under projects they are assigned to
+    const role = getAgencyRole(user, agencyId);
+    if (role === AgencyRole.OPERATOR && campaigns.length > 0) {
+      const { data: assigned } = await supabaseAdmin
+        .from('project_users')
+        .select('project_id')
+        .eq('user_id', user.id);
+      const projectIds = new Set(
+        (assigned ?? []).map((r: { project_id: string }) => r.project_id)
+      );
+      campaigns = campaigns.filter((c: { project_id: string }) =>
+        projectIds.has(c.project_id)
+      );
+    }
+
+    return campaigns;
   },
 
   /**

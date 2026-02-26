@@ -69,12 +69,39 @@ export interface GraphQLContext {
 }
 
 /**
+ * Short-lived cache for resolved user contexts.
+ * When a page fires multiple GraphQL calls with the same token,
+ * only the first call pays the full DB lookup cost.
+ */
+interface CachedUserContext {
+  user: AuthenticatedUser;
+  contact: ContextContact | null;
+  creator: CreatorContext | null;
+  decodedToken: DecodedIdToken;
+  expiresAt: number;
+}
+
+const contextCache = new Map<string, CachedUserContext>();
+const CONTEXT_CACHE_TTL_MS = 30_000; // 30 seconds
+
+function getCachedContext(firebaseUid: string): CachedUserContext | null {
+  const cached = contextCache.get(firebaseUid);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached;
+  }
+  if (cached) {
+    contextCache.delete(firebaseUid);
+  }
+  return null;
+}
+
+/**
  * Create GraphQL context from the incoming request
- * 
+ *
  * This function:
  * 1. Extracts the Firebase ID token from the Authorization header
  * 2. Verifies the token with Firebase Admin
- * 3. Looks up the user in our database
+ * 3. Looks up the user in our database (with short-lived cache)
  * 4. Returns the context with user information
  */
 export async function createContext(req: NextRequest): Promise<GraphQLContext> {
@@ -106,7 +133,22 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
   try {
     // Verify Firebase token
     const decodedToken = await verifyIdToken(idToken);
-    
+
+    // Check cache — avoids redundant DB lookups when a page fires multiple GraphQL calls
+    const cached = getCachedContext(decodedToken.uid);
+    if (cached) {
+      return {
+        user: cached.user,
+        contact: cached.contact,
+        creator: cached.creator,
+        decodedToken: cached.decodedToken,
+        requestId,
+        ipAddress,
+        userAgent,
+        agencyId,
+      };
+    }
+
     // Look up user in our database by Firebase UID (limit 1 in case of duplicates)
     const { data: authIdentities, error: authError } = await supabaseAdmin
       .from('auth_identities')
@@ -125,34 +167,30 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
       };
     }
 
-    // Get user details
-    const { data: user, error: userError } = await supabaseAdmin
-      .from('users')
-      .select('*')
-      .eq('id', authIdentity.user_id)
-      .single();
+    // Fetch user, memberships, contact, and creator in parallel
+    // All depend only on authIdentity.user_id, so no need to be sequential
+    const userId = authIdentity.user_id;
+    const [userResult, membershipsResult, contactResult, creatorResult] = await Promise.all([
+      supabaseAdmin.from('users').select('*').eq('id', userId).single(),
+      supabaseAdmin.from('agency_users').select('agency_id, role, is_active').eq('user_id', userId),
+      supabaseAdmin.from('contacts').select('id, client_id, is_client_approver').eq('user_id', userId).maybeSingle(),
+      supabaseAdmin.from('creators').select('id, agency_id, display_name').eq('user_id', userId).eq('is_active', true).maybeSingle(),
+    ]);
 
-    if (userError || !user) {
-      console.error(`User not found for ID: ${authIdentity.user_id}`);
+    if (userResult.error || !userResult.data) {
+      console.error(`User not found for ID: ${userId}`);
       return {
         ...baseContext,
         decodedToken,
       };
     }
 
-    const userRow = user as { id: string; email: string | null; full_name: string };
-
-    // Get user's agency memberships
-    const { data: memberships, error: membershipError } = await supabaseAdmin
-      .from('agency_users')
-      .select('agency_id, role, is_active')
-      .eq('user_id', userRow.id);
-
-    if (membershipError) {
-      console.error('Error fetching agency memberships:', membershipError);
+    if (membershipsResult.error) {
+      console.error('Error fetching agency memberships:', membershipsResult.error);
     }
 
-    const membershipRows = (memberships || []) as Array<{ agency_id: string; role: string; is_active: boolean }>;
+    const userRow = userResult.data as { id: string; email: string | null; full_name: string };
+    const membershipRows = (membershipsResult.data || []) as Array<{ agency_id: string; role: string; is_active: boolean }>;
     const authenticatedUser: AuthenticatedUser = {
       id: userRow.id,
       firebaseUid: decodedToken.uid,
@@ -165,14 +203,9 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
       })),
     };
 
-    // Load linked contact (for client portal users)
+    // Process contact result
     let contact: ContextContact | null = null;
-    const { data: contactRow } = await supabaseAdmin
-      .from('contacts')
-      .select('id, client_id, is_client_approver')
-      .eq('user_id', userRow.id)
-      .maybeSingle();
-    const contactData = contactRow as { id: string; client_id: string; is_client_approver: boolean } | null;
+    const contactData = contactResult.data as { id: string; client_id: string; is_client_approver: boolean } | null;
     if (contactData) {
       contact = {
         id: contactData.id,
@@ -181,15 +214,9 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
       };
     }
 
-    // Load linked creator (for creator portal users)
+    // Process creator result
     let creator: CreatorContext | null = null;
-    const { data: creatorRow } = await supabaseAdmin
-      .from('creators')
-      .select('id, agency_id, display_name')
-      .eq('user_id', userRow.id)
-      .eq('is_active', true)
-      .maybeSingle();
-    const creatorData = creatorRow as { id: string; agency_id: string; display_name: string } | null;
+    const creatorData = creatorResult.data as { id: string; agency_id: string; display_name: string } | null;
     if (creatorData) {
       creator = {
         id: creatorData.id,
@@ -197,6 +224,15 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
         displayName: creatorData.display_name,
       };
     }
+
+    // Cache the resolved user context for subsequent requests
+    contextCache.set(decodedToken.uid, {
+      user: authenticatedUser,
+      contact,
+      creator,
+      decodedToken,
+      expiresAt: Date.now() + CONTEXT_CACHE_TTL_MS,
+    });
 
     return {
       user: authenticatedUser,

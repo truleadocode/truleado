@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, memo } from "react"
 import {
   Table,
   TableBody,
@@ -64,7 +64,7 @@ const STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secon
   cancelled: { label: "Cancelled", variant: "destructive" },
 }
 
-export function CreatorPaymentsTable({
+export const CreatorPaymentsTable = memo(function CreatorPaymentsTable({
   agreements,
   campaignCurrency,
   onRefresh,
@@ -221,4 +221,4 @@ export function CreatorPaymentsTable({
       )}
     </div>
   )
-}
+})

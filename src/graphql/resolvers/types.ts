@@ -227,7 +227,9 @@ export const typeResolvers = {
     endDate: (parent: { end_date: string | null }) => parent.end_date,
     isArchived: (parent: { is_archived: boolean }) => parent.is_archived,
     createdAt: (parent: { created_at: string }) => parent.created_at,
-    client: async (parent: UserRow) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    client: async (parent: UserRow & { clients?: any }) => {
+      if (parent.clients) return parent.clients;
       const { data } = await supabaseAdmin
         .from('clients')
         .select('*')
@@ -235,7 +237,9 @@ export const typeResolvers = {
         .single();
       return data;
     },
-    campaigns: async (parent: WithId) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    campaigns: async (parent: WithId & { campaigns?: any[] }) => {
+      if (parent.campaigns) return parent.campaigns;
       const { data } = await supabaseAdmin
         .from('campaigns')
         .select('*')
@@ -326,7 +330,10 @@ export const typeResolvers = {
     budgetControlType: (parent: { budget_control_type: string | null }) =>
       parent.budget_control_type?.toUpperCase() ?? null,
     clientContractValue: (parent: { client_contract_value: number | null }) => parent.client_contract_value,
-    project: async (parent: UserRow) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    project: async (parent: UserRow & { projects?: any }) => {
+      // Use pre-loaded join data if available (from campaign query with joins)
+      if (parent.projects) return parent.projects;
       const { data } = await supabaseAdmin
         .from('projects')
         .select('*')
@@ -338,7 +345,9 @@ export const typeResolvers = {
       parent.campaign_type.toUpperCase(),
     status: (parent: { status: string }) =>
       parent.status.toUpperCase().replace('_', '_'),
-    deliverables: async (parent: WithId) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    deliverables: async (parent: WithId & { deliverables?: any[] }) => {
+      if (parent.deliverables) return parent.deliverables;
       const { data } = await supabaseAdmin
         .from('deliverables')
         .select('*')
@@ -346,7 +355,9 @@ export const typeResolvers = {
         .order('created_at', { ascending: false });
       return data || [];
     },
-    creators: async (parent: WithId) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    creators: async (parent: WithId & { campaign_creators?: any[] }) => {
+      if (parent.campaign_creators) return parent.campaign_creators;
       const { data } = await supabaseAdmin
         .from('campaign_creators')
         .select('*')
@@ -354,14 +365,18 @@ export const typeResolvers = {
         .neq('status', 'removed');
       return data || [];
     },
-    users: async (parent: WithId) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    users: async (parent: WithId & { campaign_users?: any[] }) => {
+      if (parent.campaign_users) return parent.campaign_users;
       const { data } = await supabaseAdmin
         .from('campaign_users')
         .select('*')
         .eq('campaign_id', parent.id);
       return data || [];
     },
-    attachments: async (parent: WithId) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    attachments: async (parent: WithId & { campaign_attachments?: any[] }) => {
+      if (parent.campaign_attachments) return parent.campaign_attachments;
       const { data } = await supabaseAdmin
         .from('campaign_attachments')
         .select('*')
@@ -419,7 +434,9 @@ export const typeResolvers = {
   CampaignUser: {
     // Field mappings
     createdAt: (parent: { created_at: string }) => parent.created_at,
-    user: async (parent: UserRow) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    user: async (parent: UserRow & { users?: any }) => {
+      if (parent.users) return parent.users;
       const { data } = await supabaseAdmin
         .from('users')
         .select('*')
@@ -805,7 +822,9 @@ export const typeResolvers = {
         .single();
       return data;
     },
-    creator: async (parent: UserRow) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    creator: async (parent: UserRow & { creators?: any }) => {
+      if (parent.creators) return parent.creators;
       const { data } = await supabaseAdmin
         .from('creators')
         .select('*')
