@@ -1,6 +1,6 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
 import { 
   User as FirebaseUser,
   onAuthStateChanged,
@@ -279,26 +279,26 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const clearError = () => setError(null)
 
+  const contextValue = useMemo<AuthContextType>(() => ({
+    user,
+    agencies,
+    currentAgency,
+    contact,
+    firebaseUser,
+    loading,
+    error,
+    signIn: handleSignIn,
+    signUp: handleSignUp,
+    signOut: handleSignOut,
+    resetPassword: handleResetPassword,
+    getToken,
+    setCurrentAgency,
+    clearError,
+    refetchUser,
+  }), [user, agencies, currentAgency, contact, firebaseUser, loading, error, refetchUser])
+
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        agencies,
-        currentAgency,
-        contact,
-        firebaseUser,
-        loading,
-        error,
-        signIn: handleSignIn,
-        signUp: handleSignUp,
-        signOut: handleSignOut,
-        resetPassword: handleResetPassword,
-        getToken,
-        setCurrentAgency,
-        clearError,
-        refetchUser,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   )

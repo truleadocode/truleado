@@ -913,6 +913,7 @@ export const typeDefs = gql`
     contactsList(agencyId: ID!, clientId: ID, department: String, isClientApprover: Boolean): [Contact!]!
     projects(clientId: ID!): [Project!]!
     campaigns(projectId: ID!): [Campaign!]!
+    allCampaigns(agencyId: ID!): [Campaign!]!
     deliverables(campaignId: ID!): [Deliverable!]!
     creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     
