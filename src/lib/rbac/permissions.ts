@@ -60,8 +60,14 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
     // Full notification and activity access
     Permission.VIEW_NOTIFICATIONS,
     Permission.VIEW_ACTIVITY_LOGS,
+
+    // Full discovery access
+    Permission.DISCOVERY_SEARCH,
+    Permission.DISCOVERY_UNLOCK,
+    Permission.DISCOVERY_EXPORT,
+    Permission.DISCOVERY_IMPORT,
   ],
-  
+
   [AgencyRole.ACCOUNT_MANAGER]: [
     // Read-only agency
     Permission.VIEW_AGENCY,
@@ -107,8 +113,14 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
     // Notifications and activity
     Permission.VIEW_NOTIFICATIONS,
     Permission.VIEW_ACTIVITY_LOGS,
+
+    // Full discovery access
+    Permission.DISCOVERY_SEARCH,
+    Permission.DISCOVERY_UNLOCK,
+    Permission.DISCOVERY_EXPORT,
+    Permission.DISCOVERY_IMPORT,
   ],
-  
+
   [AgencyRole.OPERATOR]: [
     // Read-only agency
     Permission.VIEW_AGENCY,
@@ -143,8 +155,14 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
     // Notifications and activity
     Permission.VIEW_NOTIFICATIONS,
     Permission.VIEW_ACTIVITY_LOGS,
+
+    // Full discovery access
+    Permission.DISCOVERY_SEARCH,
+    Permission.DISCOVERY_UNLOCK,
+    Permission.DISCOVERY_EXPORT,
+    Permission.DISCOVERY_IMPORT,
   ],
-  
+
   [AgencyRole.INTERNAL_APPROVER]: [
     // Read-only agency
     Permission.VIEW_AGENCY,

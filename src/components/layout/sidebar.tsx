@@ -12,6 +12,7 @@ import {
   Megaphone,
   FileCheck,
   UserCircle,
+  Compass,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -43,6 +44,7 @@ const navigation = [
   { name: 'Deliverables', href: '/dashboard/deliverables', icon: FolderKanban },
   { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck },
   { name: 'Creators', href: '/dashboard/creators', icon: UserCircle },
+  { name: 'Discovery', href: '/dashboard/discovery', icon: Compass },
 ]
 
 const bottomNavigation = [

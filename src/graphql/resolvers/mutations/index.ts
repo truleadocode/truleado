@@ -74,6 +74,14 @@ import {
   markAgreementPaid,
   cancelCreatorAgreement,
 } from './finance';
+import {
+  discoveryUnlock,
+  discoveryExport,
+  discoveryImportToCreators,
+  saveDiscoverySearch,
+  deleteDiscoverySearch,
+  updateDiscoverySearch,
+} from './discovery';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -172,4 +180,12 @@ export const mutationResolvers = {
   markExpensePaid,
   markAgreementPaid,
   cancelCreatorAgreement,
+
+  // Discovery
+  discoveryUnlock,
+  discoveryExport,
+  discoveryImportToCreators,
+  saveDiscoverySearch,
+  deleteDiscoverySearch,
+  updateDiscoverySearch,
 };
