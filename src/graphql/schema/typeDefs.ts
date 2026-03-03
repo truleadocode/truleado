@@ -367,6 +367,7 @@ export const typeDefs = gql`
     tiktokHandle: String
     facebookHandle: String
     linkedinHandle: String
+    profilePictureUrl: String
     notes: String
     isActive: Boolean!
     rates: [CreatorRate!]!
@@ -811,6 +812,127 @@ export const typeDefs = gql`
     completedAt: DateTime
   }
 
+  # =============================================================================
+  # CREATOR DISCOVERY MODULE
+  # =============================================================================
+
+  enum DiscoveryPlatform {
+    INSTAGRAM
+    YOUTUBE
+    TIKTOK
+  }
+
+  enum DiscoveryExportType {
+    SHORT
+    FULL
+  }
+
+  enum DiscoveryExportStatus {
+    PENDING
+    PROCESSING
+    COMPLETED
+    FAILED
+  }
+
+  # Search result influencer from OnSocial
+  type DiscoveryInfluencer {
+    userId: String!
+    username: String!
+    fullname: String
+    followers: Int
+    engagementRate: Float
+    engagements: Int
+    avgViews: Int
+    isVerified: Boolean
+    picture: String
+    url: String
+    searchResultId: String!
+    isHidden: Boolean!
+    platform: DiscoveryPlatform!
+  }
+
+  # Paginated search results
+  type DiscoverySearchResult {
+    accounts: [DiscoveryInfluencer!]!
+    total: Int!
+  }
+
+  # Record of an unlocked influencer
+  type DiscoveryUnlock {
+    id: ID!
+    platform: String!
+    onsocialUserId: String!
+    searchResultId: String!
+    username: String
+    fullname: String
+    profileData: JSON
+    tokensSpent: Float!
+    unlockedBy: String!
+    unlockedAt: DateTime!
+    expiresAt: DateTime!
+  }
+
+  # Record of an export job
+  type DiscoveryExport {
+    id: ID!
+    platform: String!
+    exportType: DiscoveryExportType!
+    filterSnapshot: JSON
+    totalAccounts: Int!
+    tokensSpent: Float!
+    onsocialExportId: String
+    status: DiscoveryExportStatus!
+    downloadUrl: String
+    errorMessage: String
+    exportedBy: String!
+    createdAt: DateTime!
+    completedAt: DateTime
+  }
+
+  # Saved search configuration
+  type SavedSearch {
+    id: ID!
+    name: String!
+    platform: String!
+    filters: JSON!
+    sortField: String
+    sortOrder: String
+    createdBy: String!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+  }
+
+  # Token pricing configuration row
+  type TokenPricingConfig {
+    id: ID!
+    provider: String!
+    action: String!
+    tokenType: String!
+    providerCost: Float!
+    internalCost: Float!
+    isActive: Boolean!
+  }
+
+  # Cost estimation result
+  type DiscoveryCostEstimate {
+    unitCost: Float!
+    totalCost: Float!
+    currentBalance: Int!
+    sufficientBalance: Boolean!
+  }
+
+  # Input for importing influencers to creator database
+  input DiscoveryImportInput {
+    onsocialUserId: String!
+    username: String!
+    fullname: String
+    platform: DiscoveryPlatform!
+    email: String
+    phone: String
+    profilePicture: String
+    searchResultId: String
+  }
+
   input AgencyEmailConfigInput {
     smtpHost: String!
     smtpPort: Int!
@@ -979,6 +1101,38 @@ export const typeDefs = gql`
 
     # Purchase history for an agency (most recent first, limit 50)
     tokenPurchases(agencyId: ID!): [TokenPurchase!]!
+
+    # ---------------------------------------------
+    # Creator Discovery Queries
+    # ---------------------------------------------
+
+    # Search influencers via OnSocial (FREE — no token cost)
+    discoverySearch(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      filters: JSON!
+      sort: JSON
+      skip: Int
+      limit: Int
+    ): DiscoverySearchResult!
+
+    # Get unlock history for an agency
+    discoveryUnlocks(agencyId: ID!, platform: DiscoveryPlatform, limit: Int, offset: Int): [DiscoveryUnlock!]!
+
+    # Get export history for an agency
+    discoveryExports(agencyId: ID!, limit: Int, offset: Int): [DiscoveryExport!]!
+
+    # Get saved search configurations for an agency
+    savedSearches(agencyId: ID!): [SavedSearch!]!
+
+    # Get token pricing configuration
+    discoveryPricing(agencyId: ID!, provider: String): [TokenPricingConfig!]!
+
+    # Estimate token cost for an operation
+    discoveryEstimateCost(agencyId: ID!, action: String!, count: Int!): DiscoveryCostEstimate!
+
+    # Get dictionary data for filter autocomplete
+    discoveryDictionary(type: String!, query: String, platform: DiscoveryPlatform): JSON
 
     # ---------------------------------------------
     # Creator Portal Queries
@@ -1422,5 +1576,56 @@ export const typeDefs = gql`
     
     # Mark all notifications as read for an agency
     markAllNotificationsRead(agencyId: ID!): Boolean!
+
+    # ---------------------------------------------
+    # Creator Discovery Mutations
+    # ---------------------------------------------
+
+    # Unlock hidden influencers (token-gated)
+    discoveryUnlock(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      searchResultIds: [String!]!
+      withContact: Boolean
+    ): [DiscoveryUnlock!]!
+
+    # Export search results (token-gated)
+    discoveryExport(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      filters: JSON!
+      sort: JSON
+      exportType: DiscoveryExportType!
+      limit: Int
+    ): DiscoveryExport!
+
+    # Import influencers to creator database (token-gated)
+    discoveryImportToCreators(
+      agencyId: ID!
+      influencers: [DiscoveryImportInput!]!
+      withContact: Boolean
+    ): [Creator!]!
+
+    # Save a search configuration
+    saveDiscoverySearch(
+      agencyId: ID!
+      name: String!
+      platform: DiscoveryPlatform!
+      filters: JSON!
+      sortField: String
+      sortOrder: String
+    ): SavedSearch!
+
+    # Delete a saved search
+    deleteDiscoverySearch(id: ID!): Boolean!
+
+    # Update a saved search
+    updateDiscoverySearch(
+      id: ID!
+      name: String
+      filters: JSON
+      sortField: String
+      sortOrder: String
+    ): SavedSearch!
   }
 `;

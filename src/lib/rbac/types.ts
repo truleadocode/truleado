@@ -90,6 +90,12 @@ export enum Permission {
   
   // Activity log permissions
   VIEW_ACTIVITY_LOGS = 'view_activity_logs',
+
+  // Discovery permissions
+  DISCOVERY_SEARCH = 'discovery_search',
+  DISCOVERY_UNLOCK = 'discovery_unlock',
+  DISCOVERY_EXPORT = 'discovery_export',
+  DISCOVERY_IMPORT = 'discovery_import',
 }
 
 /**

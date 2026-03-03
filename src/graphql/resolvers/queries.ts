@@ -30,6 +30,15 @@ import {
   myCreatorDeliverables,
   myCreatorProposal,
 } from './queries/creator-portal';
+import {
+  discoverySearch,
+  discoveryUnlocks,
+  discoveryExports,
+  savedSearches,
+  discoveryPricing,
+  discoveryEstimateCost,
+  discoveryDictionary,
+} from './queries/discovery';
 
 export const queryResolvers = {
   /**
@@ -1309,4 +1318,15 @@ export const queryResolvers = {
   myCreatorCampaigns,
   myCreatorDeliverables,
   myCreatorProposal,
+
+  // -----------------------------------------------
+  // Discovery Module Queries
+  // -----------------------------------------------
+  discoverySearch,
+  discoveryUnlocks,
+  discoveryExports,
+  savedSearches,
+  discoveryPricing,
+  discoveryEstimateCost,
+  discoveryDictionary,
 };

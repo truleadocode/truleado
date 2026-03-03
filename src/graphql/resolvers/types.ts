@@ -781,6 +781,7 @@ export const typeResolvers = {
     tiktokHandle: (parent: { tiktok_handle: string | null }) => parent.tiktok_handle,
     facebookHandle: (parent: { facebook_handle: string | null }) => parent.facebook_handle,
     linkedinHandle: (parent: { linkedin_handle: string | null }) => parent.linkedin_handle,
+    profilePictureUrl: (parent: { profile_picture_url: string | null }) => parent.profile_picture_url,
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     updatedAt: (parent: { updated_at: string }) => parent.updated_at,

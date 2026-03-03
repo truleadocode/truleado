@@ -423,6 +423,10 @@ export interface Database {
           tiktok_handle: string | null;
           notes: string | null;
           is_active: boolean;
+          profile_picture_url: string | null;
+          discovery_source: string | null;
+          onsocial_user_id: string | null;
+          discovery_imported_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -437,6 +441,10 @@ export interface Database {
           tiktok_handle?: string | null;
           notes?: string | null;
           is_active?: boolean;
+          profile_picture_url?: string | null;
+          discovery_source?: string | null;
+          onsocial_user_id?: string | null;
+          discovery_imported_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -451,6 +459,10 @@ export interface Database {
           tiktok_handle?: string | null;
           notes?: string | null;
           is_active?: boolean;
+          profile_picture_url?: string | null;
+          discovery_source?: string | null;
+          onsocial_user_id?: string | null;
+          discovery_imported_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -1013,6 +1025,182 @@ export interface Database {
           engagement_rate_delta?: number | null;
           last_refreshed_at?: string;
           snapshot_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      // ---------------------------------------------------------------
+      // Creator Discovery Module
+      // ---------------------------------------------------------------
+      token_pricing_config: {
+        Row: {
+          id: string;
+          provider: string;
+          action: string;
+          token_type: string;
+          provider_cost: number;
+          internal_cost: number;
+          agency_id: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          provider: string;
+          action: string;
+          token_type?: string;
+          provider_cost: number;
+          internal_cost: number;
+          agency_id?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          provider?: string;
+          action?: string;
+          token_type?: string;
+          provider_cost?: number;
+          internal_cost?: number;
+          agency_id?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      discovery_unlocks: {
+        Row: {
+          id: string;
+          agency_id: string;
+          platform: string;
+          onsocial_user_id: string;
+          search_result_id: string;
+          username: string | null;
+          fullname: string | null;
+          profile_data: Json | null;
+          tokens_spent: number;
+          unlocked_by: string;
+          unlocked_at: string;
+          expires_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agency_id: string;
+          platform: string;
+          onsocial_user_id: string;
+          search_result_id: string;
+          username?: string | null;
+          fullname?: string | null;
+          profile_data?: Json | null;
+          tokens_spent?: number;
+          unlocked_by: string;
+          unlocked_at?: string;
+          expires_at?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          agency_id?: string;
+          platform?: string;
+          onsocial_user_id?: string;
+          search_result_id?: string;
+          username?: string | null;
+          fullname?: string | null;
+          profile_data?: Json | null;
+          tokens_spent?: number;
+          unlocked_by?: string;
+          unlocked_at?: string;
+          expires_at?: string;
+          created_at?: string;
+        };
+      };
+      discovery_exports: {
+        Row: {
+          id: string;
+          agency_id: string;
+          platform: string;
+          export_type: string;
+          filter_snapshot: Json;
+          total_accounts: number;
+          tokens_spent: number;
+          onsocial_export_id: string | null;
+          status: string;
+          download_url: string | null;
+          error_message: string | null;
+          exported_by: string;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          agency_id: string;
+          platform: string;
+          export_type: string;
+          filter_snapshot: Json;
+          total_accounts?: number;
+          tokens_spent?: number;
+          onsocial_export_id?: string | null;
+          status?: string;
+          download_url?: string | null;
+          error_message?: string | null;
+          exported_by: string;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          agency_id?: string;
+          platform?: string;
+          export_type?: string;
+          filter_snapshot?: Json;
+          total_accounts?: number;
+          tokens_spent?: number;
+          onsocial_export_id?: string | null;
+          status?: string;
+          download_url?: string | null;
+          error_message?: string | null;
+          exported_by?: string;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+      };
+      saved_searches: {
+        Row: {
+          id: string;
+          agency_id: string;
+          name: string;
+          platform: string;
+          filters: Json;
+          sort_field: string | null;
+          sort_order: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          agency_id: string;
+          name: string;
+          platform: string;
+          filters: Json;
+          sort_field?: string | null;
+          sort_order?: string | null;
+          created_by: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          agency_id?: string;
+          name?: string;
+          platform?: string;
+          filters?: Json;
+          sort_field?: string | null;
+          sort_order?: string | null;
+          created_by?: string;
           created_at?: string;
           updated_at?: string;
         };

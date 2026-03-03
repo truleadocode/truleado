@@ -1158,6 +1158,114 @@ export const queries = {
       }
     }
   `,
+
+  // Discovery Module
+  discoverySearch: `
+    query DiscoverySearch($agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON!, $sort: JSON, $skip: Int, $limit: Int) {
+      discoverySearch(agencyId: $agencyId, platform: $platform, filters: $filters, sort: $sort, skip: $skip, limit: $limit) {
+        accounts {
+          userId
+          username
+          fullname
+          followers
+          engagementRate
+          engagements
+          avgViews
+          isVerified
+          picture
+          url
+          searchResultId
+          isHidden
+          platform
+        }
+        total
+      }
+    }
+  `,
+
+  discoveryUnlocks: `
+    query DiscoveryUnlocks($agencyId: ID!, $platform: DiscoveryPlatform, $limit: Int, $offset: Int) {
+      discoveryUnlocks(agencyId: $agencyId, platform: $platform, limit: $limit, offset: $offset) {
+        id
+        platform
+        onsocialUserId
+        searchResultId
+        username
+        fullname
+        profileData
+        tokensSpent
+        unlockedBy
+        unlockedAt
+        expiresAt
+      }
+    }
+  `,
+
+  discoveryExports: `
+    query DiscoveryExports($agencyId: ID!, $limit: Int, $offset: Int) {
+      discoveryExports(agencyId: $agencyId, limit: $limit, offset: $offset) {
+        id
+        platform
+        exportType
+        filterSnapshot
+        totalAccounts
+        tokensSpent
+        onsocialExportId
+        status
+        downloadUrl
+        exportedBy
+        createdAt
+        completedAt
+      }
+    }
+  `,
+
+  savedSearches: `
+    query SavedSearches($agencyId: ID!) {
+      savedSearches(agencyId: $agencyId) {
+        id
+        name
+        platform
+        filters
+        sortField
+        sortOrder
+        createdBy
+        createdAt
+        updatedAt
+      }
+    }
+  `,
+
+  discoveryPricing: `
+    query DiscoveryPricing($agencyId: ID!, $provider: String) {
+      discoveryPricing(agencyId: $agencyId, provider: $provider) {
+        id
+        provider
+        action
+        tokenType
+        providerCost
+        internalCost
+        isActive
+      }
+    }
+  `,
+
+  discoveryEstimateCost: `
+    query DiscoveryEstimateCost($agencyId: ID!, $action: String!, $count: Int!) {
+      discoveryEstimateCost(agencyId: $agencyId, action: $action, count: $count) {
+        unitCost
+        totalCost
+        currentBalance
+        sufficientBalance
+      }
+    }
+  `,
+
+  discoveryDictionary: `
+    query DiscoveryDictionary($type: String!, $query: String, $platform: DiscoveryPlatform) {
+      discoveryDictionary(type: $type, query: $query, platform: $platform)
+    }
+  `,
 };
 
 /**
@@ -1925,6 +2033,97 @@ export const mutations = {
         id
         status
         cancelledAt
+      }
+    }
+  `,
+
+  // Discovery Module
+  discoveryUnlock: `
+    mutation DiscoveryUnlock($agencyId: ID!, $platform: DiscoveryPlatform!, $searchResultIds: [String!]!, $withContact: Boolean) {
+      discoveryUnlock(agencyId: $agencyId, platform: $platform, searchResultIds: $searchResultIds, withContact: $withContact) {
+        id
+        platform
+        onsocialUserId
+        searchResultId
+        username
+        fullname
+        profileData
+        tokensSpent
+        unlockedBy
+        unlockedAt
+        expiresAt
+      }
+    }
+  `,
+
+  discoveryExport: `
+    mutation DiscoveryExport($agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON!, $sort: JSON, $exportType: DiscoveryExportType!, $limit: Int) {
+      discoveryExport(agencyId: $agencyId, platform: $platform, filters: $filters, sort: $sort, exportType: $exportType, limit: $limit) {
+        id
+        platform
+        exportType
+        filterSnapshot
+        totalAccounts
+        tokensSpent
+        onsocialExportId
+        status
+        downloadUrl
+        exportedBy
+        createdAt
+        completedAt
+      }
+    }
+  `,
+
+  discoveryImportToCreators: `
+    mutation DiscoveryImportToCreators($agencyId: ID!, $influencers: [DiscoveryImportInput!]!, $withContact: Boolean) {
+      discoveryImportToCreators(agencyId: $agencyId, influencers: $influencers, withContact: $withContact) {
+        id
+        displayName
+        email
+        phone
+        profilePictureUrl
+        instagramHandle
+        youtubeHandle
+        tiktokHandle
+        isActive
+      }
+    }
+  `,
+
+  saveDiscoverySearch: `
+    mutation SaveDiscoverySearch($agencyId: ID!, $name: String!, $platform: DiscoveryPlatform!, $filters: JSON!, $sortField: String, $sortOrder: String) {
+      saveDiscoverySearch(agencyId: $agencyId, name: $name, platform: $platform, filters: $filters, sortField: $sortField, sortOrder: $sortOrder) {
+        id
+        name
+        platform
+        filters
+        sortField
+        sortOrder
+        createdBy
+        createdAt
+      }
+    }
+  `,
+
+  deleteDiscoverySearch: `
+    mutation DeleteDiscoverySearch($id: ID!) {
+      deleteDiscoverySearch(id: $id)
+    }
+  `,
+
+  updateDiscoverySearch: `
+    mutation UpdateDiscoverySearch($id: ID!, $name: String, $filters: JSON, $sortField: String, $sortOrder: String) {
+      updateDiscoverySearch(id: $id, name: $name, filters: $filters, sortField: $sortField, sortOrder: $sortOrder) {
+        id
+        name
+        platform
+        filters
+        sortField
+        sortOrder
+        createdBy
+        createdAt
+        updatedAt
       }
     }
   `,
