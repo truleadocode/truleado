@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { ArrowLeft, UserCircle } from 'lucide-react'
+import { UserCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
@@ -105,13 +106,12 @@ export default function NewCreatorPage() {
       <Header title="Add Creator" subtitle="Add a new creator to your roster" />
 
       <div className="p-6 max-w-2xl">
-        <Link
-          href="/dashboard/creators"
-          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Creator Roster
-        </Link>
+        <div className="mb-6">
+          <PageBreadcrumb items={[
+            { label: 'Creators', href: '/dashboard/creators' },
+            { label: 'Add Creator' },
+          ]} />
+        </div>
 
         <Card>
           <CardHeader>
@@ -242,10 +242,10 @@ export default function NewCreatorPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes</Label>
-                <textarea
+                <Textarea
                   id="notes"
                   placeholder="Internal notes about this creator..."
-                  className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                  rows={4}
                   value={form.notes}
                   onChange={(e) => updateField('notes', e.target.value)}
                 />

@@ -5,7 +5,7 @@
  */
 
 import { createUser, ensureClientUser, ensureCreatorUser } from './user';
-import { createAgency, joinAgencyByCode, createClient, setAgencyUserRole, updateAgencyLocale } from './agency';
+import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
 import {
@@ -82,6 +82,16 @@ import {
   deleteDiscoverySearch,
   updateDiscoverySearch,
 } from './discovery';
+import {
+  createContactNote,
+  updateContactNote,
+  deleteContactNote,
+  createContactInteraction,
+  deleteContactInteraction,
+  createContactReminder,
+  dismissContactReminder,
+  deleteContactReminder,
+} from './contact-detail';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -93,6 +103,11 @@ export const mutationResolvers = {
   joinAgencyByCode,
   updateAgencyLocale,
   createClient,
+  updateClient,
+  archiveClient,
+  createClientNote,
+  updateClientNote,
+  deleteClientNote,
   createContact,
   updateContact,
   deleteContact,
@@ -188,4 +203,14 @@ export const mutationResolvers = {
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
+
+  // Contact Detail
+  createContactNote,
+  updateContactNote,
+  deleteContactNote,
+  createContactInteraction,
+  deleteContactInteraction,
+  createContactReminder,
+  dismissContactReminder,
+  deleteContactReminder,
 };

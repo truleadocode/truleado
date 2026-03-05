@@ -8,6 +8,7 @@ import {
   requireAuth,
   requireAgencyMembership,
   requireAgencyRole,
+  requireClientAccess,
   AgencyRole,
   Permission,
 } from '@/lib/rbac';
@@ -214,10 +215,44 @@ export async function createClient(
     agencyId,
     name,
     accountManagerId: accountManagerIdInput,
+    industry,
+    websiteUrl,
+    country,
+    logoUrl,
+    description,
+    clientStatus,
+    clientSince,
+    currency,
+    paymentTerms,
+    billingEmail,
+    taxNumber,
+    instagramHandle,
+    youtubeUrl,
+    tiktokHandle,
+    linkedinUrl,
+    source,
+    internalNotes,
   }: {
     agencyId: string;
     name: string;
     accountManagerId?: string | null;
+    industry?: string | null;
+    websiteUrl?: string | null;
+    country?: string | null;
+    logoUrl?: string | null;
+    description?: string | null;
+    clientStatus?: string | null;
+    clientSince?: string | null;
+    currency?: string | null;
+    paymentTerms?: string | null;
+    billingEmail?: string | null;
+    taxNumber?: string | null;
+    instagramHandle?: string | null;
+    youtubeUrl?: string | null;
+    tiktokHandle?: string | null;
+    linkedinUrl?: string | null;
+    source?: string | null;
+    internalNotes?: string | null;
   },
   ctx: GraphQLContext
 ) {
@@ -288,6 +323,23 @@ export async function createClient(
       name: name.trim(),
       account_manager_id: accountManagerId,
       is_active: true,
+      industry: industry?.trim() || null,
+      website_url: websiteUrl?.trim() || null,
+      country: country?.trim() || null,
+      logo_url: logoUrl?.trim() || null,
+      description: description?.trim() || null,
+      client_status: clientStatus?.trim() || 'active',
+      client_since: clientSince || null,
+      currency: currency?.trim() || null,
+      payment_terms: paymentTerms?.trim() || null,
+      billing_email: billingEmail?.trim() || null,
+      tax_number: taxNumber?.trim() || null,
+      instagram_handle: instagramHandle?.trim() || null,
+      youtube_url: youtubeUrl?.trim() || null,
+      tiktok_handle: tiktokHandle?.trim() || null,
+      linkedin_url: linkedinUrl?.trim() || null,
+      source: source?.trim() || null,
+      internal_notes: internalNotes?.trim() || null,
     })
     .select()
     .single();
@@ -307,6 +359,232 @@ export async function createClient(
   });
 
   return client;
+}
+
+/**
+ * Update an existing client
+ */
+export async function updateClient(
+  _: unknown,
+  args: {
+    id: string;
+    name?: string | null;
+    clientStatus?: string | null;
+    logoUrl?: string | null;
+    industry?: string | null;
+    websiteUrl?: string | null;
+    country?: string | null;
+    description?: string | null;
+    clientSince?: string | null;
+    currency?: string | null;
+    paymentTerms?: string | null;
+    billingEmail?: string | null;
+    taxNumber?: string | null;
+    instagramHandle?: string | null;
+    youtubeUrl?: string | null;
+    tiktokHandle?: string | null;
+    linkedinUrl?: string | null;
+    source?: string | null;
+    internalNotes?: string | null;
+    accountManagerId?: string | null;
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  await requireClientAccess(ctx, args.id);
+
+  // Get agency ID from client
+  const { data: existing } = await supabaseAdmin
+    .from('clients')
+    .select('agency_id')
+    .eq('id', args.id)
+    .single();
+  if (!existing) throw notFoundError('Client', args.id);
+
+  requireAgencyRole(ctx, existing.agency_id, [AgencyRole.AGENCY_ADMIN, AgencyRole.ACCOUNT_MANAGER]);
+
+  const updates: Record<string, unknown> = {};
+  if (args.name !== undefined) updates.name = args.name?.trim() || undefined;
+  if (args.clientStatus !== undefined) updates.client_status = args.clientStatus?.trim() || null;
+  if (args.logoUrl !== undefined) updates.logo_url = args.logoUrl?.trim() || null;
+  if (args.industry !== undefined) updates.industry = args.industry?.trim() || null;
+  if (args.websiteUrl !== undefined) updates.website_url = args.websiteUrl?.trim() || null;
+  if (args.country !== undefined) updates.country = args.country?.trim() || null;
+  if (args.description !== undefined) updates.description = args.description?.trim() || null;
+  if (args.clientSince !== undefined) updates.client_since = args.clientSince || null;
+  if (args.currency !== undefined) updates.currency = args.currency?.trim() || null;
+  if (args.paymentTerms !== undefined) updates.payment_terms = args.paymentTerms?.trim() || null;
+  if (args.billingEmail !== undefined) updates.billing_email = args.billingEmail?.trim() || null;
+  if (args.taxNumber !== undefined) updates.tax_number = args.taxNumber?.trim() || null;
+  if (args.instagramHandle !== undefined) updates.instagram_handle = args.instagramHandle?.trim() || null;
+  if (args.youtubeUrl !== undefined) updates.youtube_url = args.youtubeUrl?.trim() || null;
+  if (args.tiktokHandle !== undefined) updates.tiktok_handle = args.tiktokHandle?.trim() || null;
+  if (args.linkedinUrl !== undefined) updates.linkedin_url = args.linkedinUrl?.trim() || null;
+  if (args.source !== undefined) updates.source = args.source?.trim() || null;
+  if (args.internalNotes !== undefined) updates.internal_notes = args.internalNotes?.trim() || null;
+  if (args.accountManagerId !== undefined) updates.account_manager_id = args.accountManagerId || null;
+
+  if (Object.keys(updates).length === 0) {
+    const { data } = await supabaseAdmin.from('clients').select('*').eq('id', args.id).single();
+    return data;
+  }
+
+  const { data: client, error } = await supabaseAdmin
+    .from('clients')
+    .update(updates)
+    .eq('id', args.id)
+    .select()
+    .single();
+
+  if (error || !client) throw new Error('Failed to update client');
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'client',
+    entityId: args.id,
+    action: 'updated',
+    actorId: user.id,
+    actorType: 'user',
+    afterState: updates,
+  });
+
+  return client;
+}
+
+/**
+ * Archive a client (set is_active = false)
+ */
+export async function archiveClient(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  await requireClientAccess(ctx, id);
+
+  const { data: existing } = await supabaseAdmin
+    .from('clients')
+    .select('agency_id')
+    .eq('id', id)
+    .single();
+  if (!existing) throw notFoundError('Client', id);
+
+  requireAgencyRole(ctx, existing.agency_id, [AgencyRole.AGENCY_ADMIN, AgencyRole.ACCOUNT_MANAGER]);
+
+  const { data: client, error } = await supabaseAdmin
+    .from('clients')
+    .update({ is_active: false })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !client) throw new Error('Failed to archive client');
+
+  await logActivity({
+    agencyId: existing.agency_id,
+    entityType: 'client',
+    entityId: id,
+    action: 'archived',
+    actorId: user.id,
+    actorType: 'user',
+  });
+
+  return client;
+}
+
+/**
+ * Create a client note
+ */
+export async function createClientNote(
+  _: unknown,
+  { clientId, message }: { clientId: string; message: string },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  await requireClientAccess(ctx, clientId);
+
+  const { data: client } = await supabaseAdmin
+    .from('clients')
+    .select('agency_id')
+    .eq('id', clientId)
+    .single();
+  if (!client) throw notFoundError('Client', clientId);
+
+  if (!message?.trim()) throw validationError('Message is required', 'message');
+
+  const { data: note, error } = await supabaseAdmin
+    .from('client_notes')
+    .insert({
+      client_id: clientId,
+      agency_id: client.agency_id,
+      message: message.trim(),
+      created_by: user.id,
+    })
+    .select()
+    .single();
+
+  if (error || !note) throw new Error('Failed to create note');
+  return note;
+}
+
+/**
+ * Update a client note (message and/or pin status)
+ */
+export async function updateClientNote(
+  _: unknown,
+  { id, message, isPinned }: { id: string; message?: string | null; isPinned?: boolean | null },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: existing } = await supabaseAdmin
+    .from('client_notes')
+    .select('client_id')
+    .eq('id', id)
+    .single();
+  if (!existing) throw notFoundError('ClientNote', id);
+  await requireClientAccess(ctx, existing.client_id);
+
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (message !== undefined && message !== null) updates.message = message.trim();
+  if (isPinned !== undefined && isPinned !== null) updates.is_pinned = isPinned;
+
+  const { data: note, error } = await supabaseAdmin
+    .from('client_notes')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !note) throw new Error('Failed to update note');
+  return note;
+}
+
+/**
+ * Delete a client note
+ */
+export async function deleteClientNote(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: existing } = await supabaseAdmin
+    .from('client_notes')
+    .select('client_id')
+    .eq('id', id)
+    .single();
+  if (!existing) throw notFoundError('ClientNote', id);
+  await requireClientAccess(ctx, existing.client_id);
+
+  const { error } = await supabaseAdmin
+    .from('client_notes')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error('Failed to delete note');
+  return true;
 }
 
 const AGENCY_ROLES = [

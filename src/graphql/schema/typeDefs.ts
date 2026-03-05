@@ -181,6 +181,23 @@ export const typeDefs = gql`
     name: String!
     accountManager: User!
     isActive: Boolean!
+    industry: String
+    websiteUrl: String
+    country: String
+    logoUrl: String
+    description: String
+    clientStatus: String
+    clientSince: String
+    currency: String
+    paymentTerms: String
+    billingEmail: String
+    taxNumber: String
+    instagramHandle: String
+    youtubeUrl: String
+    tiktokHandle: String
+    linkedinUrl: String
+    source: String
+    internalNotes: String
     projects: [Project!]!
     contacts: [Contact!]!
     clientApprovers: [Contact!]!
@@ -203,9 +220,65 @@ export const typeDefs = gql`
     department: String
     notes: String
     isClientApprover: Boolean!
+    profilePhotoUrl: String
+    jobTitle: String
+    isPrimaryContact: Boolean!
+    linkedinUrl: String
+    preferredChannel: String
+    contactType: String
+    contactStatus: String
+    notificationPreference: String
+    birthday: String
     user: User
     createdAt: DateTime!
     updatedAt: DateTime!
+  }
+
+  # 4.4a Client Note
+  type ClientNote {
+    id: ID!
+    client: Client!
+    message: String!
+    isPinned: Boolean!
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # 4.4b Contact Note
+  type ContactNote {
+    id: ID!
+    contact: Contact!
+    message: String!
+    isPinned: Boolean!
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # 4.4c Contact Interaction
+  type ContactInteraction {
+    id: ID!
+    contact: Contact!
+    interactionType: String!
+    interactionDate: DateTime!
+    note: String
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # 4.4d Contact Reminder
+  type ContactReminder {
+    id: ID!
+    contact: Contact!
+    reminderType: String!
+    reminderDate: DateTime!
+    note: String
+    isDismissed: Boolean!
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
   }
 
   # 4.4 Project
@@ -1039,6 +1112,20 @@ export const typeDefs = gql`
     deliverables(campaignId: ID!): [Deliverable!]!
     creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     
+    # Client notes (agency-scoped)
+    clientNotes(clientId: ID!): [ClientNote!]!
+
+    # Client activity feed (aggregated from projects/campaigns)
+    clientActivityFeed(clientId: ID!, limit: Int): [ActivityLog!]!
+
+    # Client files (aggregated from campaign attachments)
+    clientFiles(clientId: ID!): [CampaignAttachment!]!
+
+    # Contact detail queries
+    contactNotes(contactId: ID!): [ContactNote!]!
+    contactInteractions(contactId: ID!, limit: Int): [ContactInteraction!]!
+    contactReminders(contactId: ID!): [ContactReminder!]!
+
     # Notifications for current user
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
     # Agency email (SMTP) config for notifications (agency members; password never returned)
@@ -1182,8 +1269,75 @@ export const typeDefs = gql`
     joinAgencyByCode(agencyCode: String!): Agency!
     
     # Create a client under an agency (Account Manager can omit accountManagerId to become owner)
-    createClient(agencyId: ID!, name: String!, accountManagerId: ID): Client!
+    createClient(
+      agencyId: ID!
+      name: String!
+      accountManagerId: ID
+      industry: String
+      websiteUrl: String
+      country: String
+      logoUrl: String
+      description: String
+      clientStatus: String
+      clientSince: String
+      currency: String
+      paymentTerms: String
+      billingEmail: String
+      taxNumber: String
+      instagramHandle: String
+      youtubeUrl: String
+      tiktokHandle: String
+      linkedinUrl: String
+      source: String
+      internalNotes: String
+    ): Client!
     
+    # Update a client (all fields optional except id)
+    updateClient(
+      id: ID!
+      name: String
+      clientStatus: String
+      logoUrl: String
+      industry: String
+      websiteUrl: String
+      country: String
+      description: String
+      clientSince: String
+      currency: String
+      paymentTerms: String
+      billingEmail: String
+      taxNumber: String
+      instagramHandle: String
+      youtubeUrl: String
+      tiktokHandle: String
+      linkedinUrl: String
+      source: String
+      internalNotes: String
+      accountManagerId: ID
+    ): Client!
+
+    # Archive a client (set is_active = false)
+    archiveClient(id: ID!): Client!
+
+    # Client notes CRUD
+    createClientNote(clientId: ID!, message: String!): ClientNote!
+    updateClientNote(id: ID!, message: String, isPinned: Boolean): ClientNote!
+    deleteClientNote(id: ID!): Boolean!
+
+    # Contact notes CRUD
+    createContactNote(contactId: ID!, message: String!): ContactNote!
+    updateContactNote(id: ID!, message: String, isPinned: Boolean): ContactNote!
+    deleteContactNote(id: ID!): Boolean!
+
+    # Contact interactions
+    createContactInteraction(contactId: ID!, interactionType: String!, interactionDate: DateTime, note: String): ContactInteraction!
+    deleteContactInteraction(id: ID!): Boolean!
+
+    # Contact reminders
+    createContactReminder(contactId: ID!, reminderType: String, reminderDate: DateTime!, note: String): ContactReminder!
+    dismissContactReminder(id: ID!): ContactReminder!
+    deleteContactReminder(id: ID!): Boolean!
+
     # Create/update/delete contacts (Phase 3)
     createContact(
       clientId: ID!
@@ -1199,6 +1353,15 @@ export const typeDefs = gql`
       notes: String
       isClientApprover: Boolean
       userId: ID
+      profilePhotoUrl: String
+      jobTitle: String
+      isPrimaryContact: Boolean
+      linkedinUrl: String
+      preferredChannel: String
+      contactType: String
+      contactStatus: String
+      notificationPreference: String
+      birthday: String
     ): Contact!
     updateContact(
       id: ID!
@@ -1214,6 +1377,15 @@ export const typeDefs = gql`
       notes: String
       isClientApprover: Boolean
       userId: ID
+      profilePhotoUrl: String
+      jobTitle: String
+      isPrimaryContact: Boolean
+      linkedinUrl: String
+      preferredChannel: String
+      contactType: String
+      contactStatus: String
+      notificationPreference: String
+      birthday: String
     ): Contact!
     deleteContact(id: ID!): Boolean!
     # Save agency email (SMTP) config; agency_admin only. Creates/updates Novu integration.

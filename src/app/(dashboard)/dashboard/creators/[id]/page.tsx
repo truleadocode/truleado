@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   MoreHorizontal,
   Instagram,
   Youtube,
@@ -17,7 +16,6 @@ import {
   Mail,
   Phone,
   StickyNote,
-  Sparkles,
   ExternalLink,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -41,6 +39,9 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Header } from '@/components/layout/header'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 import { useSocialFetch } from '@/hooks/use-social-fetch'
@@ -477,13 +478,10 @@ export default function CreatorDetailPage() {
 
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
-          <Link
-            href="/dashboard/creators"
-            className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Creator Roster
-          </Link>
+          <PageBreadcrumb items={[
+            { label: 'Creators', href: '/dashboard/creators' },
+            { label: creator.displayName },
+          ]} />
 
           <div className="flex items-center gap-3">
             {!creator.isActive && (
@@ -543,13 +541,7 @@ export default function CreatorDetailPage() {
                 <div>
                   <div className="flex items-center gap-3">
                     <h2 className="text-xl font-semibold">{creator.displayName}</h2>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                        creator.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {creator.isActive ? 'Active' : 'Inactive'}
-                    </span>
+                    <StatusBadge status={creator.isActive ? 'active' : 'inactive'} />
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     {creator.instagramHandle ? `@${creator.instagramHandle}` : 'No Instagram handle'}
@@ -634,315 +626,217 @@ export default function CreatorDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Tab Bar */}
-        {hasSocialTabs && (
-          <div className="flex items-center gap-1 border-b pb-px">
-            <Button
-              variant={activeTab === 'dashboard' ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setActiveTab('dashboard')}
-              className="gap-2"
-            >
-              <LayoutDashboard className="h-4 w-4" />
+        {/* Social Tabs */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as Tab)} className="w-full">
+          <TabsList>
+            <TabsTrigger value="dashboard">
+              <LayoutDashboard className="mr-2 h-4 w-4" />
               Dashboard
-            </Button>
+            </TabsTrigger>
             {hasInstagram && (
-              <Button
-                variant={activeTab === 'instagram' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('instagram')}
-                className="gap-2"
-              >
-                <Instagram className="h-4 w-4" />
+              <TabsTrigger value="instagram">
+                <Instagram className="mr-2 h-4 w-4" />
                 Instagram
-              </Button>
+              </TabsTrigger>
             )}
             {hasYouTube && (
-              <Button
-                variant={activeTab === 'youtube' ? 'secondary' : 'ghost'}
-                size="sm"
-                onClick={() => setActiveTab('youtube')}
-                className="gap-2"
-              >
-                <Youtube className="h-4 w-4" />
+              <TabsTrigger value="youtube">
+                <Youtube className="mr-2 h-4 w-4" />
                 YouTube
-              </Button>
+              </TabsTrigger>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="gap-2 opacity-60"
-            >
-              <Music2 className="h-4 w-4" />
+            <TabsTrigger value="tiktok" disabled className="opacity-60">
+              <Music2 className="mr-2 h-4 w-4" />
               TikTok
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
-                Coming Soon
-              </Badge>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="gap-2 opacity-60"
-            >
-              <Facebook className="h-4 w-4" />
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="facebook" disabled className="opacity-60">
+              <Facebook className="mr-2 h-4 w-4" />
               Facebook
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
-                Coming Soon
-              </Badge>
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled
-              className="gap-2 opacity-60"
-            >
-              <Linkedin className="h-4 w-4" />
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="linkedin" disabled className="opacity-60">
+              <Linkedin className="mr-2 h-4 w-4" />
               LinkedIn
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">
-                Coming Soon
-              </Badge>
-            </Button>
-          </div>
-        )}
+              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Tab Content */}
-        {activeTab === 'dashboard' && (
-          <SocialDashboardTab creator={creator} profiles={socialProfiles} />
-        )}
+          <TabsContent value="dashboard">
+            <SocialDashboardTab creator={creator} profiles={socialProfiles} />
+          </TabsContent>
 
-        {activeTab === 'instagram' && hasInstagram && (
-          <InstagramTab
-            profile={igProfile}
-            posts={instagramPosts}
-            loading={socialLoading}
-            onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
-            fetching={isPollingPlatform('instagram')}
-          />
-        )}
+          {hasInstagram && (
+            <TabsContent value="instagram">
+              <InstagramTab
+                profile={igProfile}
+                posts={instagramPosts}
+                loading={socialLoading}
+                onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
+                fetching={isPollingPlatform('instagram')}
+              />
+            </TabsContent>
+          )}
 
-        {activeTab === 'youtube' && hasYouTube && (
-          <YouTubeTab
-            profile={ytProfile}
-            posts={youtubePosts}
-            loading={socialLoading}
-            onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
-            fetching={isPollingPlatform('youtube')}
-          />
-        )}
-
-        {/* Fallback: if no social tabs, show dashboard content directly */}
-        {!hasSocialTabs && (
-          <SocialDashboardTab creator={creator} profiles={[]} />
-        )}
+          {hasYouTube && (
+            <TabsContent value="youtube">
+              <YouTubeTab
+                profile={ytProfile}
+                posts={youtubePosts}
+                loading={socialLoading}
+                onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
+                fetching={isPollingPlatform('youtube')}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
       </div>
 
       {/* Edit Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-2xl p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <div className="px-6 pt-6 pb-5 bg-gradient-to-br from-purple-600/10 via-pink-600/10 to-transparent border-b">
-              <div className="flex items-start gap-4">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-sm">
-                  <Sparkles className="h-6 w-6 text-white" />
-                </div>
-                <div className="flex-1">
-                  <DialogTitle className="text-xl tracking-tight">Edit Creator Profile</DialogTitle>
-                  <DialogDescription className="mt-1">
-                    Update identity, contact info, and social handles. Handles can be entered with or without <span className="font-medium">@</span>.
-                  </DialogDescription>
-                </div>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
+                <UserCircle className="h-5 w-5 text-purple-600" />
+              </div>
+              <div>
+                <DialogTitle>Edit Creator Profile</DialogTitle>
+                <DialogDescription>
+                  Update identity, contact info, and social handles.
+                </DialogDescription>
               </div>
             </div>
           </DialogHeader>
-          <div className="px-6 py-6 space-y-6">
-            <div className="flex items-center gap-2 border-b pb-3">
-              <Button
-                type="button"
-                variant={editTab === 'profile' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setEditTab('profile')}
-              >
-                Profile
-              </Button>
-              <Button
-                type="button"
-                variant={editTab === 'rates' ? 'default' : 'ghost'}
-                size="sm"
-                onClick={() => setEditTab('rates')}
-              >
-                Rates
-              </Button>
-            </div>
 
-            {editTab === 'profile' && (
-              <>
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
-                    <UserCircle className="h-4 w-4" />
-                    Identity
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-displayName">Display Name *</Label>
-                      <div className="relative">
-                        <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-displayName"
-                          className="pl-9"
-                          value={editForm.displayName}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-notes">Notes</Label>
-                      <div className="relative">
-                        <StickyNote className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <textarea
-                          id="edit-notes"
-                          className="flex min-h-[42px] w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                          value={editForm.notes}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
+          <Tabs value={editTab} onValueChange={(v) => setEditTab(v as 'profile' | 'rates')} className="mt-2">
+            <TabsList>
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="rates">Rates</TabsTrigger>
+            </TabsList>
 
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase mb-4">
-                    <Mail className="h-4 w-4" />
-                    Contact
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-email">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-email"
-                          type="email"
-                          className="pl-9"
-                          value={editForm.email}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-phone">Phone</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-phone"
-                          type="tel"
-                          className="pl-9"
-                          value={editForm.phone}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border bg-card p-4">
-                  <div className="flex items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                      <AtSign className="h-4 w-4" />
-                      Social Handles
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      Instagram + TikTok prefer usernames, YouTube can be channel name.
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-instagram">Instagram</Label>
-                      <div className="relative">
-                        <Instagram className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-instagram"
-                          className="pl-9"
-                          value={editForm.instagramHandle}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-youtube">YouTube</Label>
-                      <div className="relative">
-                        <Youtube className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-youtube"
-                          className="pl-9"
-                          value={editForm.youtubeHandle}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-tiktok">TikTok</Label>
-                      <div className="relative">
-                        <Music2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-tiktok"
-                          className="pl-9"
-                          value={editForm.tiktokHandle}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-facebook">Facebook</Label>
-                      <div className="relative">
-                        <Facebook className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-facebook"
-                          className="pl-9"
-                          value={editForm.facebookHandle}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="edit-linkedin">LinkedIn</Label>
-                      <div className="relative">
-                        <Linkedin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="edit-linkedin"
-                          className="pl-9"
-                          value={editForm.linkedinHandle}
-                          onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {editTab === 'rates' && (
-              <div className="rounded-xl border bg-card p-4 space-y-3">
+            <TabsContent value="profile" className="space-y-6 mt-4">
+              <div className="space-y-4">
                 <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <LayoutDashboard className="h-4 w-4" />
-                  Rates
+                  <UserCircle className="h-3.5 w-3.5" />
+                  Identity
                 </div>
-                <CreatorRatesForm
-                  rates={editRates}
-                  onChange={setEditRates}
-                  currencyCode={currentAgency?.currencyCode || 'USD'}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-displayName">Display Name *</Label>
+                    <Input
+                      id="edit-displayName"
+                      value={editForm.displayName}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, displayName: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-notes">Notes</Label>
+                    <Input
+                      id="edit-notes"
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, notes: e.target.value }))}
+                    />
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-          <DialogFooter>
-            <div className="w-full px-6 pb-6 flex items-center justify-between">
-              <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveEdit} disabled={saving} className="shadow-sm">
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <Mail className="h-3.5 w-3.5" />
+                  Contact
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-email">Email</Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      value={editForm.email}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-phone">Phone</Label>
+                    <Input
+                      id="edit-phone"
+                      type="tel"
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, phone: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <AtSign className="h-3.5 w-3.5" />
+                    Social Handles
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    Instagram + TikTok prefer usernames, YouTube can be channel name.
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-instagram">Instagram</Label>
+                    <Input
+                      id="edit-instagram"
+                      value={editForm.instagramHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, instagramHandle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-youtube">YouTube</Label>
+                    <Input
+                      id="edit-youtube"
+                      value={editForm.youtubeHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, youtubeHandle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-tiktok">TikTok</Label>
+                    <Input
+                      id="edit-tiktok"
+                      value={editForm.tiktokHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, tiktokHandle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-facebook">Facebook</Label>
+                    <Input
+                      id="edit-facebook"
+                      value={editForm.facebookHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, facebookHandle: e.target.value }))}
+                    />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="edit-linkedin">LinkedIn</Label>
+                    <Input
+                      id="edit-linkedin"
+                      value={editForm.linkedinHandle}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, linkedinHandle: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="rates" className="mt-4">
+              <CreatorRatesForm
+                rates={editRates}
+                onChange={setEditRates}
+                currencyCode={currentAgency?.currencyCode || 'USD'}
+              />
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="flex items-center justify-between sm:justify-between">
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

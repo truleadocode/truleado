@@ -1329,4 +1329,175 @@ export const queryResolvers = {
   discoveryPricing,
   discoveryEstimateCost,
   discoveryDictionary,
+
+  // -----------------------------------------------
+  // Client Detail Queries
+  // -----------------------------------------------
+
+  clientNotes: async (
+    _: unknown,
+    { clientId }: { clientId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireClientAccess(ctx, clientId);
+
+    const { data, error } = await supabaseAdmin
+      .from('client_notes')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch client notes');
+    return data || [];
+  },
+
+  clientActivityFeed: async (
+    _: unknown,
+    { clientId, limit }: { clientId: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    await requireClientAccess(ctx, clientId);
+
+    // Get all project IDs for this client
+    const { data: projects } = await supabaseAdmin
+      .from('projects')
+      .select('id')
+      .eq('client_id', clientId);
+    const projectIds = (projects || []).map((p: { id: string }) => p.id);
+
+    if (projectIds.length === 0) return [];
+
+    // Get all campaign IDs for these projects
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id')
+      .in('project_id', projectIds);
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+
+    // Fetch activity logs for projects and campaigns
+    const entityIds = [...projectIds, ...campaignIds, clientId];
+    const { data, error } = await supabaseAdmin
+      .from('activity_logs')
+      .select('*')
+      .in('entity_id', entityIds)
+      .order('created_at', { ascending: false })
+      .limit(limit || 10);
+
+    if (error) throw new Error('Failed to fetch activity feed');
+    return data || [];
+  },
+
+  clientFiles: async (
+    _: unknown,
+    { clientId }: { clientId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireClientAccess(ctx, clientId);
+
+    // Get campaign IDs for this client via projects
+    const { data: projects } = await supabaseAdmin
+      .from('projects')
+      .select('id')
+      .eq('client_id', clientId);
+    const projectIds = (projects || []).map((p: { id: string }) => p.id);
+
+    if (projectIds.length === 0) return [];
+
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id')
+      .in('project_id', projectIds);
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+
+    if (campaignIds.length === 0) return [];
+
+    const { data, error } = await supabaseAdmin
+      .from('campaign_attachments')
+      .select('*')
+      .in('campaign_id', campaignIds)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch client files');
+    return data || [];
+  },
+
+  // -----------------------------------------------
+  // Contact Detail Queries
+  // -----------------------------------------------
+
+  contactNotes: async (
+    _: unknown,
+    { contactId }: { contactId: string },
+    ctx: GraphQLContext
+  ) => {
+    // Auth: contact → client → requireClientAccess
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('client_id')
+      .eq('id', contactId)
+      .single();
+    if (!contact) throw new Error('Contact not found');
+    await requireClientAccess(ctx, contact.client_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('contact_notes')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch contact notes');
+    return data || [];
+  },
+
+  contactInteractions: async (
+    _: unknown,
+    { contactId, limit }: { contactId: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('client_id')
+      .eq('id', contactId)
+      .single();
+    if (!contact) throw new Error('Contact not found');
+    await requireClientAccess(ctx, contact.client_id);
+
+    let query = supabaseAdmin
+      .from('contact_interactions')
+      .select('*')
+      .eq('contact_id', contactId)
+      .order('interaction_date', { ascending: false });
+
+    if (limit) query = query.limit(limit);
+
+    const { data, error } = await query;
+    if (error) throw new Error('Failed to fetch contact interactions');
+    return data || [];
+  },
+
+  contactReminders: async (
+    _: unknown,
+    { contactId }: { contactId: string },
+    ctx: GraphQLContext
+  ) => {
+    const { data: contact } = await supabaseAdmin
+      .from('contacts')
+      .select('client_id')
+      .eq('id', contactId)
+      .single();
+    if (!contact) throw new Error('Contact not found');
+    await requireClientAccess(ctx, contact.client_id);
+
+    const { data, error } = await supabaseAdmin
+      .from('contact_reminders')
+      .select('*')
+      .eq('contact_id', contactId)
+      .eq('is_dismissed', false)
+      .order('reminder_date', { ascending: true });
+
+    if (error) throw new Error('Failed to fetch contact reminders');
+    return data || [];
+  },
 };

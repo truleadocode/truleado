@@ -134,6 +134,12 @@ export const queries = {
         id
         name
         isActive
+        industry
+        clientStatus
+        country
+        logoUrl
+        clientSince
+        currency
         createdAt
         accountManager {
           id
@@ -142,6 +148,11 @@ export const queries = {
         }
         projects {
           id
+          isArchived
+          campaigns {
+            id
+            totalBudget
+          }
         }
       }
     }
@@ -153,6 +164,23 @@ export const queries = {
         id
         name
         isActive
+        industry
+        websiteUrl
+        country
+        logoUrl
+        description
+        clientStatus
+        clientSince
+        currency
+        paymentTerms
+        billingEmail
+        taxNumber
+        instagramHandle
+        youtubeUrl
+        tiktokHandle
+        linkedinUrl
+        source
+        internalNotes
         createdAt
         accountManager {
           id
@@ -163,10 +191,24 @@ export const queries = {
           id
           name
           isArchived
+          startDate
+          endDate
+          projectUsers {
+            id
+            user { id name email }
+          }
           campaigns {
             id
             name
             status
+            campaignType
+            totalBudget
+            currency
+            startDate
+            endDate
+            creators {
+              id
+            }
           }
         }
         contacts {
@@ -182,12 +224,120 @@ export const queries = {
           department
           notes
           isClientApprover
+          profilePhotoUrl
+          jobTitle
+          isPrimaryContact
+          linkedinUrl
+          preferredChannel
+          contactType
+          contactStatus
+          notificationPreference
+          birthday
           createdAt
         }
       }
     }
   `,
   
+  contactDetail: `
+    query GetContactDetail($id: ID!) {
+      contact(id: $id) {
+        id
+        firstName
+        lastName
+        email
+        phone
+        mobile
+        officePhone
+        homePhone
+        address
+        department
+        notes
+        isClientApprover
+        profilePhotoUrl
+        jobTitle
+        isPrimaryContact
+        linkedinUrl
+        preferredChannel
+        contactType
+        contactStatus
+        notificationPreference
+        birthday
+        createdAt
+        updatedAt
+        client {
+          id
+          name
+          logoUrl
+          industry
+          clientStatus
+          country
+          projects {
+            id
+            name
+            campaigns {
+              id
+              name
+              status
+              campaignType
+              startDate
+              totalBudget
+            }
+          }
+          contacts {
+            id
+            firstName
+            lastName
+            profilePhotoUrl
+            jobTitle
+            contactType
+            isPrimaryContact
+          }
+        }
+      }
+    }
+  `,
+
+  contactNotes: `
+    query GetContactNotes($contactId: ID!) {
+      contactNotes(contactId: $contactId) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  contactInteractions: `
+    query GetContactInteractions($contactId: ID!, $limit: Int) {
+      contactInteractions(contactId: $contactId, limit: $limit) {
+        id
+        interactionType
+        interactionDate
+        note
+        createdBy { id name email }
+        createdAt
+      }
+    }
+  `,
+
+  contactReminders: `
+    query GetContactReminders($contactId: ID!) {
+      contactReminders(contactId: $contactId) {
+        id
+        reminderType
+        reminderDate
+        note
+        isDismissed
+        createdBy { id name email }
+        createdAt
+      }
+    }
+  `,
+
   contactsList: `
     query GetContactsList($agencyId: ID!, $clientId: ID, $department: String, $isClientApprover: Boolean) {
       contactsList(agencyId: $agencyId, clientId: $clientId, department: $department, isClientApprover: $isClientApprover) {
@@ -203,7 +353,16 @@ export const queries = {
         department
         notes
         isClientApprover
-        client { id name }
+        profilePhotoUrl
+        jobTitle
+        isPrimaryContact
+        linkedinUrl
+        preferredChannel
+        contactType
+        contactStatus
+        notificationPreference
+        birthday
+        client { id name logoUrl industry clientStatus }
         createdAt
         updatedAt
       }
@@ -1266,6 +1425,49 @@ export const queries = {
       discoveryDictionary(type: $type, query: $query, platform: $platform)
     }
   `,
+
+  // Client Detail
+  clientNotes: `
+    query GetClientNotes($clientId: ID!) {
+      clientNotes(clientId: $clientId) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  clientActivityFeed: `
+    query GetClientActivityFeed($clientId: ID!, $limit: Int) {
+      clientActivityFeed(clientId: $clientId, limit: $limit) {
+        id
+        action
+        entityType
+        entityId
+        metadata
+        actor { id name email }
+        createdAt
+      }
+    }
+  `,
+
+  clientFiles: `
+    query GetClientFiles($clientId: ID!) {
+      clientFiles(clientId: $clientId) {
+        id
+        fileName
+        fileUrl
+        fileSize
+        fileType
+        uploadedBy { id name email }
+        campaign { id name project { id name } }
+        createdAt
+      }
+    }
+  `,
 };
 
 /**
@@ -1295,8 +1497,50 @@ export const mutations = {
   `,
 
   createClient: `
-    mutation CreateClient($agencyId: ID!, $name: String!, $accountManagerId: ID!) {
-      createClient(agencyId: $agencyId, name: $name, accountManagerId: $accountManagerId) {
+    mutation CreateClient(
+      $agencyId: ID!
+      $name: String!
+      $accountManagerId: ID
+      $industry: String
+      $websiteUrl: String
+      $country: String
+      $logoUrl: String
+      $description: String
+      $clientStatus: String
+      $clientSince: String
+      $currency: String
+      $paymentTerms: String
+      $billingEmail: String
+      $taxNumber: String
+      $instagramHandle: String
+      $youtubeUrl: String
+      $tiktokHandle: String
+      $linkedinUrl: String
+      $source: String
+      $internalNotes: String
+    ) {
+      createClient(
+        agencyId: $agencyId
+        name: $name
+        accountManagerId: $accountManagerId
+        industry: $industry
+        websiteUrl: $websiteUrl
+        country: $country
+        logoUrl: $logoUrl
+        description: $description
+        clientStatus: $clientStatus
+        clientSince: $clientSince
+        currency: $currency
+        paymentTerms: $paymentTerms
+        billingEmail: $billingEmail
+        taxNumber: $taxNumber
+        instagramHandle: $instagramHandle
+        youtubeUrl: $youtubeUrl
+        tiktokHandle: $tiktokHandle
+        linkedinUrl: $linkedinUrl
+        source: $source
+        internalNotes: $internalNotes
+      ) {
         id
         name
         isActive
@@ -1327,36 +1571,130 @@ export const mutations = {
   `,
 
   createContact: `
-    mutation CreateContact($clientId: ID!, $firstName: String!, $lastName: String!, $email: String, $phone: String, $mobile: String, $officePhone: String, $homePhone: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
-      createContact(clientId: $clientId, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, mobile: $mobile, officePhone: $officePhone, homePhone: $homePhone, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+    mutation CreateContact(
+      $clientId: ID!
+      $firstName: String!
+      $lastName: String!
+      $email: String
+      $phone: String
+      $mobile: String
+      $officePhone: String
+      $homePhone: String
+      $address: String
+      $department: String
+      $notes: String
+      $isClientApprover: Boolean
+      $userId: ID
+      $profilePhotoUrl: String
+      $jobTitle: String
+      $isPrimaryContact: Boolean
+      $linkedinUrl: String
+      $preferredChannel: String
+      $contactType: String
+      $contactStatus: String
+      $notificationPreference: String
+      $birthday: String
+    ) {
+      createContact(
+        clientId: $clientId
+        firstName: $firstName
+        lastName: $lastName
+        email: $email
+        phone: $phone
+        mobile: $mobile
+        officePhone: $officePhone
+        homePhone: $homePhone
+        address: $address
+        department: $department
+        notes: $notes
+        isClientApprover: $isClientApprover
+        userId: $userId
+        profilePhotoUrl: $profilePhotoUrl
+        jobTitle: $jobTitle
+        isPrimaryContact: $isPrimaryContact
+        linkedinUrl: $linkedinUrl
+        preferredChannel: $preferredChannel
+        contactType: $contactType
+        contactStatus: $contactStatus
+        notificationPreference: $notificationPreference
+        birthday: $birthday
+      ) {
         id
         firstName
         lastName
         email
         phone
-        mobile
-        officePhone
-        homePhone
         department
+        jobTitle
+        contactType
+        contactStatus
         isClientApprover
+        isPrimaryContact
         createdAt
       }
     }
   `,
 
   updateContact: `
-    mutation UpdateContact($id: ID!, $firstName: String, $lastName: String, $email: String, $phone: String, $mobile: String, $officePhone: String, $homePhone: String, $address: String, $department: String, $notes: String, $isClientApprover: Boolean, $userId: ID) {
-      updateContact(id: $id, firstName: $firstName, lastName: $lastName, email: $email, phone: $phone, mobile: $mobile, officePhone: $officePhone, homePhone: $homePhone, address: $address, department: $department, notes: $notes, isClientApprover: $isClientApprover, userId: $userId) {
+    mutation UpdateContact(
+      $id: ID!
+      $firstName: String
+      $lastName: String
+      $email: String
+      $phone: String
+      $mobile: String
+      $officePhone: String
+      $homePhone: String
+      $address: String
+      $department: String
+      $notes: String
+      $isClientApprover: Boolean
+      $userId: ID
+      $profilePhotoUrl: String
+      $jobTitle: String
+      $isPrimaryContact: Boolean
+      $linkedinUrl: String
+      $preferredChannel: String
+      $contactType: String
+      $contactStatus: String
+      $notificationPreference: String
+      $birthday: String
+    ) {
+      updateContact(
+        id: $id
+        firstName: $firstName
+        lastName: $lastName
+        email: $email
+        phone: $phone
+        mobile: $mobile
+        officePhone: $officePhone
+        homePhone: $homePhone
+        address: $address
+        department: $department
+        notes: $notes
+        isClientApprover: $isClientApprover
+        userId: $userId
+        profilePhotoUrl: $profilePhotoUrl
+        jobTitle: $jobTitle
+        isPrimaryContact: $isPrimaryContact
+        linkedinUrl: $linkedinUrl
+        preferredChannel: $preferredChannel
+        contactType: $contactType
+        contactStatus: $contactStatus
+        notificationPreference: $notificationPreference
+        birthday: $birthday
+      ) {
         id
         firstName
         lastName
         email
         phone
-        mobile
-        officePhone
-        homePhone
         department
+        jobTitle
+        contactType
+        contactStatus
         isClientApprover
+        isPrimaryContact
         updatedAt
       }
     }
@@ -2125,6 +2463,158 @@ export const mutations = {
         createdAt
         updatedAt
       }
+    }
+  `,
+
+  // Client Detail — Mutations
+  updateClient: `
+    mutation UpdateClient(
+      $id: ID!, $name: String, $clientStatus: String, $logoUrl: String,
+      $industry: String, $websiteUrl: String, $country: String, $description: String,
+      $clientSince: String, $currency: String, $paymentTerms: String,
+      $billingEmail: String, $taxNumber: String, $instagramHandle: String,
+      $youtubeUrl: String, $tiktokHandle: String, $linkedinUrl: String,
+      $source: String, $internalNotes: String, $accountManagerId: ID
+    ) {
+      updateClient(
+        id: $id, name: $name, clientStatus: $clientStatus, logoUrl: $logoUrl,
+        industry: $industry, websiteUrl: $websiteUrl, country: $country, description: $description,
+        clientSince: $clientSince, currency: $currency, paymentTerms: $paymentTerms,
+        billingEmail: $billingEmail, taxNumber: $taxNumber, instagramHandle: $instagramHandle,
+        youtubeUrl: $youtubeUrl, tiktokHandle: $tiktokHandle, linkedinUrl: $linkedinUrl,
+        source: $source, internalNotes: $internalNotes, accountManagerId: $accountManagerId
+      ) {
+        id
+        name
+        clientStatus
+        logoUrl
+        industry
+        websiteUrl
+        country
+        description
+        clientSince
+        currency
+        paymentTerms
+        billingEmail
+        taxNumber
+        instagramHandle
+        youtubeUrl
+        tiktokHandle
+        linkedinUrl
+        source
+        internalNotes
+        accountManager { id name email }
+      }
+    }
+  `,
+
+  createClientNote: `
+    mutation CreateClientNote($clientId: ID!, $message: String!) {
+      createClientNote(clientId: $clientId, message: $message) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  updateClientNote: `
+    mutation UpdateClientNote($id: ID!, $message: String, $isPinned: Boolean) {
+      updateClientNote(id: $id, message: $message, isPinned: $isPinned) {
+        id
+        message
+        isPinned
+        updatedAt
+      }
+    }
+  `,
+
+  deleteClientNote: `
+    mutation DeleteClientNote($id: ID!) {
+      deleteClientNote(id: $id)
+    }
+  `,
+
+  // Contact Detail mutations
+  createContactNote: `
+    mutation CreateContactNote($contactId: ID!, $message: String!) {
+      createContactNote(contactId: $contactId, message: $message) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  updateContactNote: `
+    mutation UpdateContactNote($id: ID!, $message: String, $isPinned: Boolean) {
+      updateContactNote(id: $id, message: $message, isPinned: $isPinned) {
+        id
+        message
+        isPinned
+        updatedAt
+      }
+    }
+  `,
+
+  deleteContactNote: `
+    mutation DeleteContactNote($id: ID!) {
+      deleteContactNote(id: $id)
+    }
+  `,
+
+  createContactInteraction: `
+    mutation CreateContactInteraction($contactId: ID!, $interactionType: String!, $interactionDate: String, $note: String) {
+      createContactInteraction(contactId: $contactId, interactionType: $interactionType, interactionDate: $interactionDate, note: $note) {
+        id
+        interactionType
+        interactionDate
+        note
+        createdBy { id name email }
+        createdAt
+      }
+    }
+  `,
+
+  deleteContactInteraction: `
+    mutation DeleteContactInteraction($id: ID!) {
+      deleteContactInteraction(id: $id)
+    }
+  `,
+
+  createContactReminder: `
+    mutation CreateContactReminder($contactId: ID!, $reminderType: String, $reminderDate: String!, $note: String) {
+      createContactReminder(contactId: $contactId, reminderType: $reminderType, reminderDate: $reminderDate, note: $note) {
+        id
+        reminderType
+        reminderDate
+        note
+        isDismissed
+        createdBy { id name email }
+        createdAt
+      }
+    }
+  `,
+
+  dismissContactReminder: `
+    mutation DismissContactReminder($id: ID!) {
+      dismissContactReminder(id: $id) {
+        id
+        isDismissed
+        updatedAt
+      }
+    }
+  `,
+
+  deleteContactReminder: `
+    mutation DeleteContactReminder($id: ID!) {
+      deleteContactReminder(id: $id)
     }
   `,
 };

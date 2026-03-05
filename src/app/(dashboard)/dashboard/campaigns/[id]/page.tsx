@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import {
-  ArrowLeft,
   Activity,
   Megaphone,
   Building2,
@@ -52,6 +51,8 @@ import {
 } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { getCampaignStatusLabel, getDeliverableStatusLabel } from '@/lib/campaign-status'
 import { DatePicker } from '@/components/ui/date-picker'
 import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-editor'
@@ -996,15 +997,14 @@ export default function CampaignDetailPage() {
       />
       
       <div className="p-6 space-y-6">
-        {/* Top Actions Bar */}
+        {/* Breadcrumb & Actions */}
         <div className="flex items-center justify-between">
-          <Link
-            href="/dashboard/campaigns"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Campaigns
-          </Link>
+          <PageBreadcrumb items={[
+            { label: 'Campaigns', href: '/dashboard/campaigns' },
+            { label: campaign.project.client.name, href: `/dashboard/clients/${campaign.project.client.id}` },
+            { label: campaign.project.name },
+            { label: campaign.name },
+          ]} />
           
           <div className="flex items-center gap-3">
             {currentTransition && !isArchived && (

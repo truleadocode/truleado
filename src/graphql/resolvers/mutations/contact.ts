@@ -26,6 +26,15 @@ export async function createContact(
     notes?: string;
     isClientApprover?: boolean;
     userId?: string;
+    profilePhotoUrl?: string;
+    jobTitle?: string;
+    isPrimaryContact?: boolean;
+    linkedinUrl?: string;
+    preferredChannel?: string;
+    contactType?: string;
+    contactStatus?: string;
+    notificationPreference?: string;
+    birthday?: string;
   },
   ctx: GraphQLContext
 ) {
@@ -54,6 +63,15 @@ export async function createContact(
       notes: args.notes?.trim() || null,
       is_client_approver: args.isClientApprover ?? false,
       user_id: args.userId || null,
+      profile_photo_url: args.profilePhotoUrl?.trim() || null,
+      job_title: args.jobTitle?.trim() || null,
+      is_primary_contact: args.isPrimaryContact ?? false,
+      linkedin_url: args.linkedinUrl?.trim() || null,
+      preferred_channel: args.preferredChannel?.trim() || null,
+      contact_type: args.contactType?.trim() || null,
+      contact_status: args.contactStatus?.trim() || 'active',
+      notification_preference: args.notificationPreference?.trim() || null,
+      birthday: args.birthday?.trim() || null,
       updated_at: new Date().toISOString(),
     })
     .select()
@@ -87,6 +105,15 @@ export async function updateContact(
     notes?: string;
     isClientApprover?: boolean;
     userId?: string;
+    profilePhotoUrl?: string;
+    jobTitle?: string;
+    isPrimaryContact?: boolean;
+    linkedinUrl?: string;
+    preferredChannel?: string;
+    contactType?: string;
+    contactStatus?: string;
+    notificationPreference?: string;
+    birthday?: string;
   },
   ctx: GraphQLContext
 ) {
@@ -116,6 +143,15 @@ export async function updateContact(
   if (args.notes !== undefined) updates.notes = args.notes?.trim() || null;
   if (args.isClientApprover !== undefined) updates.is_client_approver = args.isClientApprover;
   if (args.userId !== undefined) updates.user_id = args.userId || null;
+  if (args.profilePhotoUrl !== undefined) updates.profile_photo_url = args.profilePhotoUrl?.trim() || null;
+  if (args.jobTitle !== undefined) updates.job_title = args.jobTitle?.trim() || null;
+  if (args.isPrimaryContact !== undefined) updates.is_primary_contact = args.isPrimaryContact;
+  if (args.linkedinUrl !== undefined) updates.linkedin_url = args.linkedinUrl?.trim() || null;
+  if (args.preferredChannel !== undefined) updates.preferred_channel = args.preferredChannel?.trim() || null;
+  if (args.contactType !== undefined) updates.contact_type = args.contactType?.trim() || null;
+  if (args.contactStatus !== undefined) updates.contact_status = args.contactStatus?.trim() || null;
+  if (args.notificationPreference !== undefined) updates.notification_preference = args.notificationPreference?.trim() || null;
+  if (args.birthday !== undefined) updates.birthday = args.birthday?.trim() || null;
 
   const { data, error } = await supabaseAdmin
     .from('contacts')

@@ -4,10 +4,11 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import { ChevronLeft, Calendar, Banknote, FileText, Clock, CheckCircle, XCircle, AlertCircle, Send, ArrowLeftRight, MessageCircle } from 'lucide-react'
+import { Calendar, Banknote, FileText, Clock, CheckCircle, XCircle, AlertCircle, Send, ArrowLeftRight, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -269,12 +270,11 @@ export default function CreatorProposalPage() {
   return (
     <div className="flex-1 container max-w-3xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <Link href="/creator/campaigns">
-          <Button variant="ghost" size="sm" className="gap-1 -ml-2 mb-4">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Campaigns
-          </Button>
-        </Link>
+        <PageBreadcrumb items={[
+          { label: 'Campaigns', href: '/creator/campaigns' },
+          { label: campaign?.campaign.name || 'Campaign', href: campaign ? `/creator/campaigns/${campaign.id}` : undefined },
+          { label: 'Proposal' },
+        ]} />
       </div>
 
       {loading ? (

@@ -2,16 +2,24 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { ArrowLeft, AlertCircle, Megaphone, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertCircle, Megaphone, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { ApproverPicker } from '@/components/approver-picker'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
@@ -178,13 +186,20 @@ export default function NewCampaignPage() {
       <Header title="New Campaign" subtitle="Create a new influencer campaign" />
       
       <div className="p-6 max-w-2xl">
-        <Link
-          href={preselectedProjectId ? `/dashboard/projects/${preselectedProjectId}` : '/dashboard/campaigns'}
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {preselectedProjectId ? `Back to ${selectedProject?.name || 'Project'}` : 'Back to Campaigns'}
-        </Link>
+        <div className="mb-6">
+          <PageBreadcrumb items={
+            preselectedProjectId
+              ? [
+                  { label: 'Projects', href: '/dashboard/projects' },
+                  { label: selectedProject?.name || 'Project', href: `/dashboard/projects/${preselectedProjectId}` },
+                  { label: 'New Campaign' },
+                ]
+              : [
+                  { label: 'Campaigns', href: '/dashboard/campaigns' },
+                  { label: 'New Campaign' },
+                ]
+          } />
+        </div>
 
         <Card>
           <CardHeader>
@@ -210,22 +225,23 @@ export default function NewCampaignPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="projectId">Project *</Label>
-                <select
-                  id="projectId"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                <Label>Project *</Label>
+                <Select
+                  value={preselectedProjectId || undefined}
+                  onValueChange={(value) => setValue('projectId', value, { shouldValidate: true })}
                   disabled={loadingProjects || !!preselectedProjectId}
-                  {...register('projectId')}
                 >
-                  <option value="">
-                    {loadingProjects ? 'Loading...' : 'Select a project'}
-                  </option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name} ({project.client.name})
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingProjects ? 'Loading...' : 'Select a project'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name} ({project.client.name})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {errors.projectId && (
                   <p className="text-sm text-destructive">{errors.projectId.message}</p>
                 )}
@@ -245,15 +261,19 @@ export default function NewCampaignPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="campaignType">Campaign Type *</Label>
-                <select
-                  id="campaignType"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  {...register('campaignType')}
+                <Label>Campaign Type *</Label>
+                <Select
+                  defaultValue="INFLUENCER"
+                  onValueChange={(value) => setValue('campaignType', value as 'INFLUENCER' | 'SOCIAL', { shouldValidate: true })}
                 >
-                  <option value="INFLUENCER">Influencer Campaign</option>
-                  <option value="SOCIAL">Social Media Campaign</option>
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="INFLUENCER">Influencer Campaign</SelectItem>
+                    <SelectItem value="SOCIAL">Social Media Campaign</SelectItem>
+                  </SelectContent>
+                </Select>
                 {errors.campaignType && (
                   <p className="text-sm text-destructive">{errors.campaignType.message}</p>
                 )}
@@ -261,11 +281,10 @@ export default function NewCampaignPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <textarea
+                <Textarea
                   id="description"
                   rows={3}
                   placeholder="Brief description of the campaign goals..."
-                  className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   {...register('description')}
                 />
               </div>
@@ -323,16 +342,16 @@ export default function NewCampaignPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="budgetControlType">Budget Control Type</Label>
-                      <select
-                        id="budgetControlType"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        value={budgetControlType}
-                        onChange={(e) => setBudgetControlType(e.target.value)}
-                      >
-                        <option value="soft">Soft Limit — Allow overspend with warnings</option>
-                        <option value="hard">Hard Limit — Block overspend actions</option>
-                      </select>
+                      <Label>Budget Control Type</Label>
+                      <Select value={budgetControlType} onValueChange={setBudgetControlType}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="soft">Soft Limit — Allow overspend with warnings</SelectItem>
+                          <SelectItem value="hard">Hard Limit — Block overspend actions</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="clientContractValue">Client Contract Value (Revenue)</Label>
