@@ -1,12 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, UserCircle, Search, Filter, MoreHorizontal, Instagram, Youtube, Eye, EyeOff } from 'lucide-react'
+import { UserCircle, MoreHorizontal, Instagram, Youtube, Eye, EyeOff } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent } from '@/components/ui/card'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +12,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Header } from '@/components/layout/header'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { ListPageShell } from '@/components/layout/list-page-shell'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
@@ -74,9 +82,7 @@ export default function CreatorsPage() {
       (creator.email && creator.email.toLowerCase().includes(query)) ||
       (creator.instagramHandle && creator.instagramHandle.toLowerCase().includes(query)) ||
       (creator.youtubeHandle && creator.youtubeHandle.toLowerCase().includes(query)) ||
-      (creator.tiktokHandle && creator.tiktokHandle.toLowerCase().includes(query)) ||
-      (creator.facebookHandle && creator.facebookHandle.toLowerCase().includes(query)) ||
-      (creator.linkedinHandle && creator.linkedinHandle.toLowerCase().includes(query))
+      (creator.tiktokHandle && creator.tiktokHandle.toLowerCase().includes(query))
     )
   })
 
@@ -107,201 +113,174 @@ export default function CreatorsPage() {
     })
   }
 
-  return (
-    <>
-      <Header title="Creator Roster" subtitle="Manage your influencer network" />
+  const columns = [
+    { label: 'Creator', className: 'w-[240px]' },
+    { label: 'Status' },
+    { label: 'Email' },
+    { label: 'Platforms' },
+    { label: 'Added' },
+    { label: '', className: 'w-[50px]' },
+  ]
 
-      <div className="p-6 space-y-6">
-        {/* Actions Bar */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between">
-          <div className="flex gap-3 flex-1 max-w-md">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search creators..."
-                className="pl-9"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            <Button
-              variant={showInactive ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setShowInactive(!showInactive)}
-              title={showInactive ? 'Showing all creators' : 'Show inactive creators'}
-            >
-              {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-          </div>
-          <Button asChild>
-            <Link href="/dashboard/creators/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Creator
-            </Link>
+  return (
+    <ListPageShell
+      title="Creator Roster"
+      subtitle="Manage your influencer network"
+      searchPlaceholder="Search creators..."
+      searchQuery={searchQuery}
+      onSearchChange={setSearchQuery}
+      addButton={{ label: 'Add Creator', href: '/dashboard/creators/new' }}
+      loading={loading}
+      error={error}
+      columns={columns}
+      emptyState={{
+        icon: UserCircle,
+        title: 'No creators yet',
+        description: 'Build your influencer roster by adding creators. You can then assign them to campaigns and track their work.',
+        addLabel: 'Add Your First Creator',
+        addHref: '/dashboard/creators/new',
+      }}
+      itemCount={creators.length}
+      filteredCount={filteredCreators.length}
+      filterBar={
+        <div className="flex items-center gap-2">
+          <Button
+            variant={showInactive ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setShowInactive(!showInactive)}
+          >
+            {showInactive ? <Eye className="mr-2 h-3.5 w-3.5" /> : <EyeOff className="mr-2 h-3.5 w-3.5" />}
+            {showInactive ? 'Showing inactive' : 'Show inactive'}
           </Button>
         </div>
-
-        {/* Error State */}
-        {error && (
-          <Card className="border-destructive bg-destructive/10">
-            <CardContent className="p-4 text-destructive">
-              {error}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-muted" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-5 w-32 bg-muted rounded" />
-                      <div className="h-4 w-24 bg-muted rounded" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!loading && !error && creators.length === 0 && (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                <UserCircle className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <h3 className="text-lg font-semibold">No creators yet</h3>
-              <p className="text-muted-foreground text-center mt-2 max-w-sm">
-                Build your influencer roster by adding creators. You can then assign them
-                to campaigns and track their work.
-              </p>
-              <Button className="mt-6" asChild>
-                <Link href="/dashboard/creators/new">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Your First Creator
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* No Search Results */}
-        {!loading && !error && creators.length > 0 && filteredCreators.length === 0 && (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-12">
-              <Search className="h-8 w-8 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold">No results found</h3>
-              <p className="text-muted-foreground text-center mt-2">
-                No creators match &ldquo;{searchQuery}&rdquo;
-              </p>
-              <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
-                Clear search
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Creators Grid */}
-        {!loading && !error && filteredCreators.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredCreators.map((creator) => (
-              <Link key={creator.id} href={`/dashboard/creators/${creator.id}`}>
-                <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                          <UserCircle className="h-6 w-6 text-purple-500" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold truncate">{creator.displayName}</h3>
-                            {!creator.isActive && (
-                              <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
-                                Inactive
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                            {creator.instagramHandle && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Instagram className="h-3 w-3" />
-                                @{creator.instagramHandle}
-                              </span>
-                            )}
-                            {creator.youtubeHandle && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                <Youtube className="h-3 w-3" />
-                                {creator.youtubeHandle}
-                              </span>
-                            )}
-                            {creator.tiktokHandle && (
-                              <span className="text-xs text-muted-foreground">
-                                TT: @{creator.tiktokHandle}
-                              </span>
-                            )}
-                            {creator.facebookHandle && (
-                              <span className="text-xs text-muted-foreground">
-                                FB: {creator.facebookHandle}
-                              </span>
-                            )}
-                            {creator.linkedinHandle && (
-                              <span className="text-xs text-muted-foreground">
-                                IN: {creator.linkedinHandle}
-                              </span>
-                            )}
-                          </div>
-                        </div>
+      }
+    >
+      <TooltipProvider>
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[240px]">Creator</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Platforms</TableHead>
+                <TableHead>Added</TableHead>
+                <TableHead className="w-[50px]" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredCreators.map((creator) => (
+                <TableRow
+                  key={creator.id}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/dashboard/creators/${creator.id}`)}
+                >
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
+                        <UserCircle className="h-4 w-4 text-purple-500" />
                       </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild onClick={(e) => e.preventDefault()}>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={(e) => {
-                            e.preventDefault()
-                            router.push(`/dashboard/creators/${creator.id}`)
-                          }}>
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={(e) => {
-                            e.preventDefault()
-                            router.push(`/dashboard/creators/${creator.id}`)
-                          }}>
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={(e) => {
-                            e.preventDefault()
-                            handleDeactivate(creator)
-                          }}>
-                            {creator.isActive ? 'Deactivate' : 'Activate'}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <span className="font-medium truncate">{creator.displayName}</span>
                     </div>
-
-                    <div className="mt-4 pt-4 border-t flex items-center justify-between text-sm text-muted-foreground">
-                      <span className="truncate">
-                        {creator.email || creator.phone || 'No contact info'}
-                      </span>
-                      <span>{formatDate(creator.createdAt)}</span>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={creator.isActive ? 'active' : 'inactive'} />
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">
+                      {creator.email || '—'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {creator.instagramHandle && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center justify-center h-7 w-7 rounded bg-pink-50 text-pink-600">
+                              <Instagram className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>@{creator.instagramHandle}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {creator.youtubeHandle && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center justify-center h-7 w-7 rounded bg-red-50 text-red-600">
+                              <Youtube className="h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{creator.youtubeHandle}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {creator.tiktokHandle && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center justify-center h-7 w-7 rounded bg-gray-100 text-gray-700 text-xs font-bold">
+                              TT
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>@{creator.tiktokHandle}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {creator.facebookHandle && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center justify-center h-7 w-7 rounded bg-blue-50 text-blue-600 text-xs font-bold">
+                              FB
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{creator.facebookHandle}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {creator.linkedinHandle && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center justify-center h-7 w-7 rounded bg-sky-50 text-sky-600 text-xs font-bold">
+                              IN
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{creator.linkedinHandle}</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {!creator.instagramHandle && !creator.youtubeHandle && !creator.tiktokHandle && !creator.facebookHandle && !creator.linkedinHandle && (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
                     </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
-    </>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-muted-foreground">{formatDate(creator.createdAt)}</span>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/creators/${creator.id}`}>View Details</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link href={`/dashboard/creators/${creator.id}`}>Edit</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeactivate(creator)
+                        }}>
+                          {creator.isActive ? 'Deactivate' : 'Activate'}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </TooltipProvider>
+    </ListPageShell>
   )
 }

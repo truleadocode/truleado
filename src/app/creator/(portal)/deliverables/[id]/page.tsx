@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, ChangeEvent, useMemo } from '
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ChevronLeft,
   Activity,
   FileCheck,
   Upload,
@@ -36,6 +35,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/dialog'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Badge } from '@/components/ui/badge'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
@@ -648,13 +649,10 @@ export default function CreatorDeliverableDetailPage() {
     <div className="flex-1 container max-w-6xl mx-auto px-4 py-8">
       {/* Navigation & Actions */}
       <div className="flex items-center justify-between mb-6">
-        <Link
-          href="/creator/deliverables"
-          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back to Deliverables
-        </Link>
+        <PageBreadcrumb items={[
+          { label: 'Deliverables', href: '/creator/deliverables' },
+          { label: deliverable.title },
+        ]} />
 
         <div className="flex items-center gap-3">
           <Button variant="outline" onClick={() => setActivitySheetOpen(true)}>
@@ -1334,13 +1332,13 @@ export default function CreatorDeliverableDetailPage() {
               </p>
             )}
             <Label htmlFor="edit-caption">Caption</Label>
-            <textarea
+            <Textarea
               id="edit-caption"
               rows={4}
               value={captionEditText}
               onChange={(e) => setCaptionEditText(e.target.value)}
               placeholder="Caption or copy for this version..."
-              className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-2"
             />
           </div>
           <DialogFooter>
@@ -1383,13 +1381,13 @@ export default function CreatorDeliverableDetailPage() {
               </p>
             )}
             <Label htmlFor="caption">Caption / Copy</Label>
-            <textarea
+            <Textarea
               id="caption"
               rows={3}
               value={captionText}
               onChange={(e) => setCaptionText(e.target.value)}
               placeholder="Optional caption or post copy..."
-              className="mt-2 flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="mt-2"
             />
           </div>
           <DialogFooter>

@@ -1,16 +1,16 @@
 "use client"
 
-import { FileCheck, Search, Filter, Inbox } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search, Inbox } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 
 export default function ApprovalsPage() {
   return (
     <>
       <Header title="Approvals" subtitle="Review pending approvals" />
-      
+
       <div className="p-6 space-y-6">
         {/* Actions Bar */}
         <div className="flex flex-col sm:flex-row gap-4 justify-between">
@@ -19,16 +19,15 @@ export default function ApprovalsPage() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input placeholder="Search approvals..." className="pl-9" />
             </div>
-            <Button variant="outline" size="icon">
-              <Filter className="h-4 w-4" />
-            </Button>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline">All</Button>
-            <Button variant="outline">Pending</Button>
-            <Button variant="outline">Approved</Button>
-            <Button variant="outline">Rejected</Button>
-          </div>
+          <Tabs defaultValue="all">
+            <TabsList>
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="approved">Approved</TabsTrigger>
+              <TabsTrigger value="rejected">Rejected</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         {/* Empty State */}

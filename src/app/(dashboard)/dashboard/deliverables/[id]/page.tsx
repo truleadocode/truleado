@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useRef, ChangeEvent, useMemo } from '
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
-  ArrowLeft,
   Activity,
   FileCheck,
   Upload,
@@ -48,6 +47,7 @@ import {
 } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { FileUpload } from '@/components/ui/file-upload'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
@@ -897,15 +897,13 @@ export default function DeliverableDetailPage() {
       />
       
       <div className="p-6 space-y-6">
-        {/* Navigation & Actions */}
+        {/* Breadcrumb & Actions */}
         <div className="flex items-center justify-between">
-          <Link
-            href={`/dashboard/campaigns/${deliverable.campaign.id}`}
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to {deliverable.campaign.name}
-          </Link>
+          <PageBreadcrumb items={[
+            { label: 'Campaigns', href: '/dashboard/campaigns' },
+            { label: deliverable.campaign.name, href: `/dashboard/campaigns/${deliverable.campaign.id}` },
+            { label: deliverable.title },
+          ]} />
           
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => setActivitySheetOpen(true)}>

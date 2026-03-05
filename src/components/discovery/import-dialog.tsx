@@ -24,6 +24,7 @@ interface DiscoveryInfluencer {
   engagementRate: number | null
   engagements: number | null
   avgViews: number | null
+  avgLikes: number | null
   isVerified: boolean
   picture: string | null
   url: string | null
@@ -111,6 +112,9 @@ export function ImportDialog({
         phone: null,
         profilePicture: i.picture,
         searchResultId: i.searchResultId || null,
+        followers: i.followers,
+        engagementRate: i.engagementRate,
+        avgLikes: i.avgLikes,
       }))
 
       await graphqlRequest(mutations.discoveryImportToCreators, {

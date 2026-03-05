@@ -124,6 +124,23 @@ export const typeResolvers = {
     // Field mappings
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
+    industry: (parent: { industry: string | null }) => parent.industry,
+    websiteUrl: (parent: { website_url: string | null }) => parent.website_url,
+    country: (parent: { country: string | null }) => parent.country,
+    logoUrl: (parent: { logo_url: string | null }) => parent.logo_url,
+    description: (parent: { description: string | null }) => parent.description,
+    clientStatus: (parent: { client_status: string | null }) => parent.client_status,
+    clientSince: (parent: { client_since: string | null }) => parent.client_since,
+    currency: (parent: { currency: string | null }) => parent.currency,
+    paymentTerms: (parent: { payment_terms: string | null }) => parent.payment_terms,
+    billingEmail: (parent: { billing_email: string | null }) => parent.billing_email,
+    taxNumber: (parent: { tax_number: string | null }) => parent.tax_number,
+    instagramHandle: (parent: { instagram_handle: string | null }) => parent.instagram_handle,
+    youtubeUrl: (parent: { youtube_url: string | null }) => parent.youtube_url,
+    tiktokHandle: (parent: { tiktok_handle: string | null }) => parent.tiktok_handle,
+    linkedinUrl: (parent: { linkedin_url: string | null }) => parent.linkedin_url,
+    source: (parent: { source: string | null }) => parent.source,
+    internalNotes: (parent: { internal_notes: string | null }) => parent.internal_notes,
     agency: async (parent: UserRow) => {
       const { data } = await supabaseAdmin
         .from('agencies')
@@ -194,6 +211,97 @@ export const typeResolvers = {
     },
   },
 
+  ClientNote: {
+    isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    client: async (parent: { client_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('clients')
+        .select('*')
+        .eq('id', parent.client_id)
+        .single();
+      return data;
+    },
+  },
+
+  ContactNote: {
+    isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    contact: async (parent: { contact_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.contact_id)
+        .single();
+      return data;
+    },
+  },
+
+  ContactInteraction: {
+    interactionType: (parent: { interaction_type: string }) => parent.interaction_type,
+    interactionDate: (parent: { interaction_date: string }) => parent.interaction_date,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    contact: async (parent: { contact_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.contact_id)
+        .single();
+      return data;
+    },
+  },
+
+  ContactReminder: {
+    reminderType: (parent: { reminder_type: string }) => parent.reminder_type,
+    reminderDate: (parent: { reminder_date: string }) => parent.reminder_date,
+    isDismissed: (parent: { is_dismissed: boolean }) => parent.is_dismissed,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    contact: async (parent: { contact_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.contact_id)
+        .single();
+      return data;
+    },
+  },
+
   Contact: {
     firstName: (parent: { first_name: string }) => parent.first_name,
     lastName: (parent: { last_name: string }) => parent.last_name,
@@ -202,6 +310,15 @@ export const typeResolvers = {
     updatedAt: (parent: { updated_at: string }) => parent.updated_at,
     officePhone: (parent: { office_phone: string | null }) => parent.office_phone,
     homePhone: (parent: { home_phone: string | null }) => parent.home_phone,
+    profilePhotoUrl: (parent: { profile_photo_url: string | null }) => parent.profile_photo_url,
+    jobTitle: (parent: { job_title: string | null }) => parent.job_title,
+    isPrimaryContact: (parent: { is_primary_contact: boolean }) => parent.is_primary_contact,
+    linkedinUrl: (parent: { linkedin_url: string | null }) => parent.linkedin_url,
+    preferredChannel: (parent: { preferred_channel: string | null }) => parent.preferred_channel,
+    contactType: (parent: { contact_type: string | null }) => parent.contact_type,
+    contactStatus: (parent: { contact_status: string | null }) => parent.contact_status,
+    notificationPreference: (parent: { notification_preference: string | null }) => parent.notification_preference,
+    birthday: (parent: { birthday: string | null }) => parent.birthday,
     client: async (parent: UserRow) => {
       const { data } = await supabaseAdmin
         .from('clients')

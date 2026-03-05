@@ -4,6 +4,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Globe, Languages, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
@@ -158,18 +165,22 @@ export default function LocaleSettingsPage() {
                   <Coins className="h-4 w-4 text-muted-foreground" />
                   Currency
                 </label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Select
                   value={form.currencyCode}
-                  onChange={(e) => setForm((prev) => ({ ...prev, currencyCode: e.target.value }))}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, currencyCode: value }))}
                   disabled={!isAgencyAdmin || loading}
                 >
-                  {currencyOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {currencyOptions.map((option) => (
+                      <SelectItem key={option.code} value={option.code}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">Current: {currencyLabel}</p>
               </div>
 
@@ -178,18 +189,22 @@ export default function LocaleSettingsPage() {
                   <Globe className="h-4 w-4 text-muted-foreground" />
                   Timezone
                 </label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Select
                   value={form.timezone}
-                  onChange={(e) => setForm((prev) => ({ ...prev, timezone: e.target.value }))}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, timezone: value }))}
                   disabled={!isAgencyAdmin || loading}
                 >
-                  {timezoneOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {timezoneOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -197,18 +212,22 @@ export default function LocaleSettingsPage() {
                   <Languages className="h-4 w-4 text-muted-foreground" />
                   Language
                 </label>
-                <select
-                  className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                <Select
                   value={form.languageCode}
-                  onChange={(e) => setForm((prev) => ({ ...prev, languageCode: e.target.value }))}
+                  onValueChange={(value) => setForm((prev) => ({ ...prev, languageCode: value }))}
                   disabled={!isAgencyAdmin || loading}
                 >
-                  {languageOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {languageOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

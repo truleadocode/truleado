@@ -2,14 +2,29 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { Users, Search, Building2, CheckCircle, Circle, Eye, Pencil, Trash2, Plus } from 'lucide-react'
+import { Users, Search, Building2, Eye, Pencil, Trash2, Plus, Copy, Star, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, mutations, queries } from '@/lib/graphql/client'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -20,7 +35,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import { ContactFormDialog, type ContactFormData } from '@/components/contacts/contact-form-dialog'
+import { ContactFormDialog, emptyContactForm, type ContactFormData } from '@/components/contacts/contact-form-dialog'
 
 interface ContactRow {
   id: string
@@ -35,7 +50,16 @@ interface ContactRow {
   department: string | null
   notes: string | null
   isClientApprover: boolean
-  client: { id: string; name: string }
+  profilePhotoUrl: string | null
+  jobTitle: string | null
+  isPrimaryContact: boolean
+  linkedinUrl: string | null
+  preferredChannel: string | null
+  contactType: string | null
+  contactStatus: string | null
+  notificationPreference: string | null
+  birthday: string | null
+  client: { id: string; name: string; logoUrl?: string | null; industry?: string | null; clientStatus?: string | null }
   createdAt: string
   updatedAt: string
 }
@@ -43,6 +67,9 @@ interface ContactRow {
 interface Client {
   id: string
   name: string
+  logoUrl?: string | null
+  industry?: string | null
+  clientStatus?: string | null
 }
 
 export default function ContactsPage() {
@@ -54,7 +81,6 @@ export default function ContactsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [filterClientId, setFilterClientId] = useState<string>('')
-  const [filterDepartment, setFilterDepartment] = useState('')
   const [filterApprover, setFilterApprover] = useState<boolean | null>(null)
   const [viewContact, setViewContact] = useState<ContactRow | null>(null)
   const [editingContact, setEditingContact] = useState<ContactRow | null>(null)
@@ -62,49 +88,8 @@ export default function ContactsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [editForm, setEditForm] = useState<ContactFormData>({
-    clientId: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    mobile: '',
-    officePhone: '',
-    homePhone: '',
-    address: '',
-    department: '',
-    notes: '',
-    isClientApprover: false,
-  })
-  const [createForm, setCreateForm] = useState<ContactFormData>({
-    clientId: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    mobile: '',
-    officePhone: '',
-    homePhone: '',
-    address: '',
-    department: '',
-    notes: '',
-    isClientApprover: false,
-  })
-  const filterFields = [
-    'name',
-    'email',
-    'mobile',
-    'department',
-    'client',
-  ] as const
-  type FilterField = (typeof filterFields)[number]
-  const [activeFilterFields, setActiveFilterFields] = useState<FilterField[]>([
-    'name',
-    'email',
-    'mobile',
-    'department',
-    'client',
-  ])
+  const [editForm, setEditForm] = useState<ContactFormData>({ ...emptyContactForm })
+  const [createForm, setCreateForm] = useState<ContactFormData>({ ...emptyContactForm })
 
   const fetchContacts = useCallback(async () => {
     if (!currentAgency?.id) return
@@ -116,7 +101,6 @@ export default function ContactsPage() {
         {
           agencyId: currentAgency.id,
           clientId: filterClientId || undefined,
-          department: filterDepartment || undefined,
           isClientApprover: filterApprover ?? undefined,
         }
       )
@@ -126,7 +110,7 @@ export default function ContactsPage() {
     } finally {
       setLoading(false)
     }
-  }, [currentAgency?.id, filterClientId, filterDepartment, filterApprover])
+  }, [currentAgency?.id, filterClientId, filterApprover])
 
   const fetchClients = useCallback(async () => {
     if (!currentAgency?.id) return
@@ -160,19 +144,13 @@ export default function ContactsPage() {
   const filteredContacts = contacts.filter((c) => {
     const q = normalize(searchQuery)
     if (!q) return true
-    const effectiveFields = activeFilterFields.length
-      ? activeFilterFields
-      : filterFields
-    const values: Record<FilterField, string> = {
-      name: normalize(`${c.firstName ?? ''} ${c.lastName ?? ''} ${c.lastName ?? ''} ${c.firstName ?? ''}`),
-      email: normalize(c.email ?? ''),
-      mobile: normalize(
-        `${c.phone ?? ''} ${c.mobile ?? ''} ${c.officePhone ?? ''} ${c.homePhone ?? ''}`
-      ),
-      department: normalize(c.department ?? ''),
-      client: normalize(c.client?.name ?? ''),
-    }
-    return effectiveFields.some((field) => values[field].includes(q))
+    return (
+      normalize(`${c.firstName} ${c.lastName}`).includes(q) ||
+      normalize(c.email ?? '').includes(q) ||
+      normalize(`${c.phone ?? ''} ${c.mobile ?? ''}`).includes(q) ||
+      normalize(c.department ?? '').includes(q) ||
+      normalize(c.client?.name ?? '').includes(q)
+    )
   })
 
   const openEditContact = (c: ContactRow) => {
@@ -183,30 +161,24 @@ export default function ContactsPage() {
       lastName: c.lastName,
       email: c.email ?? '',
       phone: c.phone ?? '',
-      mobile: c.mobile ?? '',
-      officePhone: c.officePhone ?? '',
-      homePhone: c.homePhone ?? '',
-      address: c.address ?? '',
+      profilePhotoUrl: c.profilePhotoUrl ?? '',
+      jobTitle: c.jobTitle ?? '',
       department: c.department ?? '',
+      isPrimaryContact: c.isPrimaryContact,
+      linkedinUrl: c.linkedinUrl ?? '',
+      preferredChannel: c.preferredChannel ?? '',
+      contactType: c.contactType ?? '',
+      contactStatus: c.contactStatus ?? 'active',
+      notificationPreference: c.notificationPreference ?? '',
+      birthday: c.birthday ?? '',
       notes: c.notes ?? '',
-      isClientApprover: c.isClientApprover,
     })
   }
 
   const openCreateContact = () => {
     setCreateForm({
+      ...emptyContactForm,
       clientId: filterClientId || clients[0]?.id || '',
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      mobile: '',
-      officePhone: '',
-      homePhone: '',
-      address: '',
-      department: '',
-      notes: '',
-      isClientApprover: false,
     })
     setCreateOpen(true)
   }
@@ -228,13 +200,17 @@ export default function ContactsPage() {
         lastName: createForm.lastName.trim(),
         email: createForm.email.trim() || null,
         phone: createForm.phone.trim() || null,
-        mobile: createForm.mobile.trim() || null,
-        officePhone: createForm.officePhone.trim() || null,
-        homePhone: createForm.homePhone.trim() || null,
-        address: createForm.address.trim() || null,
         department: createForm.department.trim() || null,
         notes: createForm.notes.trim() || null,
-        isClientApprover: createForm.isClientApprover,
+        profilePhotoUrl: createForm.profilePhotoUrl.trim() || null,
+        jobTitle: createForm.jobTitle.trim() || null,
+        isPrimaryContact: createForm.isPrimaryContact,
+        linkedinUrl: createForm.linkedinUrl.trim() || null,
+        preferredChannel: createForm.preferredChannel || null,
+        contactType: createForm.contactType || null,
+        contactStatus: createForm.contactStatus || null,
+        notificationPreference: createForm.notificationPreference || null,
+        birthday: createForm.birthday || null,
       })
       toast({ title: 'Contact added' })
       setCreateOpen(false)
@@ -260,13 +236,17 @@ export default function ContactsPage() {
         lastName: editForm.lastName.trim(),
         email: editForm.email.trim() || null,
         phone: editForm.phone.trim() || null,
-        mobile: editForm.mobile.trim() || null,
-        officePhone: editForm.officePhone.trim() || null,
-        homePhone: editForm.homePhone.trim() || null,
-        address: editForm.address.trim() || null,
         department: editForm.department.trim() || null,
         notes: editForm.notes.trim() || null,
-        isClientApprover: editForm.isClientApprover,
+        profilePhotoUrl: editForm.profilePhotoUrl.trim() || null,
+        jobTitle: editForm.jobTitle.trim() || null,
+        isPrimaryContact: editForm.isPrimaryContact,
+        linkedinUrl: editForm.linkedinUrl.trim() || null,
+        preferredChannel: editForm.preferredChannel || null,
+        contactType: editForm.contactType || null,
+        contactStatus: editForm.contactStatus || null,
+        notificationPreference: editForm.notificationPreference || null,
+        birthday: editForm.birthday || null,
       })
       toast({ title: 'Contact updated' })
       setEditingContact(null)
@@ -300,6 +280,41 @@ export default function ContactsPage() {
       year: 'numeric',
     })
 
+  const timeAgo = (dateString: string) => {
+    const now = new Date()
+    const date = new Date(dateString)
+    const diffMs = now.getTime() - date.getTime()
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+    if (diffDays === 0) return 'Today'
+    if (diffDays === 1) return 'Yesterday'
+    if (diffDays < 7) return `${diffDays}d ago`
+    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
+    if (diffDays < 365) return `${Math.floor(diffDays / 30)}mo ago`
+    return `${Math.floor(diffDays / 365)}y ago`
+  }
+
+  const contactTypeBadge: Record<string, { label: string; className: string }> = {
+    decision_maker: { label: 'Decision Maker', className: 'bg-purple-100 text-purple-700' },
+    influencer: { label: 'Influencer', className: 'bg-blue-100 text-blue-700' },
+    champion: { label: 'Champion', className: 'bg-teal-100 text-teal-700' },
+    end_user: { label: 'End User', className: 'bg-orange-100 text-orange-700' },
+    technical: { label: 'Technical', className: 'bg-sky-100 text-sky-700' },
+    other: { label: 'Other', className: 'bg-gray-100 text-gray-600' },
+  }
+
+  const contactStatusBadge: Record<string, { label: string; className: string }> = {
+    active: { label: 'Active', className: 'bg-green-100 text-green-700' },
+    inactive: { label: 'Inactive', className: 'bg-gray-100 text-gray-500' },
+    left_company: { label: 'Left Company', className: 'bg-red-100 text-red-700' },
+  }
+
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text)
+    setCopiedId(id)
+    setTimeout(() => setCopiedId(null), 1500)
+  }
+
   if (!currentAgency) {
     return (
       <>
@@ -319,340 +334,376 @@ export default function ContactsPage() {
     <>
       <Header title="Contacts" subtitle="CRM-style view of client contacts" />
       <div className="p-6 space-y-6">
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <div className="relative flex-1 min-w-[240px] max-w-xl">
+        {/* Actions Bar */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-between">
+          <div className="flex gap-3 flex-1 max-w-md">
+            <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Global search across selected fields..."
+                placeholder="Search contacts..."
                 className="pl-9"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm text-muted-foreground">Search in:</span>
-              {filterFields.map((field) => {
-                const label =
-                  field === 'name'
-                    ? 'Name'
-                    : field === 'email'
-                      ? 'Email'
-                      : field === 'mobile'
-                        ? 'Phone'
-                        : field === 'department'
-                          ? 'Department'
-                          : 'Client'
-                const active = activeFilterFields.includes(field)
-                return (
-                  <Button
-                    key={field}
-                    variant={active ? 'secondary' : 'outline'}
-                    size="sm"
-                    onClick={() =>
-                      setActiveFilterFields((prev) =>
-                        prev.includes(field)
-                          ? prev.filter((f) => f !== field)
-                          : [...prev, field]
-                      )
-                    }
-                  >
-                    {label}
-                  </Button>
-                )
-              })}
-            </div>
           </div>
-          <div className="flex flex-wrap gap-3 items-center">
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={filterClientId}
-              onChange={(e) => setFilterClientId(e.target.value)}
-            >
-              <option value="">All clients</option>
-              {clients.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <Input
-              placeholder="Department"
-              className="w-40"
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-            />
-            <div className="flex gap-2">
-              <Button
-                variant={filterApprover === true ? 'secondary' : 'outline'}
-                size="sm"
-                onClick={() => setFilterApprover(filterApprover === true ? null : true)}
-              >
-                <CheckCircle className="mr-1 h-4 w-4" />
-                Approvers
-              </Button>
-              <Button
-                variant={filterApprover === false ? 'secondary' : 'outline'}
-                size="sm"
-                onClick={() => setFilterApprover(filterApprover === false ? null : false)}
-              >
-                <Circle className="mr-1 h-4 w-4" />
-                Not approvers
-              </Button>
-            </div>
-            <div className="ml-auto">
-              <Button onClick={openCreateContact} disabled={clients.length === 0}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Contact
-              </Button>
-            </div>
-          </div>
+          <Button onClick={openCreateContact} disabled={clients.length === 0}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Contact
+          </Button>
         </div>
 
-        {loading ? (
-          <div className="animate-pulse space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-16 bg-muted rounded-lg" />
-            ))}
+        {/* Filters */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <Select value={filterClientId || '_all'} onValueChange={(v) => setFilterClientId(v === '_all' ? '' : v)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="All clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="_all">All clients</SelectItem>
+              {clients.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Loading */}
+        {loading && (
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[280px]">Contact</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Activity</TableHead>
+                  <TableHead className="w-[100px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <TableRow key={i} className="animate-pulse">
+                    <TableCell><div className="h-10 w-44 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-28 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-36 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-24 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-16 bg-muted rounded-full" /></TableCell>
+                    <TableCell><div className="h-5 w-16 bg-muted rounded" /></TableCell>
+                    <TableCell />
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        ) : error ? (
-          <Card className="border-destructive/50">
-            <CardContent className="p-6 text-center text-destructive">
-              {error}
-            </CardContent>
+        )}
+
+        {/* Error */}
+        {!loading && error && (
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="p-4 text-destructive">{error}</CardContent>
           </Card>
-        ) : filteredContacts.length === 0 ? (
+        )}
+
+        {/* Empty / No results */}
+        {!loading && !error && filteredContacts.length === 0 && (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Users className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="font-semibold">No contacts found</h3>
+              <h3 className="font-semibold">
+                {contacts.length === 0 ? 'No contacts found' : 'No results found'}
+              </h3>
               <p className="text-muted-foreground text-center mt-2 max-w-sm">
                 {contacts.length === 0
-                  ? 'Add contacts from a client page (Contacts tab).'
-                  : 'Try changing filters or search.'}
+                  ? 'Add contacts from a client page or use the Add Contact button above.'
+                  : `No contacts match "${searchQuery}"`}
               </p>
-              <Button className="mt-4" asChild>
-                <Link href="/dashboard/clients">
-                  <Building2 className="mr-2 h-4 w-4" />
-                  Go to Clients
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                <table className="min-w-[900px] w-full text-sm">
-                  <thead className="bg-muted/40 text-muted-foreground">
-                    <tr className="text-left">
-                      <th className="px-4 py-3 font-medium">Contact</th>
-                      <th className="px-4 py-3 font-medium">Email</th>
-                      <th className="px-4 py-3 font-medium">Phone</th>
-                      <th className="px-4 py-3 font-medium">Department</th>
-                      <th className="px-4 py-3 font-medium">Client</th>
-                      <th className="px-4 py-3 font-medium">Approver</th>
-                      <th className="px-4 py-3 font-medium">Added</th>
-                      <th className="px-4 py-3 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {filteredContacts.map((c) => (
-                      <tr key={c.id} className="hover:bg-muted/30">
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/dashboard/clients/${c.client.id}#contacts`}
-                            className="flex items-center gap-3"
-                          >
-                            <Avatar className="h-9 w-9 shrink-0">
-                              <AvatarFallback>
-                                {c.firstName[0]}
-                                {c.lastName[0]}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <div className="font-medium truncate">
-                                {c.firstName} {c.lastName}
-                              </div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {c.email || c.phone || c.mobile || '—'}
-                              </div>
-                            </div>
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.email ? (
-                            <a
-                              className="text-foreground/80 hover:text-foreground"
-                              href={`mailto:${c.email}`}
-                            >
-                              {c.email}
-                            </a>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.phone ||
-                            c.mobile ||
-                            c.officePhone ||
-                            c.homePhone || (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.department ?? <span className="text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/dashboard/clients/${c.client.id}`}
-                            className="inline-flex items-center gap-1 text-foreground/80 hover:text-foreground"
-                          >
-                            <Building2 className="h-4 w-4" />
-                            {c.client.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">
-                          {c.isClientApprover ? (
-                            <Badge variant="hashtag">Approver</Badge>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {formatDate(c.createdAt)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="View contact"
-                              onClick={() => setViewContact(c)}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Edit contact"
-                              onClick={() => openEditContact(c)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title="Delete contact"
-                              className="text-destructive"
-                              onClick={() => setDeleteContact(c)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {contacts.length === 0 && (
+                <Button className="mt-4" asChild>
+                  <Link href="/dashboard/clients">
+                    <Building2 className="mr-2 h-4 w-4" />
+                    Go to Clients
+                  </Link>
+                </Button>
+              )}
+              {contacts.length > 0 && (
+                <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
+                  Clear search
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
+
+        {/* Table */}
+        {!loading && !error && filteredContacts.length > 0 && (
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[280px]">Contact</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Last Activity</TableHead>
+                  <TableHead className="w-[100px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredContacts.map((c) => {
+                  const ctBadge = c.contactType ? contactTypeBadge[c.contactType] || contactTypeBadge.other : null
+                  const csBadge = contactStatusBadge[c.contactStatus || 'active'] || contactStatusBadge.active
+
+                  return (
+                    <TableRow key={c.id}>
+                      {/* Primary Info: Photo + Name + Job Title + Contact Type Badge */}
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-9 w-9 shrink-0">
+                            {c.profilePhotoUrl && <AvatarImage src={c.profilePhotoUrl} alt={`${c.firstName} ${c.lastName}`} />}
+                            <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                              {c.firstName[0]}{c.lastName[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Link href={`/dashboard/contacts/${c.id}`} className="font-medium truncate hover:underline">
+                                {c.firstName} {c.lastName}
+                              </Link>
+                              {c.isPrimaryContact && (
+                                <Star className="h-3.5 w-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {c.jobTitle && (
+                                <span className="text-xs text-muted-foreground truncate">{c.jobTitle}</span>
+                              )}
+                              {ctBadge && (
+                                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0 ${ctBadge.className}`}>
+                                  {ctBadge.label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+
+                      {/* Linked Client: Logo + Name + Industry */}
+                      <TableCell>
+                        <Link
+                          href={`/dashboard/clients/${c.client.id}`}
+                          className="flex items-center gap-2 hover:underline"
+                        >
+                          <Avatar className="h-6 w-6 rounded shrink-0">
+                            {c.client.logoUrl && <AvatarImage src={c.client.logoUrl} alt={c.client.name} />}
+                            <AvatarFallback className="rounded text-[9px] bg-muted">
+                              {c.client.name.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <span className="text-sm truncate block">{c.client.name}</span>
+                            {c.client.industry && (
+                              <span className="text-[10px] text-muted-foreground">{c.client.industry}</span>
+                            )}
+                          </div>
+                        </Link>
+                      </TableCell>
+
+                      {/* Email with copy */}
+                      <TableCell>
+                        {c.email ? (
+                          <div className="flex items-center gap-1.5 group">
+                            <a className="text-sm hover:underline truncate max-w-[180px]" href={`mailto:${c.email}`}>
+                              {c.email}
+                            </a>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); copyToClipboard(c.email!, `email-${c.id}`) }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              title="Copy email"
+                            >
+                              {copiedId === `email-${c.id}` ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Phone with copy */}
+                      <TableCell>
+                        {(c.phone || c.mobile) ? (
+                          <div className="flex items-center gap-1.5 group">
+                            <span className="text-sm truncate max-w-[140px]">{c.phone || c.mobile}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); copyToClipboard((c.phone || c.mobile)!, `phone-${c.id}`) }}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              title="Copy phone"
+                            >
+                              {copiedId === `phone-${c.id}` ? (
+                                <Check className="h-3.5 w-3.5 text-green-600" />
+                              ) : (
+                                <Copy className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+
+                      {/* Status Badge */}
+                      <TableCell>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${csBadge.className}`}>
+                          {csBadge.label}
+                        </span>
+                      </TableCell>
+
+                      {/* Last Activity */}
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {timeAgo(c.updatedAt)}
+                        </span>
+                      </TableCell>
+
+                      {/* Actions */}
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="View" onClick={() => setViewContact(c)}>
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEditContact(c)}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Delete" onClick={() => setDeleteContact(c)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
       </div>
 
+      {/* View Contact Dialog */}
       <Dialog open={!!viewContact} onOpenChange={(open) => !open && setViewContact(null)}>
         <DialogContent className="sm:max-w-2xl">
-          {viewContact && (
-            <>
-              <DialogHeader className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-12 w-12">
-                    <AvatarFallback>
-                      {viewContact.firstName[0]}
-                      {viewContact.lastName[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <DialogTitle className="text-xl">
-                      {viewContact.firstName} {viewContact.lastName}
-                    </DialogTitle>
-                    <DialogDescription className="flex items-center gap-2">
-                      {viewContact.department || 'No department'}
-                      <span className="text-muted-foreground">·</span>
-                      {viewContact.client.name}
-                    </DialogDescription>
+          {viewContact && (() => {
+            const vCtBadge = viewContact.contactType ? contactTypeBadge[viewContact.contactType] || contactTypeBadge.other : null
+            const vCsBadge = contactStatusBadge[viewContact.contactStatus || 'active'] || contactStatusBadge.active
+            return (
+              <>
+                <DialogHeader className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-12 w-12">
+                      {viewContact.profilePhotoUrl && <AvatarImage src={viewContact.profilePhotoUrl} alt={`${viewContact.firstName} ${viewContact.lastName}`} />}
+                      <AvatarFallback className="bg-primary/10 text-primary">
+                        {viewContact.firstName[0]}{viewContact.lastName[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <DialogTitle className="text-xl flex items-center gap-2">
+                        {viewContact.firstName} {viewContact.lastName}
+                        {viewContact.isPrimaryContact && (
+                          <Star className="h-4 w-4 text-amber-500 fill-amber-500" />
+                        )}
+                      </DialogTitle>
+                      <DialogDescription className="flex items-center gap-2">
+                        {viewContact.jobTitle || viewContact.department || 'No role'}
+                        <span className="text-muted-foreground">·</span>
+                        {viewContact.client.name}
+                      </DialogDescription>
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {viewContact.isClientApprover ? (
-                    <Badge variant="hashtag">Approver</Badge>
-                  ) : (
-                    <Badge variant="secondary">Standard contact</Badge>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${vCsBadge.className}`}>
+                      {vCsBadge.label}
+                    </span>
+                    {vCtBadge && (
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${vCtBadge.className}`}>
+                        {vCtBadge.label}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">
+                      Last updated {formatDate(viewContact.updatedAt)}
+                    </span>
+                  </div>
+                </DialogHeader>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Contact Info</div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Email</span>
+                        <span>{viewContact.email || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Phone</span>
+                        <span>{viewContact.phone || '—'}</span>
+                      </div>
+                      {viewContact.linkedinUrl && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">LinkedIn</span>
+                          <a href={viewContact.linkedinUrl} target="_blank" rel="noopener noreferrer" className="hover:underline text-blue-600 truncate max-w-[180px]">
+                            Profile
+                          </a>
+                        </div>
+                      )}
+                      {viewContact.preferredChannel && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Preferred</span>
+                          <span className="capitalize">{viewContact.preferredChannel}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Details</div>
+                    <div className="space-y-2 text-sm">
+                      {viewContact.department && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Department</span>
+                          <span>{viewContact.department}</span>
+                        </div>
+                      )}
+                      {viewContact.notificationPreference && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Notifications</span>
+                          <span className="capitalize">{viewContact.notificationPreference.replace('_', ' ')}</span>
+                        </div>
+                      )}
+                      {viewContact.birthday && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Birthday</span>
+                          <span>{formatDate(viewContact.birthday)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {viewContact.notes && (
+                    <div className="rounded-lg border bg-muted/20 p-4 space-y-3 sm:col-span-2">
+                      <div className="text-xs uppercase tracking-wide text-muted-foreground">Notes</div>
+                      <div className="text-sm whitespace-pre-wrap text-muted-foreground">{viewContact.notes}</div>
+                    </div>
                   )}
-                  <span className="text-xs text-muted-foreground">
-                    Last updated {formatDate(viewContact.updatedAt)}
-                  </span>
                 </div>
-              </DialogHeader>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Contact Info
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Email</span>
-                      <span>{viewContact.email || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Primary</span>
-                      <span>{viewContact.phone || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Mobile</span>
-                      <span>{viewContact.mobile || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Office</span>
-                      <span>{viewContact.officePhone || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Home</span>
-                      <span>{viewContact.homePhone || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Department</span>
-                      <span>{viewContact.department || '—'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Client</span>
-                      <span>{viewContact.client.name}</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Address
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {viewContact.address || '—'}
-                  </div>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3 sm:col-span-2">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Notes
-                  </div>
-                  <div className="text-sm whitespace-pre-wrap text-muted-foreground">
-                    {viewContact.notes || '—'}
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
+      {/* Edit Contact Dialog */}
       <ContactFormDialog
         open={!!editingContact}
         onOpenChange={(open) => !open && setEditingContact(null)}
@@ -663,6 +714,7 @@ export default function ContactsPage() {
         saving={saving}
       />
 
+      {/* Create Contact Dialog */}
       <ContactFormDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
@@ -675,6 +727,7 @@ export default function ContactsPage() {
         showClientSelector
       />
 
+      {/* Delete Confirmation */}
       <Dialog open={!!deleteContact} onOpenChange={(open) => !open && setDeleteContact(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader className="space-y-2">
@@ -687,12 +740,8 @@ export default function ContactsPage() {
             This action cannot be undone.
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteContact(null)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteContact} loading={deleting}>
-              Delete contact
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteContact(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteContact} loading={deleting}>Delete contact</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronRight, ChevronLeft, Inbox, Calendar, FileCheck, Briefcase, Info } from 'lucide-react'
+import { ChevronRight, Inbox, Calendar, FileCheck, Briefcase, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
 
@@ -161,12 +162,10 @@ export default function CreatorCampaignDetailPage() {
   return (
     <div className="flex-1 container max-w-4xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <Link href="/creator/campaigns">
-          <Button variant="ghost" size="sm" className="gap-1 -ml-2 mb-4">
-            <ChevronLeft className="h-4 w-4" />
-            Back to Campaigns
-          </Button>
-        </Link>
+        <PageBreadcrumb items={[
+          { label: 'Campaigns', href: '/creator/campaigns' },
+          { label: campaign?.campaign.name || 'Campaign' },
+        ]} />
       </div>
 
       {loading ? (

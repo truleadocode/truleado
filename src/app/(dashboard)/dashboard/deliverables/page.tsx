@@ -1,14 +1,25 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { FileCheck, Search, Clock, CheckCircle, XCircle, Send } from 'lucide-react'
+import { FileCheck, Search } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { getDeliverableStatusLabel } from '@/lib/campaign-status'
 
 interface Deliverable {
   id: string
@@ -45,16 +56,6 @@ interface Client {
   name: string
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  PENDING: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="h-3 w-3" /> },
-  SUBMITTED: { label: 'Submitted', color: 'bg-blue-100 text-blue-700', icon: <Send className="h-3 w-3" /> },
-  INTERNAL_REVIEW: { label: 'Pending Campaign Approval', color: 'bg-yellow-100 text-yellow-700', icon: <Clock className="h-3 w-3" /> },
-  PENDING_PROJECT_APPROVAL: { label: 'Pending Project Approval', color: 'bg-amber-100 text-amber-700', icon: <Clock className="h-3 w-3" /> },
-  CLIENT_REVIEW: { label: 'Pending Client Approval', color: 'bg-orange-100 text-orange-700', icon: <Clock className="h-3 w-3" /> },
-  APPROVED: { label: 'Fully Approved', color: 'bg-green-100 text-green-700', icon: <CheckCircle className="h-3 w-3" /> },
-  REJECTED: { label: 'Rejected', color: 'bg-red-100 text-red-700', icon: <XCircle className="h-3 w-3" /> },
-}
-
 interface DeliverableWithCampaign extends Deliverable {
   campaign: {
     id: string
@@ -62,6 +63,8 @@ interface DeliverableWithCampaign extends Deliverable {
     clientName: string
   }
 }
+
+const STATUS_KEYS = ['PENDING', 'SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW', 'APPROVED', 'REJECTED']
 
 export default function DeliverablesPage() {
   const { currentAgency } = useAuth()
@@ -73,26 +76,25 @@ export default function DeliverablesPage() {
 
   const fetchDeliverables = useCallback(async () => {
     if (!currentAgency?.id) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
-      // Get all clients
       const clientsData = await graphqlRequest<{ clients: Client[] }>(
         queries.clients,
         { agencyId: currentAgency.id }
       )
-      
+
       const allDeliverables: DeliverableWithCampaign[] = []
-      
+
       for (const client of clientsData.clients) {
         try {
           const projectsData = await graphqlRequest<{ projects: Project[] }>(
             queries.projects,
             { clientId: client.id }
           )
-          
+
           for (const project of projectsData.projects) {
             for (const campaign of project.campaigns || []) {
               for (const deliverable of campaign.deliverables || []) {
@@ -111,12 +113,11 @@ export default function DeliverablesPage() {
           console.error(`Failed to fetch projects for client ${client.id}:`, err)
         }
       }
-      
-      // Sort by created date
-      allDeliverables.sort((a, b) => 
+
+      allDeliverables.sort((a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       )
-      
+
       setDeliverables(allDeliverables)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load deliverables')
@@ -130,18 +131,18 @@ export default function DeliverablesPage() {
   }, [fetchDeliverables])
 
   const filteredDeliverables = deliverables.filter((d) => {
-    const matchesSearch = 
+    const matchesSearch =
       d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       d.campaign.clientName.toLowerCase().includes(searchQuery.toLowerCase())
-    
+
     const matchesStatus = statusFilter === 'all' || d.status === statusFilter.toUpperCase()
-    
+
     return matchesSearch && matchesStatus
   })
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return null
+    if (!dateString) return '—'
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
@@ -156,31 +157,21 @@ export default function DeliverablesPage() {
   return (
     <>
       <Header title="Deliverables" subtitle="Track and approve content deliverables" />
-      
+
       <div className="p-6 space-y-6">
         {/* Status Filter Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
-          <Button
-            variant={statusFilter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('all')}
-          >
-            All ({deliverables.length})
-          </Button>
-          {['PENDING', 'SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW', 'APPROVED', 'REJECTED'].map((status) => {
-            const config = STATUS_CONFIG[status]
-            return (
-              <Button
-                key={status}
-                variant={statusFilter === status ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setStatusFilter(status)}
-              >
-                {config.label} ({statusCounts[status] || 0})
-              </Button>
-            )
-          })}
-        </div>
+        {deliverables.length > 0 && (
+          <Tabs value={statusFilter} onValueChange={setStatusFilter}>
+            <TabsList>
+              <TabsTrigger value="all">All ({deliverables.length})</TabsTrigger>
+              {STATUS_KEYS.map((status) => (
+                <TabsTrigger key={status} value={status}>
+                  {getDeliverableStatusLabel(status)} ({statusCounts[status] || 0})
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
 
         {/* Search */}
         <div className="flex gap-3 max-w-md">
@@ -198,28 +189,39 @@ export default function DeliverablesPage() {
         {/* Error State */}
         {error && (
           <Card className="border-destructive bg-destructive/10">
-            <CardContent className="p-4 text-destructive">
-              {error}
-            </CardContent>
+            <CardContent className="p-4 text-destructive">{error}</CardContent>
           </Card>
         )}
 
         {/* Loading State */}
         {loading && (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <Card key={i} className="animate-pulse">
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="h-10 w-10 rounded bg-muted" />
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 w-48 bg-muted rounded" />
-                      <div className="h-3 w-32 bg-muted rounded" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[260px]">Deliverable</TableHead>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead className="text-center">Version</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <TableRow key={i} className="animate-pulse">
+                    <TableCell><div className="h-5 w-40 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-28 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-24 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-20 bg-muted rounded" /></TableCell>
+                    <TableCell><div className="h-5 w-16 bg-muted rounded" /></TableCell>
+                    <TableCell className="text-center"><div className="h-5 w-8 bg-muted rounded mx-auto" /></TableCell>
+                    <TableCell><div className="h-5 w-24 bg-muted rounded-full" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
 
@@ -227,69 +229,73 @@ export default function DeliverablesPage() {
         {!loading && !error && deliverables.length === 0 && (
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-16">
-              <FileCheck className="h-16 w-16 text-muted-foreground mb-4" />
+              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                <FileCheck className="h-8 w-8 text-muted-foreground" />
+              </div>
               <h3 className="text-lg font-semibold">No deliverables yet</h3>
               <p className="text-muted-foreground text-center mt-2 max-w-sm">
-                Deliverables are created within campaigns. Create a campaign first, 
+                Deliverables are created within campaigns. Create a campaign first,
                 then add deliverables to track content.
               </p>
               <Button className="mt-6" asChild>
-                <Link href="/dashboard/campaigns">
-                  Go to Campaigns
-                </Link>
+                <Link href="/dashboard/campaigns">Go to Campaigns</Link>
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Deliverables List */}
+        {/* Deliverables Table */}
         {!loading && !error && filteredDeliverables.length > 0 && (
-          <div className="space-y-3">
-            {filteredDeliverables.map((deliverable) => {
-              const statusConfig = STATUS_CONFIG[deliverable.status] || STATUS_CONFIG.pending
-              return (
-                <Link key={deliverable.id} href={`/dashboard/deliverables/${deliverable.id}`}>
-                  <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                            <FileCheck className="h-5 w-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-medium">{deliverable.title}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              {deliverable.campaign.clientName} • {deliverable.campaign.name}
-                            </p>
-                          </div>
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[260px]">Deliverable</TableHead>
+                  <TableHead>Campaign</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Due Date</TableHead>
+                  <TableHead className="text-center">Version</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredDeliverables.map((deliverable) => (
+                  <TableRow
+                    key={deliverable.id}
+                    className="cursor-pointer"
+                    onClick={() => window.location.href = `/dashboard/deliverables/${deliverable.id}`}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                          <FileCheck className="h-4 w-4 text-blue-600" />
                         </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right hidden sm:block">
-                            <p className="text-sm capitalize">
-                              {deliverable.deliverableType.replace(/_/g, ' ')}
-                            </p>
-                            {deliverable.dueDate && (
-                              <p className="text-xs text-muted-foreground">
-                                Due: {formatDate(deliverable.dueDate)}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">
-                              v{deliverable.versions.length || 0}
-                            </span>
-                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig.color}`}>
-                              {statusConfig.icon}
-                              {statusConfig.label}
-                            </span>
-                          </div>
-                        </div>
+                        <span className="font-medium truncate">{deliverable.title}</span>
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              )
-            })}
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">{deliverable.campaign.name}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">{deliverable.campaign.clientName}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm capitalize">{deliverable.deliverableType.replace(/_/g, ' ')}</span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">{formatDate(deliverable.dueDate)}</span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="text-sm">v{deliverable.versions.length || 0}</span>
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={deliverable.status} type="deliverable" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
 

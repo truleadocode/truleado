@@ -17,6 +17,7 @@ import { logActivity } from '@/lib/audit';
 import { calculateUnlockCost, calculateExportCost, calculateImportCost } from '@/lib/discovery/pricing';
 import { deductPremiumTokens, refundPremiumTokens } from '@/lib/discovery/token-deduction';
 import { unhideInfluencers } from '@/lib/onsocial/unhide';
+import { getInfluencerContacts } from '@/lib/onsocial/contacts';
 import { createExport } from '@/lib/onsocial/exports';
 import type { OnSocialPlatform, OnSocialExportType } from '@/lib/onsocial/types';
 
@@ -29,13 +30,16 @@ export async function discoveryUnlock(
   {
     agencyId,
     platform,
-    searchResultIds,
-    withContact,
+    influencers,
   }: {
     agencyId: string;
     platform: string;
-    searchResultIds: string[];
-    withContact?: boolean;
+    influencers: Array<{
+      onsocialUserId: string;
+      searchResultId: string;
+      username: string;
+      fullname?: string;
+    }>;
   },
   ctx: GraphQLContext
 ) {
@@ -47,34 +51,44 @@ export async function discoveryUnlock(
 
   const platformLower = platform.toLowerCase() as OnSocialPlatform;
 
-  // Filter out empty/invalid search result IDs
-  const validIds = searchResultIds.filter((id) => id && id.trim().length > 0);
-  if (validIds.length === 0) {
-    throw new Error('No valid search result IDs provided. Please re-search and try again.');
+  if (influencers.length === 0) {
+    throw new Error('No influencers provided for unlock');
   }
 
-  // Calculate cost based on valid IDs only
-  const pricing = await calculateUnlockCost(agencyId, validIds.length, withContact || false);
-
-  // Deduct premium tokens BEFORE API call
+  // Calculate cost and deduct agency tokens BEFORE calling OnSocial
+  const pricing = await calculateUnlockCost(agencyId, influencers.length, false);
   const deduction = await deductPremiumTokens(agencyId, Math.ceil(pricing.totalInternalCost));
 
   try {
-    // Call OnSocial unhide API
-    const result = await unhideInfluencers(validIds, platformLower);
+    // Call OnSocial unhide API to reveal hidden profiles (uses Truleado's subscription tokens)
+    const searchResultIds = influencers.map((inf) => inf.searchResultId);
+    const unhideResult = await unhideInfluencers(searchResultIds, platformLower);
 
-    // Insert unlock records for each unlocked account
-    const unlockRows = result.accounts.map((account) => ({
-      agency_id: agencyId,
-      platform: platformLower,
-      onsocial_user_id: account.account.user_profile.user_id,
-      search_result_id: account.account.search_result_id || '',
-      username: account.account.user_profile.username,
-      fullname: account.account.user_profile.fullname || null,
-      profile_data: account.account.user_profile,
-      tokens_spent: pricing.totalInternalCost / searchResultIds.length,
-      unlocked_by: user.id,
-    }));
+    // Build a map of revealed profiles by search_result_id for easy lookup
+    const revealedMap = new Map<string, Record<string, unknown>>();
+    for (const a of unhideResult.accounts) {
+      if (a.account.search_result_id) {
+        revealedMap.set(a.account.search_result_id, a.account.user_profile as unknown as Record<string, unknown>);
+      }
+    }
+
+    // Store unlock records with the revealed profile data
+    const unlockRows = influencers.map((inf) => {
+      const revealed = revealedMap.get(inf.searchResultId);
+      return {
+        agency_id: agencyId,
+        platform: platformLower,
+        onsocial_user_id: revealed
+          ? (revealed.user_id as string) || inf.onsocialUserId
+          : inf.onsocialUserId,
+        search_result_id: inf.searchResultId,
+        username: revealed ? (revealed.username as string) || inf.username : inf.username,
+        fullname: revealed ? (revealed.fullname as string) || inf.fullname || null : inf.fullname || null,
+        profile_data: revealed || null,
+        tokens_spent: pricing.totalInternalCost / influencers.length,
+        unlocked_by: user.id,
+      };
+    });
 
     const { data: unlocks, error: insertError } = await supabaseAdmin
       .from('discovery_unlocks')
@@ -85,7 +99,6 @@ export async function discoveryUnlock(
       throw new Error('Failed to save unlock records');
     }
 
-    // Log activity
     await logActivity({
       agencyId,
       entityType: 'discovery_unlock',
@@ -95,14 +108,12 @@ export async function discoveryUnlock(
       actorType: 'user',
       metadata: {
         platform: platformLower,
-        count: searchResultIds.length,
-        withContact: withContact || false,
+        count: influencers.length,
         tokensSpent: Math.ceil(pricing.totalInternalCost),
         newBalance: deduction.newBalance,
       },
     });
 
-    // Map to GraphQL response
     return unlocks.map((u: Record<string, unknown>) => ({
       id: u.id,
       platform: u.platform,
@@ -117,7 +128,6 @@ export async function discoveryUnlock(
       expiresAt: u.expires_at,
     }));
   } catch (err) {
-    // Refund tokens on failure
     await refundPremiumTokens(agencyId, deduction.previousBalance);
     throw err;
   }
@@ -255,6 +265,10 @@ export async function discoveryImportToCreators(
       phone?: string;
       profilePicture?: string;
       searchResultId?: string;
+      followers?: number;
+      engagementRate?: number;
+      avgLikes?: number;
+      contactLinks?: unknown;
     }>;
     withContact?: boolean;
   },
@@ -276,8 +290,8 @@ export async function discoveryImportToCreators(
   const deduction = await deductPremiumTokens(agencyId, Math.ceil(pricing.totalInternalCost));
 
   try {
-    // When importing with contact, call OnSocial unhide to fetch email/phone
-    let contactMap = new Map<string, { email?: string; phone?: string }>();
+    // When importing with contact, call OnSocial /exports/contacts/ for email/phone
+    let contactMap = new Map<string, { email?: string; phone?: string; contactLinks?: unknown[] }>();
     if (withContact) {
       contactMap = await fetchContactData(influencers);
     }
@@ -297,6 +311,7 @@ export async function discoveryImportToCreators(
       const contact = contactMap.get(influencer.onsocialUserId);
       const email = influencer.email || contact?.email || null;
       const phone = influencer.phone || contact?.phone || null;
+      const contactLinks = contact?.contactLinks || influencer.contactLinks || null;
 
       // Check if creator already exists
       const { data: existing } = await supabaseAdmin
@@ -307,7 +322,7 @@ export async function discoveryImportToCreators(
         .maybeSingle();
 
       if (existing) {
-        // Update existing — don't overwrite notes/email/phone if already set
+        // Update existing — don't overwrite fields if already set
         const updates: Record<string, unknown> = {
           [handleColumn]: influencer.username,
           discovery_imported_at: new Date().toISOString(),
@@ -319,12 +334,13 @@ export async function discoveryImportToCreators(
         if (!existing.profile_picture_url && influencer.profilePicture) {
           updates.profile_picture_url = influencer.profilePicture;
         }
-        if (!existing.email && email) {
-          updates.email = email;
-        }
-        if (!existing.phone && phone) {
-          updates.phone = phone;
-        }
+        if (!existing.email && email) updates.email = email;
+        if (!existing.phone && phone) updates.phone = phone;
+        if (!existing.platform) updates.platform = platformLower;
+        if (!existing.followers && influencer.followers) updates.followers = influencer.followers;
+        if (!existing.engagement_rate && influencer.engagementRate) updates.engagement_rate = influencer.engagementRate;
+        if (!existing.avg_likes && influencer.avgLikes) updates.avg_likes = influencer.avgLikes;
+        if (!existing.contact_links && contactLinks) updates.contact_links = contactLinks;
 
         const { data: updated, error } = await supabaseAdmin
           .from('creators')
@@ -334,7 +350,8 @@ export async function discoveryImportToCreators(
           .single();
 
         if (error || !updated) {
-          throw new Error(`Failed to update creator ${existing.id}`);
+          console.error('[Discovery] Failed to update creator:', error);
+          throw new Error(`Failed to update creator ${existing.id}: ${error?.message || 'No data returned'}`);
         }
         results.push(updated);
       } else {
@@ -347,11 +364,16 @@ export async function discoveryImportToCreators(
           discovery_source: 'discovery',
           discovery_imported_at: new Date().toISOString(),
           is_active: true,
+          platform: platformLower,
         };
 
         if (influencer.profilePicture) insertData.profile_picture_url = influencer.profilePicture;
         if (email) insertData.email = email;
         if (phone) insertData.phone = phone;
+        if (influencer.followers) insertData.followers = influencer.followers;
+        if (influencer.engagementRate) insertData.engagement_rate = influencer.engagementRate;
+        if (influencer.avgLikes) insertData.avg_likes = influencer.avgLikes;
+        if (contactLinks) insertData.contact_links = contactLinks;
 
         const { data: created, error } = await supabaseAdmin
           .from('creators')
@@ -360,7 +382,8 @@ export async function discoveryImportToCreators(
           .single();
 
         if (error || !created) {
-          throw new Error(`Failed to create creator for ${influencer.username}`);
+          console.error('[Discovery] Failed to create creator:', error);
+          throw new Error(`Failed to create creator for ${influencer.username}: ${error?.message || 'No data returned'}`);
         }
         results.push(created);
       }
@@ -396,19 +419,20 @@ export async function discoveryImportToCreators(
  *
  * Strategy (in order):
  *   1. Check discovery_unlocks for cached profile_data that may contain contacts
- *   2. Call OnSocial unhide to get fresh profile data (may return contacts)
+ *   2. Call OnSocial GET /exports/contacts/ for each profile still missing contacts
  *   3. For any profiles still missing contacts, the import proceeds without them
  *
- * Returns a map of onsocialUserId → { email, phone }.
+ * Returns a map of onsocialUserId → { email, phone, contactLinks }.
  */
 async function fetchContactData(
   influencers: Array<{
     onsocialUserId: string;
+    username: string;
     platform: string;
     searchResultId?: string;
   }>
-): Promise<Map<string, { email?: string; phone?: string }>> {
-  const contactMap = new Map<string, { email?: string; phone?: string }>();
+): Promise<Map<string, { email?: string; phone?: string; contactLinks?: unknown[] }>> {
+  const contactMap = new Map<string, { email?: string; phone?: string; contactLinks?: unknown[] }>();
   const onsocialUserIds = influencers.map((i) => i.onsocialUserId);
 
   // Step 1: Check discovery_unlocks for cached contact data
@@ -429,43 +453,33 @@ async function fetchContactData(
     }
   }
 
-  // Step 2: Call OnSocial unhide for profiles that still lack contact data
+  // Step 2: Call OnSocial /exports/contacts/ for profiles still missing contacts
   const needsEnrichment = influencers.filter(
-    (inf) => inf.searchResultId && !contactMap.has(inf.onsocialUserId)
+    (inf) => !contactMap.has(inf.onsocialUserId)
   );
 
-  if (needsEnrichment.length > 0) {
-    // Group by platform since unhide API requires a platform param
-    const byPlatform = new Map<string, string[]>();
-    const idToUser = new Map<string, string>();
+  // Fetch contacts in parallel (batched to avoid overwhelming the API)
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < needsEnrichment.length; i += BATCH_SIZE) {
+    const batch = needsEnrichment.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map(async (inf) => {
+        const platform = inf.platform.toLowerCase() as OnSocialPlatform;
+        const result = await getInfluencerContacts(inf.username, platform);
 
-    for (const inf of needsEnrichment) {
-      const plat = inf.platform.toLowerCase();
-      if (!byPlatform.has(plat)) byPlatform.set(plat, []);
-      byPlatform.get(plat)!.push(inf.searchResultId!);
-      idToUser.set(inf.searchResultId!, inf.onsocialUserId);
-    }
-
-    for (const [platform, searchResultIds] of byPlatform) {
-      try {
-        const result = await unhideInfluencers(
-          searchResultIds,
-          platform as OnSocialPlatform
-        );
-
-        for (const account of result.accounts) {
-          const profile = account.account.user_profile;
-          const userId = profile.user_id || idToUser.get(account.account.search_result_id || '');
-          if (!userId) continue;
-
-          const contact = extractContactFromProfile(profile as unknown as Record<string, unknown>);
-          if (contact.email || contact.phone) {
-            contactMap.set(userId, contact);
-          }
+        if (result.success && result.user_profile?.contacts) {
+          const contact = extractContactFromContacts(result.user_profile.contacts);
+          contactMap.set(inf.onsocialUserId, {
+            ...contact,
+            contactLinks: result.user_profile.contacts,
+          });
         }
-      } catch (err) {
-        // If unhide fails, log but don't fail the import.
-        console.error('[Discovery] Contact enrichment via unhide failed:', err);
+      })
+    );
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('[Discovery] Contact fetch failed:', result.reason);
       }
     }
   }
@@ -474,7 +488,7 @@ async function fetchContactData(
 }
 
 /**
- * Extract email and phone from a profile data object.
+ * Extract email and phone from a profile data object (cached in discovery_unlocks).
  * Checks multiple possible field names / structures.
  */
 function extractContactFromProfile(
@@ -490,13 +504,30 @@ function extractContactFromProfile(
 
   // Contacts array (OnSocial may return contacts as an array of {type, value})
   if (Array.isArray(profile.contacts)) {
-    for (const c of profile.contacts) {
-      if (typeof c === 'object' && c !== null) {
-        const ct = c as { type?: string; value?: string };
-        if (ct.type === 'email' && ct.value && !email) email = ct.value;
-        if ((ct.type === 'phone' || ct.type === 'phone_number') && ct.value && !phone) phone = ct.value;
-      }
-    }
+    const result = extractContactFromContacts(
+      profile.contacts as Array<{ type: string; value: string }>
+    );
+    if (result.email && !email) email = result.email;
+    if (result.phone && !phone) phone = result.phone;
+  }
+
+  return { email, phone };
+}
+
+/**
+ * Extract email and phone from an OnSocial contacts array.
+ * The /exports/contacts/ API returns contacts as [{type, value, formatted_value}].
+ */
+function extractContactFromContacts(
+  contacts: Array<{ type: string; value: string }>
+): { email?: string; phone?: string } {
+  let email: string | undefined;
+  let phone: string | undefined;
+
+  for (const c of contacts) {
+    if (!c.type || !c.value) continue;
+    if (c.type === 'email' && !email) email = c.value;
+    if ((c.type === 'phone' || c.type === 'phone_number') && !phone) phone = c.value;
   }
 
   return { email, phone };

@@ -1,143 +1,119 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import {
-  ArrowLeft,
-  Building2,
-  FolderKanban,
-  Megaphone,
-  Plus,
-  MoreHorizontal,
-  AlertCircle,
-  Users,
-  Pencil,
-  Trash2,
-  CheckCircle,
-  Circle,
-} from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Card, CardContent } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
-import { getCampaignStatusLabel } from '@/lib/campaign-status'
+import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
-import { ContactFormDialog, type ContactFormData } from '@/components/contacts/contact-form-dialog'
-
-interface Project {
-  id: string
-  name: string
-  isArchived: boolean
-  campaigns: {
-    id: string
-    name: string
-    status: string
-  }[]
-}
-
-interface Contact {
-  id: string
-  firstName: string
-  lastName: string
-  email: string | null
-  phone: string | null
-  mobile: string | null
-  officePhone: string | null
-  homePhone: string | null
-  department: string | null
-  address?: string | null
-  notes?: string | null
-  isClientApprover: boolean
-  createdAt: string
-}
-
-interface Client {
-  id: string
-  name: string
-  isActive: boolean
-  createdAt: string
-  accountManager: {
-    id: string
-    name: string | null
-    email: string
-  } | null
-  projects: Project[]
-  contacts: Contact[]
-}
-
-type Tab = 'overview' | 'contacts'
+import { ContactFormDialog, emptyContactForm, type ContactFormData } from '@/components/contacts/contact-form-dialog'
+import { ClientEditDialog } from '@/components/clients/client-edit-dialog'
+import { ClientSidebar } from './components/client-sidebar'
+import { OverviewTab } from './components/overview-tab'
+import { ContactsTab } from './components/contacts-tab'
+import { ProjectsTab } from './components/projects-tab'
+import { CampaignsTab } from './components/campaigns-tab'
+import { NotesTab } from './components/notes-tab'
+import { FilesTab } from './components/files-tab'
+import type { Client, Contact, ClientNote, ActivityLog, ClientFile } from './types'
 
 export default function ClientDetailPage() {
   const params = useParams()
   const router = useRouter()
   const clientId = params.id as string
   const { toast } = useToast()
-  
+
   const [client, setClient] = useState<Client | null>(null)
+  const [notes, setNotes] = useState<ClientNote[]>([])
+  const [activityFeed, setActivityFeed] = useState<ActivityLog[]>([])
+  const [files, setFiles] = useState<ClientFile[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<Tab>('overview')
+  const [activeTab, setActiveTab] = useState('overview')
+
+  // Contact form state
   const [contactDialogOpen, setContactDialogOpen] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [contactForm, setContactForm] = useState<ContactFormData>({
-    clientId: '',
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    mobile: '',
-    officePhone: '',
-    homePhone: '',
-    address: '',
-    department: '',
-    notes: '',
-    isClientApprover: false,
-  })
+  const [contactForm, setContactForm] = useState<ContactFormData>({ ...emptyContactForm })
   const [submitting, setSubmitting] = useState(false)
 
-  const fetchClient = async () => {
+  // Edit client dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  // ----- Data fetching -----
+  const fetchClient = useCallback(async () => {
     try {
-      const data = await graphqlRequest<{ client: Client }>(
-        queries.client,
-        { id: clientId }
-      )
+      const data = await graphqlRequest<{ client: Client }>(queries.client, { id: clientId })
       setClient(data.client)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load client')
     } finally {
       setLoading(false)
     }
-  }
+  }, [clientId])
+
+  const fetchNotes = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ clientNotes: ClientNote[] }>(queries.clientNotes, { clientId })
+      setNotes(data.clientNotes)
+    } catch {
+      // silently fail for supplementary data
+    }
+  }, [clientId])
+
+  const fetchActivity = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ clientActivityFeed: ActivityLog[] }>(queries.clientActivityFeed, { clientId, limit: 10 })
+      setActivityFeed(data.clientActivityFeed)
+    } catch {
+      // silently fail
+    }
+  }, [clientId])
+
+  const fetchFiles = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ clientFiles: ClientFile[] }>(queries.clientFiles, { clientId })
+      setFiles(data.clientFiles)
+    } catch {
+      // silently fail
+    }
+  }, [clientId])
 
   useEffect(() => {
     fetchClient()
-  }, [clientId])
+    fetchNotes()
+    fetchActivity()
+    fetchFiles()
+  }, [fetchClient, fetchNotes, fetchActivity, fetchFiles])
 
+  // ----- Client actions -----
+  const handleStatusChange = async (status: string) => {
+    try {
+      await graphqlRequest(mutations.updateClient, { id: clientId, clientStatus: status })
+      toast({ title: 'Status updated' })
+      await fetchClient()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to update status', variant: 'destructive' })
+    }
+  }
+
+  const handleArchiveClient = async () => {
+    try {
+      await graphqlRequest(mutations.archiveClient, { id: clientId })
+      toast({ title: 'Client archived' })
+      router.push('/dashboard/clients')
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to archive client', variant: 'destructive' })
+    }
+  }
+
+  // ----- Contact actions -----
   const openAddContact = () => {
     setEditingContact(null)
-    setContactForm({
-      clientId: '',
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      mobile: '',
-      officePhone: '',
-      homePhone: '',
-      address: '',
-      department: '',
-      notes: '',
-      isClientApprover: false,
-    })
+    setContactForm({ ...emptyContactForm })
     setContactDialogOpen(true)
   }
 
@@ -149,13 +125,17 @@ export default function ClientDetailPage() {
       lastName: c.lastName,
       email: c.email ?? '',
       phone: c.phone ?? '',
-      mobile: c.mobile ?? '',
-      officePhone: c.officePhone ?? '',
-      homePhone: c.homePhone ?? '',
-      address: c.address ?? '',
+      profilePhotoUrl: c.profilePhotoUrl ?? '',
+      jobTitle: c.jobTitle ?? '',
       department: c.department ?? '',
+      isPrimaryContact: c.isPrimaryContact,
+      linkedinUrl: c.linkedinUrl ?? '',
+      preferredChannel: c.preferredChannel ?? '',
+      contactType: c.contactType ?? '',
+      contactStatus: c.contactStatus ?? 'active',
+      notificationPreference: c.notificationPreference ?? '',
+      birthday: c.birthday ?? '',
       notes: c.notes ?? '',
-      isClientApprover: c.isClientApprover,
     })
     setContactDialogOpen(true)
   }
@@ -167,37 +147,28 @@ export default function ClientDetailPage() {
     }
     setSubmitting(true)
     try {
+      const commonFields = {
+        firstName: contactForm.firstName.trim(),
+        lastName: contactForm.lastName.trim(),
+        email: contactForm.email.trim() || null,
+        phone: contactForm.phone.trim() || null,
+        department: contactForm.department.trim() || null,
+        notes: contactForm.notes.trim() || null,
+        profilePhotoUrl: contactForm.profilePhotoUrl.trim() || null,
+        jobTitle: contactForm.jobTitle.trim() || null,
+        isPrimaryContact: contactForm.isPrimaryContact,
+        linkedinUrl: contactForm.linkedinUrl.trim() || null,
+        preferredChannel: contactForm.preferredChannel || null,
+        contactType: contactForm.contactType || null,
+        contactStatus: contactForm.contactStatus || null,
+        notificationPreference: contactForm.notificationPreference || null,
+        birthday: contactForm.birthday || null,
+      }
       if (editingContact) {
-        await graphqlRequest(mutations.updateContact, {
-          id: editingContact.id,
-          firstName: contactForm.firstName.trim(),
-          lastName: contactForm.lastName.trim(),
-          email: contactForm.email.trim() || null,
-          phone: contactForm.phone.trim() || null,
-          mobile: contactForm.mobile.trim() || null,
-          officePhone: contactForm.officePhone.trim() || null,
-          homePhone: contactForm.homePhone.trim() || null,
-          address: contactForm.address.trim() || null,
-          department: contactForm.department.trim() || null,
-          notes: contactForm.notes.trim() || null,
-          isClientApprover: contactForm.isClientApprover,
-        })
+        await graphqlRequest(mutations.updateContact, { id: editingContact.id, ...commonFields })
         toast({ title: 'Contact updated' })
       } else {
-        await graphqlRequest(mutations.createContact, {
-          clientId,
-          firstName: contactForm.firstName.trim(),
-          lastName: contactForm.lastName.trim(),
-          email: contactForm.email.trim() || null,
-          phone: contactForm.phone.trim() || null,
-          mobile: contactForm.mobile.trim() || null,
-          officePhone: contactForm.officePhone.trim() || null,
-          homePhone: contactForm.homePhone.trim() || null,
-          address: contactForm.address.trim() || null,
-          department: contactForm.department.trim() || null,
-          notes: contactForm.notes.trim() || null,
-          isClientApprover: contactForm.isClientApprover,
-        })
+        await graphqlRequest(mutations.createContact, { clientId, ...commonFields })
         toast({ title: 'Contact added' })
       }
       setContactDialogOpen(false)
@@ -220,58 +191,62 @@ export default function ClientDetailPage() {
     }
   }
 
-  const handleToggleApprover = async (c: Contact) => {
+  // ----- Notes actions -----
+  const handleCreateNote = async (message: string) => {
     try {
-      await graphqlRequest(mutations.updateContact, {
-        id: c.id,
-        isClientApprover: !c.isClientApprover,
-      })
-      toast({ title: c.isClientApprover ? 'Removed as client approver' : 'Set as client approver' })
-      await fetchClient()
+      await graphqlRequest(mutations.createClientNote, { clientId, message })
+      toast({ title: 'Note added' })
+      await fetchNotes()
     } catch (err) {
-      toast({ title: err instanceof Error ? err.message : 'Failed to update', variant: 'destructive' })
+      toast({ title: err instanceof Error ? err.message : 'Failed to add note', variant: 'destructive' })
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '?'
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2)
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      DRAFT: 'bg-gray-100 text-gray-700',
-      ACTIVE: 'bg-green-100 text-green-700',
-      IN_REVIEW: 'bg-yellow-100 text-yellow-700',
-      APPROVED: 'bg-blue-100 text-blue-700',
-      COMPLETED: 'bg-purple-100 text-purple-700',
-      ARCHIVED: 'bg-gray-100 text-gray-500',
+  const handleUpdateNote = async (id: string, updates: { message?: string; isPinned?: boolean }) => {
+    try {
+      await graphqlRequest(mutations.updateClientNote, { id, ...updates })
+      await fetchNotes()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to update note', variant: 'destructive' })
     }
-    return colors[status] || 'bg-gray-100 text-gray-700'
   }
 
+  const handleDeleteNote = async (id: string) => {
+    try {
+      await graphqlRequest(mutations.deleteClientNote, { id })
+      toast({ title: 'Note deleted' })
+      await fetchNotes()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to delete note', variant: 'destructive' })
+    }
+  }
+
+  // ----- Loading / Error states -----
   if (loading) {
     return (
       <>
-        <Header title="Loading..." />
-        <div className="p-6">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 w-48 bg-muted rounded" />
-            <div className="h-32 bg-muted rounded-lg" />
-            <div className="h-64 bg-muted rounded-lg" />
+        <Header title="Client" />
+        <div className="flex">
+          <div className="w-[260px] shrink-0 border-r p-5 space-y-4">
+            <div className="flex flex-col items-center">
+              <div className="h-16 w-16 rounded-xl bg-muted animate-pulse" />
+              <div className="h-5 w-32 bg-muted rounded animate-pulse mt-3" />
+              <div className="h-4 w-20 bg-muted rounded animate-pulse mt-2" />
+            </div>
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="h-8 bg-muted rounded animate-pulse" />
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 p-6 space-y-6">
+            <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
+              ))}
+            </div>
+            <div className="h-64 bg-muted rounded-lg animate-pulse" />
           </div>
         </div>
       </>
@@ -298,285 +273,108 @@ export default function ClientDetailPage() {
     )
   }
 
-  const totalCampaigns = client.projects.reduce(
-    (sum, project) => sum + project.campaigns.length,
-    0
-  )
+  const totalCampaigns = client.projects.reduce((sum, p) => sum + p.campaigns.length, 0)
 
   return (
     <>
-      <Header 
-        title={client.name} 
-        subtitle={`Client since ${formatDate(client.createdAt)}`} 
-      />
-      
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <Link
-            href="/dashboard/clients"
-            className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Clients
-          </Link>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <MoreHorizontal className="mr-2 h-4 w-4" />
-                Actions
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>Edit Client</DropdownMenuItem>
-              <DropdownMenuItem>Change Account Manager</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive">
-                Archive Client
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+      <Header title={client.name} />
 
-        {/* Tabs */}
-        <div className="flex gap-2 border-b">
-          <Button
-            variant={tab === 'overview' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setTab('overview')}
-          >
-            Overview
-          </Button>
-          <Button
-            variant={tab === 'contacts' ? 'secondary' : 'ghost'}
-            size="sm"
-            onClick={() => setTab('contacts')}
-          >
-            <Users className="mr-2 h-4 w-4" />
-            Contacts ({client.contacts?.length ?? 0})
-          </Button>
-        </div>
+      <div className="flex min-h-[calc(100vh-57px)]">
+        {/* Left sidebar — sticky */}
+        <ClientSidebar
+          client={client}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          counts={{
+            contacts: client.contacts?.length ?? 0,
+            projects: client.projects.length,
+            campaigns: totalCampaigns,
+            notes: notes.length,
+            files: files.length,
+          }}
+          onStatusChange={handleStatusChange}
+          onEditClient={() => setEditDialogOpen(true)}
+          onArchiveClient={handleArchiveClient}
+          onAddContact={openAddContact}
+        />
 
-        {tab === 'overview' && (
-        <>
-        {/* Client Info Card */}
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-6">
-              <div className="h-20 w-20 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Building2 className="h-10 w-10 text-primary" />
-              </div>
-              <div className="flex-1 grid gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Account Manager</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Avatar className="h-6 w-6">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(client.accountManager?.name || client.accountManager?.email)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="font-medium">
-                      {client.accountManager?.name || client.accountManager?.email || 'Unassigned'}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Projects</p>
-                  <p className="font-medium mt-1">{client.projects.length}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Campaigns</p>
-                  <p className="font-medium mt-1">{totalCampaigns}</p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Main content area */}
+        <main className="flex-1 min-w-0">
+          <div className="p-6 space-y-4">
+            <PageBreadcrumb items={[
+              { label: 'Clients', href: '/dashboard/clients' },
+              { label: client.name },
+            ]} />
 
-        {/* Projects Section */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Projects</h2>
-            <Button asChild>
-              <Link href={`/dashboard/projects/new?clientId=${client.id}`}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
-              </Link>
-            </Button>
-          </div>
+            {activeTab === 'overview' && (
+              <OverviewTab client={client} activityFeed={activityFeed} />
+            )}
 
-          {client.projects.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="font-semibold">No projects yet</h3>
-                <p className="text-muted-foreground text-center mt-2 max-w-sm">
-                  Create your first project for {client.name} to start organizing campaigns.
-                </p>
-                <Button className="mt-4" asChild>
-                  <Link href={`/dashboard/projects/new?clientId=${client.id}`}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Project
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {client.projects.map((project) => (
-                <Card key={project.id}>
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                          <FolderKanban className="h-5 w-5 text-purple-600" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-base">
-                            <Link 
-                              href={`/dashboard/projects/${project.id}`}
-                              className="hover:underline"
-                            >
-                              {project.name}
-                            </Link>
-                          </CardTitle>
-                          <CardDescription>
-                            {project.campaigns.length} campaign{project.campaigns.length !== 1 ? 's' : ''}
-                          </CardDescription>
-                        </div>
-                      </div>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${project.isArchived ? 'bg-gray-100 text-gray-500' : 'bg-green-100 text-green-700'}`}>
-                        {project.isArchived ? 'Archived' : 'Active'}
-                      </span>
-                    </div>
-                  </CardHeader>
-                  {project.campaigns.length > 0 && (
-                    <CardContent className="pt-0">
-                      <div className="border-t pt-3 space-y-2">
-                        {project.campaigns.slice(0, 3).map((campaign) => (
-                          <Link
-                            key={campaign.id}
-                            href={`/dashboard/campaigns/${campaign.id}`}
-                            className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Megaphone className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">{campaign.name}</span>
-                            </div>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}>
-                              {getCampaignStatusLabel(campaign.status)}
-                            </span>
-                          </Link>
-                        ))}
-                        {project.campaigns.length > 3 && (
-                          <p className="text-xs text-muted-foreground pl-2">
-                            +{project.campaigns.length - 3} more campaigns
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
-                  )}
-                </Card>
-              ))}
-            </div>
-          )}
-        </div>
-        </>
-        )}
+            {activeTab === 'contacts' && (
+              <ContactsTab
+                contacts={client.contacts || []}
+                onAddContact={openAddContact}
+                onEditContact={openEditContact}
+                onDeleteContact={handleDeleteContact}
+                clientName={client.name}
+              />
+            )}
 
-        {tab === 'contacts' && (
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Contacts</h2>
-              <Button onClick={openAddContact}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Contact
-              </Button>
-            </div>
-            {(!client.contacts || client.contacts.length === 0) ? (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="font-semibold">No contacts yet</h3>
-                  <p className="text-muted-foreground text-center mt-2 max-w-sm">
-                    Add contacts at {client.name} for approvals and CRM.
-                  </p>
-                  <Button className="mt-4" onClick={openAddContact}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Contact
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-2">
-                {(client.contacts ?? []).map((c) => (
-                  <Card key={c.id}>
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <Avatar className="h-10 w-10 shrink-0">
-                          <AvatarFallback>
-                            {c.firstName[0]}{c.lastName[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <p className="font-medium truncate">
-                            {c.firstName} {c.lastName}
-                          </p>
-                          <p className="text-sm text-muted-foreground truncate">
-                            {c.email || c.phone || c.mobile || '—'}
-                            {c.department && ` · ${c.department}`}
-                          </p>
-                        </div>
-                        {c.isClientApprover && (
-                          <span className="shrink-0 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                            Client approver
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          title={c.isClientApprover ? 'Remove as approver' : 'Set as client approver'}
-                          onClick={() => handleToggleApprover(c)}
-                        >
-                          {c.isClientApprover ? (
-                            <CheckCircle className="h-4 w-4 text-primary" />
-                          ) : (
-                            <Circle className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => openEditContact(c)}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => handleDeleteContact(c.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+            {activeTab === 'projects' && (
+              <ProjectsTab
+                projects={client.projects}
+                clientId={client.id}
+                clientCurrency={client.currency}
+              />
+            )}
+
+            {activeTab === 'campaigns' && (
+              <CampaignsTab
+                projects={client.projects}
+                clientCurrency={client.currency}
+              />
+            )}
+
+            {activeTab === 'notes' && (
+              <NotesTab
+                notes={notes}
+                onCreateNote={handleCreateNote}
+                onUpdateNote={handleUpdateNote}
+                onDeleteNote={handleDeleteNote}
+              />
+            )}
+
+            {activeTab === 'files' && (
+              <FilesTab
+                files={files}
+                projects={client.projects}
+              />
             )}
           </div>
-        )}
-
-        {/* Add/Edit Contact Dialog */}
-        <ContactFormDialog
-          open={contactDialogOpen}
-          onOpenChange={setContactDialogOpen}
-          mode={editingContact ? 'edit' : 'create'}
-          form={contactForm}
-          onFormChange={(f) => setContactForm(f)}
-          onSubmit={handleSaveContact}
-          saving={submitting}
-        />
+        </main>
       </div>
+
+      {/* Contact Dialog */}
+      <ContactFormDialog
+        open={contactDialogOpen}
+        onOpenChange={setContactDialogOpen}
+        mode={editingContact ? 'edit' : 'create'}
+        form={contactForm}
+        onFormChange={(f) => setContactForm(f)}
+        onSubmit={handleSaveContact}
+        saving={submitting}
+      />
+
+      {/* Edit Client Dialog */}
+      <ClientEditDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        client={client}
+        onUpdated={() => {
+          toast({ title: 'Client updated' })
+          fetchClient()
+        }}
+      />
     </>
   )
 }
