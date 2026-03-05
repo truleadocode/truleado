@@ -54,6 +54,7 @@ export interface OnSocialUserProfile {
   sec_uid?: string;
   custom_name?: string;
   avg_views?: number;
+  avg_likes?: number;
   account_type?: number;
   description?: string;
   // Contact fields — returned by unhide/export enrichment
@@ -101,6 +102,28 @@ export interface OnSocialUnhideResponse {
   accounts: OnSocialSearchAccount[];
   cost: number;
   tokens: number;
+}
+
+// ---------------------------------------------------------------------------
+// Contacts
+// ---------------------------------------------------------------------------
+
+export interface OnSocialContact {
+  type: string;
+  value: string;
+  formatted_value?: string;
+}
+
+export interface OnSocialContactsResponse {
+  success: boolean;
+  user_profile: {
+    user_id: string;
+    username: string;
+    fullname?: string;
+    picture?: string;
+    url?: string;
+    contacts: OnSocialContact[];
+  };
 }
 
 // ---------------------------------------------------------------------------

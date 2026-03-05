@@ -14,6 +14,7 @@ export interface DiscoveryInfluencer {
   engagementRate: number | null
   engagements: number | null
   avgViews: number | null
+  avgLikes: number | null
   isVerified: boolean
   picture: string | null
   url: string | null

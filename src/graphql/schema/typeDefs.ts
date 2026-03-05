@@ -442,6 +442,12 @@ export const typeDefs = gql`
     linkedinHandle: String
     profilePictureUrl: String
     notes: String
+    platform: String
+    followers: Int
+    engagementRate: Float
+    avgLikes: Int
+    contactLinks: JSON
+    discoveryQuery: JSON
     isActive: Boolean!
     rates: [CreatorRate!]!
     campaignAssignments: [CampaignCreator!]!
@@ -915,6 +921,7 @@ export const typeDefs = gql`
     followers: Int
     engagementRate: Float
     engagements: Int
+    avgLikes: Int
     avgViews: Int
     isVerified: Boolean
     picture: String
@@ -994,6 +1001,14 @@ export const typeDefs = gql`
     sufficientBalance: Boolean!
   }
 
+  # Input for unlocking search results (local, no OnSocial API call)
+  input DiscoveryUnlockInput {
+    onsocialUserId: String!
+    searchResultId: String!
+    username: String!
+    fullname: String
+  }
+
   # Input for importing influencers to creator database
   input DiscoveryImportInput {
     onsocialUserId: String!
@@ -1004,6 +1019,10 @@ export const typeDefs = gql`
     phone: String
     profilePicture: String
     searchResultId: String
+    followers: Int
+    engagementRate: Float
+    avgLikes: Int
+    contactLinks: JSON
   }
 
   input AgencyEmailConfigInput {
@@ -1753,12 +1772,11 @@ export const typeDefs = gql`
     # Creator Discovery Mutations
     # ---------------------------------------------
 
-    # Unlock hidden influencers (token-gated)
+    # Unlock search results (token-gated, no external API call)
     discoveryUnlock(
       agencyId: ID!
       platform: DiscoveryPlatform!
-      searchResultIds: [String!]!
-      withContact: Boolean
+      influencers: [DiscoveryUnlockInput!]!
     ): [DiscoveryUnlock!]!
 
     # Export search results (token-gated)

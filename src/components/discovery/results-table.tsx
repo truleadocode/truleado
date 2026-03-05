@@ -34,6 +34,7 @@ export interface DiscoveryInfluencer {
   engagementRate: number | null
   engagements: number | null
   avgViews: number | null
+  avgLikes: number | null
   isVerified: boolean
   picture: string | null
   url: string | null
@@ -55,6 +56,8 @@ interface ResultsTableProps {
   onUnlock: () => void
   onExport: () => void
   onAnalyze?: (account: DiscoveryInfluencer) => void
+  /** Whether all results on this page have been unlocked */
+  unlockedAll: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +128,9 @@ function SkeletonRows() {
             <SkeletonCell className="w-16" />
           </TableCell>
           <TableCell>
+            <SkeletonCell className="w-16" />
+          </TableCell>
+          <TableCell>
             <SkeletonCell className="w-20" />
           </TableCell>
         </TableRow>
@@ -150,40 +156,38 @@ export const ResultsTable = memo(function ResultsTable({
   onUnlock,
   onExport,
   onAnalyze,
+  unlockedAll,
 }: ResultsTableProps) {
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const rangeStart = total === 0 ? 0 : (page - 1) * limit + 1
 
-  // Sort: visible first, then hidden — preserving relative order within each group
-  const sortedAccounts = useMemo(() => {
-    return [...accounts].sort((a, b) => {
-      if (a.isHidden === b.isHidden) return 0
-      return a.isHidden ? 1 : -1
-    })
-  }, [accounts])
+  // Use OnSocial's hidden_result flag to determine locked state.
+  // After unlock succeeds, unlockedAll overrides to show everything.
+  const isLocked = (account: DiscoveryInfluencer): boolean => {
+    if (unlockedAll) return false
+    return account.isHidden
+  }
 
-  const visibleAccounts = useMemo(
-    () => sortedAccounts.filter((a) => !a.isHidden),
-    [sortedAccounts]
-  )
-  const hiddenAccounts = useMemo(
-    () => sortedAccounts.filter((a) => a.isHidden),
-    [sortedAccounts]
+  // Selectable accounts (not locked)
+  const selectableAccounts = useMemo(
+    () => accounts.filter((a) => !a.isHidden || unlockedAll),
+    [accounts, unlockedAll]
   )
 
-  // Select-all only applies to visible (non-hidden) accounts
-  const allVisibleSelected = useMemo(() => {
-    if (visibleAccounts.length === 0) return false
-    return visibleAccounts.every((a) => selectedIds.has(a.userId))
-  }, [visibleAccounts, selectedIds])
+  const lockedCount = accounts.length - selectableAccounts.length
 
-  const someVisibleSelected = useMemo(() => {
-    if (visibleAccounts.length === 0) return false
+  const allSelectableSelected = useMemo(() => {
+    if (selectableAccounts.length === 0) return false
+    return selectableAccounts.every((a) => selectedIds.has(a.userId))
+  }, [selectableAccounts, selectedIds])
+
+  const someSelectableSelected = useMemo(() => {
+    if (selectableAccounts.length === 0) return false
     return (
-      visibleAccounts.some((a) => selectedIds.has(a.userId)) &&
-      !allVisibleSelected
+      selectableAccounts.some((a) => selectedIds.has(a.userId)) &&
+      !allSelectableSelected
     )
-  }, [visibleAccounts, selectedIds, allVisibleSelected])
+  }, [selectableAccounts, selectedIds, allSelectableSelected])
 
   // -------------------------------------------------------------------------
   // Empty state
@@ -200,6 +204,7 @@ export const ResultsTable = memo(function ResultsTable({
               <TableHead>Influencer</TableHead>
               <TableHead>Followers</TableHead>
               <TableHead>Engagements</TableHead>
+              <TableHead>Avg Likes</TableHead>
               <TableHead>Views</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
@@ -229,15 +234,15 @@ export const ResultsTable = memo(function ResultsTable({
               {total.toLocaleString()} influencers found
             </p>
             <div className="flex items-center gap-3">
-              {/* If API returned hidden results → unlock them via OnSocial unhide */}
-              {hiddenAccounts.length > 0 && (
+              {/* Unlock remaining locked results */}
+              {lockedCount > 0 && (
                 <Button
                   size="sm"
                   onClick={onUnlock}
                   className="rounded-full"
                 >
                   <Unlock className="mr-1.5 h-4 w-4" />
-                  Unlock next {hiddenAccounts.length} results
+                  Unlock {lockedCount} locked result{lockedCount !== 1 ? "s" : ""}
                 </Button>
               )}
               <Button
@@ -261,9 +266,9 @@ export const ResultsTable = memo(function ResultsTable({
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-gray-300 accent-primary cursor-pointer"
-                  checked={allVisibleSelected}
+                  checked={allSelectableSelected}
                   ref={(el) => {
-                    if (el) el.indeterminate = someVisibleSelected
+                    if (el) el.indeterminate = someSelectableSelected
                   }}
                   onChange={onSelectAll}
                   aria-label="Select all visible on this page"
@@ -272,6 +277,7 @@ export const ResultsTable = memo(function ResultsTable({
               <TableHead>Influencer</TableHead>
               <TableHead>Followers</TableHead>
               <TableHead>Engagements</TableHead>
+              <TableHead>Avg Likes</TableHead>
               <TableHead>Views</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
@@ -280,31 +286,17 @@ export const ResultsTable = memo(function ResultsTable({
             {loading ? (
               <SkeletonRows />
             ) : (
-              <>
-                {/* Visible (unlocked) rows */}
-                {visibleAccounts.map((account, index) => (
-                  <InfluencerRow
-                    key={account.userId}
-                    rank={rangeStart + index}
-                    account={account}
-                    isSelected={selectedIds.has(account.userId)}
-                    onToggleSelect={onToggleSelect}
-                    onAnalyze={onAnalyze}
-                  />
-                ))}
-
-                {/* Hidden (locked) rows */}
-                {hiddenAccounts.map((account, index) => (
-                  <InfluencerRow
-                    key={account.userId}
-                    rank={rangeStart + visibleAccounts.length + index}
-                    account={account}
-                    isSelected={false}
-                    onToggleSelect={onToggleSelect}
-                    onAnalyze={onAnalyze}
-                  />
-                ))}
-              </>
+              accounts.map((account, index) => (
+                <InfluencerRow
+                  key={account.userId}
+                  rank={rangeStart + index}
+                  account={account}
+                  locked={isLocked(account)}
+                  isSelected={!isLocked(account) && selectedIds.has(account.userId)}
+                  onToggleSelect={onToggleSelect}
+                  onAnalyze={onAnalyze}
+                />
+              ))
             )}
           </TableBody>
         </Table>
@@ -355,39 +347,39 @@ export const ResultsTable = memo(function ResultsTable({
 const InfluencerRow = memo(function InfluencerRow({
   rank,
   account,
+  locked,
   isSelected,
   onToggleSelect,
   onAnalyze,
 }: {
   rank: number
   account: DiscoveryInfluencer
+  locked: boolean
   isSelected: boolean
   onToggleSelect: (userId: string) => void
   onAnalyze?: (account: DiscoveryInfluencer) => void
 }) {
-  const hidden = account.isHidden
-
-  const displayName = hidden
+  const displayName = locked
     ? maskText(account.fullname ?? account.username)
     : account.fullname ?? account.username
 
-  const displayHandle = hidden
+  const displayHandle = locked
     ? maskText(account.username)
     : `@${account.username}`
 
   return (
     <TableRow
       data-state={isSelected ? "selected" : undefined}
-      className={hidden ? "opacity-75" : ""}
+      className={locked ? "opacity-75" : ""}
     >
       {/* Rank */}
       <TableCell className="w-[50px] text-center text-sm text-muted-foreground font-medium">
         {rank}
       </TableCell>
 
-      {/* Checkbox — visible rows only; lock icon for hidden */}
+      {/* Checkbox — unlocked rows only; lock icon for locked */}
       <TableCell className="w-[40px]">
-        {!hidden ? (
+        {!locked ? (
           <input
             type="checkbox"
             className="h-4 w-4 rounded border-gray-300 accent-primary cursor-pointer"
@@ -405,11 +397,11 @@ const InfluencerRow = memo(function InfluencerRow({
         <div className="flex items-center gap-3">
           <div className="relative">
             <Avatar className="h-9 w-9">
-              {!hidden && account.picture ? (
+              {!locked && account.picture ? (
                 <AvatarImage src={account.picture} alt={account.username} />
               ) : null}
               <AvatarFallback className="text-xs">
-                {hidden ? (
+                {locked ? (
                   <Lock className="h-4 w-4 text-muted-foreground" />
                 ) : (
                   getInitials(account.fullname, account.username)
@@ -421,24 +413,24 @@ const InfluencerRow = memo(function InfluencerRow({
             <div className="flex items-center gap-1.5">
               <span
                 className={`text-sm font-medium truncate ${
-                  hidden ? "text-muted-foreground select-none blur-[3px]" : ""
+                  locked ? "text-muted-foreground select-none blur-[3px]" : ""
                 }`}
               >
                 {displayName}
               </span>
-              {!hidden && account.isVerified && (
+              {!locked && account.isVerified && (
                 <CheckCircle2 className="h-3.5 w-3.5 text-blue-500 shrink-0" />
               )}
             </div>
             <div className="flex items-center gap-1.5">
               <span
                 className={`text-xs text-muted-foreground truncate ${
-                  hidden ? "select-none blur-[3px]" : ""
+                  locked ? "select-none blur-[3px]" : ""
                 }`}
               >
                 {displayHandle}
               </span>
-              {!hidden && account.url && (
+              {!locked && account.url && (
                 <a
                   href={account.url}
                   target="_blank"
@@ -454,7 +446,7 @@ const InfluencerRow = memo(function InfluencerRow({
         </div>
       </TableCell>
 
-      {/* Followers — always shown even for hidden rows */}
+      {/* Followers — always shown */}
       <TableCell className="text-sm tabular-nums">
         {formatNumber(account.followers)}
       </TableCell>
@@ -463,6 +455,15 @@ const InfluencerRow = memo(function InfluencerRow({
       <TableCell className="text-sm tabular-nums">
         {account.engagements != null ? (
           formatNumber(account.engagements)
+        ) : (
+          <span className="text-muted-foreground">&mdash;</span>
+        )}
+      </TableCell>
+
+      {/* Avg Likes */}
+      <TableCell className="text-sm tabular-nums">
+        {account.avgLikes != null ? (
+          formatNumber(account.avgLikes)
         ) : (
           <span className="text-muted-foreground">&mdash;</span>
         )}
@@ -483,12 +484,12 @@ const InfluencerRow = memo(function InfluencerRow({
           variant="secondary"
           size="sm"
           className={
-            hidden
+            locked
               ? "h-8 text-xs opacity-50 cursor-not-allowed"
               : "h-8 bg-teal-700 hover:bg-teal-800 text-white text-xs"
           }
-          disabled={hidden}
-          onClick={() => !hidden && onAnalyze?.(account)}
+          disabled={locked}
+          onClick={() => !locked && onAnalyze?.(account)}
         >
           <BarChart3 className="h-3.5 w-3.5 mr-1" />
           Analyze

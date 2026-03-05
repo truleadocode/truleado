@@ -15,8 +15,10 @@ import { getActionPrice } from '@/lib/discovery/pricing';
 
 /**
  * Search for influencers via OnSocial.
- * FREE — no token cost. Cross-references with discovery_unlocks
- * to mark already-unlocked profiles.
+ * FREE — no token cost. OnSocial returns ~3 visible + ~27 hidden results
+ * (auto_unhide=0). Hidden results lack profile data. After an agency unlocks
+ * results via the unhide API, the revealed profile data is stored in
+ * discovery_unlocks — we cross-reference here to fill it in.
  */
 export async function discoverySearch(
   _: unknown,
@@ -48,57 +50,73 @@ export async function discoverySearch(
     limit: args.limit ?? 30,
   });
 
-  // Keep ALL accounts — hidden accounts have masked identity but we show them
-  // as blurred/locked rows in the UI so the user knows more exist to unlock.
-  // Collect user_ids from accounts that have them (for unlock cross-reference).
-  const userIds = result.accounts
-    .map((a) => a.account.user_profile.user_id)
-    .filter(Boolean);
-
-  let unlockedSet = new Set<string>();
-  if (userIds.length > 0) {
-    const { data: unlocks } = await supabaseAdmin
-      .from('discovery_unlocks')
-      .select('onsocial_user_id')
-      .eq('agency_id', args.agencyId)
-      .eq('platform', platform)
-      .in('onsocial_user_id', userIds)
-      .gt('expires_at', new Date().toISOString());
-
-    unlockedSet = new Set(
-      (unlocks || []).map((u: { onsocial_user_id: string }) => u.onsocial_user_id)
-    );
-  }
-
-  // Map all accounts. Hidden accounts use search_result_id as fallback identifier.
+  // Map all accounts — include hidden results.
+  // Hidden results (hidden_result=true) come from OnSocial without user_id/identity,
+  // so we use search_result_id as fallback. Frontend shows them as locked.
   const accounts = result.accounts
     .map((a) => {
       const profile = a.account.user_profile;
-      const hasUserId = Boolean(profile.user_id);
-      const isUnlocked = hasUserId && unlockedSet.has(profile.user_id);
-      const isHidden = isUnlocked ? false : (a.account.hidden_result ?? false);
+      const hidden = a.account.hidden_result === true;
 
-      // Visible (non-hidden) accounts MUST have a valid user_id
-      if (!isHidden && !hasUserId) return null;
+      // Hidden results may lack user_id — use search_result_id as fallback
+      const userId = profile.user_id || a.account.search_result_id || '';
+      if (!userId) return null;
 
-      const searchResultId = a.account.search_result_id ?? '';
       return {
-        userId: profile.user_id || `hidden-${searchResultId}`,
+        userId,
         username: profile.username || '',
         fullname: profile.fullname ?? null,
         followers: profile.followers ?? 0,
         engagementRate: profile.engagement_rate ?? null,
         engagements: profile.engagements ?? null,
+        avgLikes: profile.avg_likes ?? null,
         avgViews: profile.avg_views ?? null,
         isVerified: profile.is_verified ?? false,
-        picture: isHidden ? null : (profile.picture || null),
-        url: isHidden ? null : (profile.url || null),
-        searchResultId,
-        isHidden,
+        picture: hidden ? null : (profile.picture || null),
+        url: hidden ? null : (profile.url || null),
+        searchResultId: a.account.search_result_id ?? '',
+        isHidden: hidden,
         platform: args.platform,
       };
     })
-    .filter(Boolean);
+    .filter((a): a is Exclude<typeof a, null> => a !== null);
+
+  // Cross-reference hidden results with previously unlocked data.
+  // When an agency has unlocked results, the revealed profile data is
+  // stored in discovery_unlocks — merge it back so the frontend can display it.
+  const hiddenSrIds = accounts
+    .filter((a) => a.isHidden && a.searchResultId)
+    .map((a) => a.searchResultId);
+
+  if (hiddenSrIds.length > 0) {
+    const { data: unlockRows } = await supabaseAdmin
+      .from('discovery_unlocks')
+      .select('search_result_id, onsocial_user_id, username, fullname, profile_data')
+      .eq('agency_id', args.agencyId)
+      .in('search_result_id', hiddenSrIds);
+
+    const unlocks = (unlockRows ?? []) as Record<string, unknown>[];
+
+    if (unlocks.length > 0) {
+      const unlockMap = new Map(
+        unlocks.map((u) => [u.search_result_id as string, u])
+      );
+
+      for (const account of accounts) {
+        if (!account.isHidden) continue;
+        const unlock = unlockMap.get(account.searchResultId);
+        if (!unlock) continue;
+
+        const pd = unlock.profile_data as Record<string, unknown> | null;
+        account.userId = (unlock.onsocial_user_id as string) || account.userId;
+        account.username = (unlock.username as string) || account.username;
+        account.fullname = (unlock.fullname as string) || account.fullname;
+        account.picture = (pd?.picture as string) || null;
+        account.url = (pd?.url as string) || null;
+        account.isHidden = false; // No longer hidden — agency has paid to reveal
+      }
+    }
+  }
 
   return { accounts, total: result.total };
 }

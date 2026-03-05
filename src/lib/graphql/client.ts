@@ -1330,6 +1330,7 @@ export const queries = {
           engagementRate
           engagements
           avgViews
+          avgLikes
           isVerified
           picture
           url
@@ -2377,8 +2378,8 @@ export const mutations = {
 
   // Discovery Module
   discoveryUnlock: `
-    mutation DiscoveryUnlock($agencyId: ID!, $platform: DiscoveryPlatform!, $searchResultIds: [String!]!, $withContact: Boolean) {
-      discoveryUnlock(agencyId: $agencyId, platform: $platform, searchResultIds: $searchResultIds, withContact: $withContact) {
+    mutation DiscoveryUnlock($agencyId: ID!, $platform: DiscoveryPlatform!, $influencers: [DiscoveryUnlockInput!]!) {
+      discoveryUnlock(agencyId: $agencyId, platform: $platform, influencers: $influencers) {
         id
         platform
         onsocialUserId
@@ -2425,6 +2426,11 @@ export const mutations = {
         youtubeHandle
         tiktokHandle
         isActive
+        platform
+        followers
+        engagementRate
+        avgLikes
+        contactLinks
       }
     }
   `,

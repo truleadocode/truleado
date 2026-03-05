@@ -71,6 +71,9 @@ export default function DiscoveryPage() {
   // Selection state
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
+  // First-3-free gating: tracks whether all results on this page are unlocked
+  const [unlockedAll, setUnlockedAll] = useState(false)
+
   // Dialog states
   const [unlockOpen, setUnlockOpen] = useState(false)
   const [unlockTargets, setUnlockTargets] = useState<DiscoveryInfluencer[]>([])
@@ -107,37 +110,36 @@ export default function DiscoveryPage() {
 
   const selectAll = useCallback(() => {
     if (!data?.accounts) return
-    // Only select visible (non-hidden) accounts
-    const visibleIds = data.accounts
-      .filter((a) => !a.isHidden)
+    // Only select non-hidden accounts (or all if unlockedAll)
+    const selectableIds = data.accounts
+      .filter((a) => !a.isHidden || unlockedAll)
       .map((a) => a.userId)
     setSelectedIds((prev) => {
-      const allSelected = visibleIds.every((id) => prev.has(id))
+      const allSelected = selectableIds.every((id) => prev.has(id))
       if (allSelected) {
         const next = new Set(prev)
-        visibleIds.forEach((id) => next.delete(id))
+        selectableIds.forEach((id) => next.delete(id))
         return next
       }
-      return new Set([...prev, ...visibleIds])
+      return new Set([...prev, ...selectableIds])
     })
-  }, [data?.accounts])
+  }, [data?.accounts, unlockedAll])
 
-  // Selected influencers — only non-hidden
+  // Selected influencers — only selectable (unlocked)
   const selectedInfluencers = useMemo(() => {
     if (!data?.accounts) return []
     return data.accounts.filter(
-      (a) => !a.isHidden && selectedIds.has(a.userId)
+      (a) => selectedIds.has(a.userId)
     )
   }, [data?.accounts, selectedIds])
 
-  // Banner: Unlock triggers — only hidden accounts that have search_result_ids
+  // Banner: Unlock triggers — hidden accounts that need OnSocial unhide
   const handleBannerUnlock = useCallback(() => {
-    const hidden = (data?.accounts || []).filter(
-      (a) => a.isHidden && a.searchResultId
-    )
-    setUnlockTargets(hidden)
+    const accounts = data?.accounts || []
+    const locked = accounts.filter((a) => !unlockedAll && a.isHidden)
+    setUnlockTargets(locked)
     setUnlockOpen(true)
-  }, [data?.accounts])
+  }, [data?.accounts, unlockedAll])
 
   // Banner: Export triggers — full search export
   const handleBannerExport = useCallback(() => {
@@ -157,6 +159,8 @@ export default function DiscoveryPage() {
 
   const handleUnlockSuccess = useCallback(() => {
     setSelectedIds(new Set())
+    setUnlockedAll(true)
+    // Re-fetch search results to get the now-revealed profile data
     search()
   }, [search])
 
@@ -175,10 +179,11 @@ export default function DiscoveryPage() {
     })
   }, [toast])
 
-  // Clear selection when platform changes
+  // Clear selection and unlock state when platform changes
   const handlePlatformChange = useCallback(
     (p: string) => {
       setSelectedIds(new Set())
+      setUnlockedAll(false)
       setPlatform(p as DiscoveryPlatform)
     },
     [setPlatform]
@@ -350,6 +355,7 @@ export default function DiscoveryPage() {
           onUnlock={handleBannerUnlock}
           onExport={handleBannerExport}
           onAnalyze={handleAnalyze}
+          unlockedAll={unlockedAll}
         />
       </div>
 

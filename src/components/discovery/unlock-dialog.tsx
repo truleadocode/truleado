@@ -10,11 +10,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import { graphqlRequest, queries, mutations } from "@/lib/graphql/client"
 import { useAuth } from "@/contexts/auth-context"
-import { Unlock, Loader2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Unlock, Loader2, AlertCircle } from "lucide-react"
 
 interface DiscoveryInfluencer {
   userId: string
@@ -24,6 +23,7 @@ interface DiscoveryInfluencer {
   engagementRate: number | null
   engagements: number | null
   avgViews: number | null
+  avgLikes: number | null
   isVerified: boolean
   picture: string | null
   url: string | null
@@ -54,7 +54,6 @@ export function UnlockDialog({
   platform,
   onSuccess,
 }: UnlockDialogProps) {
-  const [withContact, setWithContact] = useState(false)
   const [costEstimate, setCostEstimate] = useState<CostEstimate | null>(null)
   const [estimateLoading, setEstimateLoading] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
@@ -69,12 +68,11 @@ export function UnlockDialog({
     setEstimateLoading(true)
     setCostEstimate(null)
     try {
-      const action = withContact ? "unlock_with_contact" : "unlock"
       const data = await graphqlRequest<{
         discoveryEstimateCost: CostEstimate
       }>(queries.discoveryEstimateCost, {
         agencyId: currentAgency.id,
-        action,
+        action: "unlock",
         count,
       })
       setCostEstimate(data.discoveryEstimateCost)
@@ -88,27 +86,33 @@ export function UnlockDialog({
     } finally {
       setEstimateLoading(false)
     }
-  }, [currentAgency, count, withContact, toast])
+  }, [currentAgency, count, toast])
 
   useEffect(() => {
     if (open) {
       fetchEstimate()
     } else {
       setCostEstimate(null)
-      setWithContact(false)
     }
-  }, [open, withContact, fetchEstimate])
+  }, [open, fetchEstimate])
 
   const handleUnlock = async () => {
     if (!currentAgency) return
 
     setUnlocking(true)
     try {
+      // Build influencer inputs for the new mutation signature
+      const influencers = selectedInfluencers.map((i) => ({
+        onsocialUserId: i.userId,
+        searchResultId: i.searchResultId,
+        username: i.username,
+        fullname: i.fullname,
+      }))
+
       await graphqlRequest(mutations.discoveryUnlock, {
         agencyId: currentAgency.id,
         platform,
-        searchResultIds: selectedInfluencers.map((i) => i.searchResultId),
-        withContact,
+        influencers,
       })
 
       toast({
@@ -141,33 +145,12 @@ export function UnlockDialog({
           <DialogDescription>
             Unlock detailed profile data for{" "}
             <span className="font-medium text-foreground">{count}</span>{" "}
-            selected influencer{count !== 1 ? "s" : ""}.
+            influencer{count !== 1 ? "s" : ""}. This will deduct tokens from
+            your agency balance.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          {/* With Contact Info toggle */}
-          <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-            <input
-              id="with-contact"
-              type="checkbox"
-              className="h-4 w-4 rounded border-input"
-              checked={withContact}
-              onChange={(e) => setWithContact(e.target.checked)}
-            />
-            <div>
-              <label
-                htmlFor="with-contact"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Include contact information
-              </label>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Unlock email addresses and phone numbers (costs more tokens)
-              </p>
-            </div>
-          </div>
-
           {/* Cost estimate */}
           <div className="rounded-lg border p-4 space-y-3">
             <div className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
