@@ -48,38 +48,111 @@ function validateTransition(currentStatus: string, newStatus: string): void {
  */
 export async function createProject(
   _: unknown,
-  {
-    clientId,
-    name,
-    description,
-  }: {
+  args: {
     clientId: string;
     name: string;
     description?: string;
+    projectType?: string;
+    status?: string;
+    projectManagerId?: string;
+    clientPocId?: string;
+    startDate?: string;
+    endDate?: string;
+    currency?: string;
+    influencerBudget?: number;
+    agencyFee?: number;
+    agencyFeeType?: string;
+    productionBudget?: number;
+    boostingBudget?: number;
+    contingency?: number;
+    platforms?: string[];
+    campaignObjectives?: string[];
+    influencerTiers?: string[];
+    plannedCampaigns?: number;
+    targetReach?: number;
+    targetImpressions?: number;
+    targetEngagementRate?: number;
+    targetConversions?: number;
+    influencerApprovalContactId?: string;
+    contentApprovalContactId?: string;
+    approvalTurnaround?: string;
+    reportingCadence?: string;
+    briefFileUrl?: string;
+    contractFileUrl?: string;
+    exclusivityClause?: boolean;
+    exclusivityTerms?: string;
+    contentUsageRights?: string;
+    renewalDate?: string;
+    externalFolderLink?: string;
+    priority?: string;
+    source?: string;
+    tags?: string[];
+    internalNotes?: string;
   },
   ctx: GraphQLContext
 ) {
-  await requireClientAccess(ctx, clientId, true);
-  
-  if (!name || name.trim().length < 2) {
+  await requireClientAccess(ctx, args.clientId, true);
+
+  if (!args.name || args.name.trim().length < 2) {
     throw validationError('Project name must be at least 2 characters', 'name');
   }
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const insertData: Record<string, any> = {
+    client_id: args.clientId,
+    name: args.name.trim(),
+    description: args.description?.trim() || null,
+    is_archived: false,
+  };
+
+  // Map optional fields
+  if (args.projectType) insertData.project_type = args.projectType;
+  if (args.status) insertData.status = args.status;
+  if (args.projectManagerId) insertData.project_manager_id = args.projectManagerId;
+  if (args.clientPocId) insertData.client_poc_id = args.clientPocId;
+  if (args.startDate) insertData.start_date = args.startDate;
+  if (args.endDate) insertData.end_date = args.endDate;
+  if (args.currency) insertData.currency = args.currency;
+  if (args.influencerBudget !== undefined) insertData.influencer_budget = args.influencerBudget;
+  if (args.agencyFee !== undefined) insertData.agency_fee = args.agencyFee;
+  if (args.agencyFeeType) insertData.agency_fee_type = args.agencyFeeType;
+  if (args.productionBudget !== undefined) insertData.production_budget = args.productionBudget;
+  if (args.boostingBudget !== undefined) insertData.boosting_budget = args.boostingBudget;
+  if (args.contingency !== undefined) insertData.contingency = args.contingency;
+  if (args.platforms) insertData.platforms = args.platforms;
+  if (args.campaignObjectives) insertData.campaign_objectives = args.campaignObjectives;
+  if (args.influencerTiers) insertData.influencer_tiers = args.influencerTiers;
+  if (args.plannedCampaigns !== undefined) insertData.planned_campaigns = args.plannedCampaigns;
+  if (args.targetReach !== undefined) insertData.target_reach = args.targetReach;
+  if (args.targetImpressions !== undefined) insertData.target_impressions = args.targetImpressions;
+  if (args.targetEngagementRate !== undefined) insertData.target_engagement_rate = args.targetEngagementRate;
+  if (args.targetConversions !== undefined) insertData.target_conversions = args.targetConversions;
+  if (args.influencerApprovalContactId) insertData.influencer_approval_contact_id = args.influencerApprovalContactId;
+  if (args.contentApprovalContactId) insertData.content_approval_contact_id = args.contentApprovalContactId;
+  if (args.approvalTurnaround) insertData.approval_turnaround = args.approvalTurnaround;
+  if (args.reportingCadence) insertData.reporting_cadence = args.reportingCadence;
+  if (args.briefFileUrl) insertData.brief_file_url = args.briefFileUrl;
+  if (args.contractFileUrl) insertData.contract_file_url = args.contractFileUrl;
+  if (args.exclusivityClause !== undefined) insertData.exclusivity_clause = args.exclusivityClause;
+  if (args.exclusivityTerms) insertData.exclusivity_terms = args.exclusivityTerms;
+  if (args.contentUsageRights) insertData.content_usage_rights = args.contentUsageRights;
+  if (args.renewalDate) insertData.renewal_date = args.renewalDate;
+  if (args.externalFolderLink) insertData.external_folder_link = args.externalFolderLink;
+  if (args.priority) insertData.priority = args.priority;
+  if (args.source) insertData.source = args.source;
+  if (args.tags) insertData.tags = args.tags;
+  if (args.internalNotes) insertData.internal_notes = args.internalNotes;
+
   const { data: project, error } = await supabaseAdmin
     .from('projects')
-    .insert({
-      client_id: clientId,
-      name: name.trim(),
-      description: description?.trim() || null,
-      is_archived: false,
-    })
+    .insert(insertData)
     .select()
     .single();
-  
+
   if (error || !project) {
     throw new Error('Failed to create project');
   }
-  
+
   // Log activity
   const agencyId = await getAgencyIdForProject(project.id);
   if (agencyId) {
@@ -93,7 +166,7 @@ export async function createProject(
       afterState: project,
     });
   }
-  
+
   return project;
 }
 

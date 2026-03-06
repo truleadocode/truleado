@@ -29,13 +29,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 export interface ContactFormData {
   firstName: string
@@ -187,21 +187,21 @@ export function ContactFormDialog({
   const birthdayDate = form.birthday ? new Date(form.birthday) : undefined
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-2xl w-full flex flex-col p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
               <Icon className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription>{description}</DialogDescription>
+              <SheetTitle>{title}</SheetTitle>
+              <SheetDescription>{description}</SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
-        <div className="space-y-6 mt-2">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
           {/* ── Section 1: Identity ── */}
           <div className="space-y-4">
             <SectionHeader icon={User} label="Identity" />
@@ -551,15 +551,15 @@ export function ContactFormDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex items-center justify-between sm:justify-between mt-4">
+        <SheetFooter className="flex items-center justify-between sm:justify-between px-6 py-4 border-t shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button onClick={onSubmit} disabled={saving}>
             {saving ? 'Saving...' : submitLabel}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

@@ -7,7 +7,7 @@
 import { createUser, ensureClientUser, ensureCreatorUser } from './user';
 import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
-import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
+import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser, updateProjectStatus, bulkUpdateProjectStatus, bulkArchiveProjects } from './project';
 import {
   createProject,
   createCampaign,
@@ -83,6 +83,11 @@ import {
   updateDiscoverySearch,
 } from './discovery';
 import {
+  createProjectNote,
+  updateProjectNote,
+  deleteProjectNote,
+} from './project-notes';
+import {
   createContactNote,
   updateContactNote,
   deleteContactNote,
@@ -118,6 +123,9 @@ export const mutationResolvers = {
   removeProjectApprover,
   addProjectUser,
   removeProjectUser,
+  updateProjectStatus,
+  bulkUpdateProjectStatus,
+  bulkArchiveProjects,
   createCampaign,
   updateCampaignDetails,
   setCampaignDates,
@@ -203,6 +211,11 @@ export const mutationResolvers = {
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
+
+  // Project Notes
+  createProjectNote,
+  updateProjectNote,
+  deleteProjectNote,
 
   // Contact Detail
   createContactNote,

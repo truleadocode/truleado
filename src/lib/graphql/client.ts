@@ -414,9 +414,46 @@ export const queries = {
         endDate
         isArchived
         createdAt
+        projectType
+        status
+        priority
+        source
+        currency
+        influencerBudget
+        agencyFee
+        agencyFeeType
+        productionBudget
+        boostingBudget
+        contingency
+        platforms
+        campaignObjectives
+        influencerTiers
+        plannedCampaigns
+        targetReach
+        targetImpressions
+        targetEngagementRate
+        targetConversions
+        approvalTurnaround
+        reportingCadence
+        briefFileUrl
+        contractFileUrl
+        exclusivityClause
+        exclusivityTerms
+        contentUsageRights
+        renewalDate
+        externalFolderLink
+        tags
+        internalNotes
+        projectManager { id name email }
+        clientPoc { id firstName lastName email jobTitle }
+        influencerApprovalContact { id firstName lastName }
+        contentApprovalContact { id firstName lastName }
         client {
           id
           name
+          logoUrl
+          industry
+          currencyCode
           accountManager {
             id
             name
@@ -429,10 +466,21 @@ export const queries = {
           status
           startDate
           endDate
+          totalBudget
+          creators {
+            id
+            fee
+            creator {
+              id
+              name
+              profilePictureUrl
+            }
+          }
           deliverables {
             id
             title
             status
+            dueDate
           }
         }
         projectApprovers {
@@ -527,6 +575,10 @@ export const queries = {
         campaignType
         startDate
         endDate
+        totalBudget
+        currency
+        budgetControlType
+        clientContractValue
         createdAt
         project {
           id
@@ -534,22 +586,103 @@ export const queries = {
           client {
             id
             name
+            logoUrl
+            industry
           }
         }
         deliverables {
           id
-        }
-        creators {
-          id
+          deliverableType
+          status
+          dueDate
           creator {
             id
             displayName
+          }
+          trackingRecord {
+            id
+            urls { url }
+          }
+          approvals {
+            id
+            status
+          }
+        }
+        creators {
+          id
+          status
+          rateAmount
+          rateCurrency
+          creator {
+            id
+            displayName
+            profilePictureUrl
+            followers
+            engagementRate
+            instagramHandle
+            youtubeHandle
+            tiktokHandle
+          }
+        }
+        users {
+          id
+          role
+          user {
+            id
+            name
+            email
           }
         }
       }
     }
   `,
   
+  agencyProjects: `
+    query GetAgencyProjects($agencyId: ID!) {
+      agencyProjects(agencyId: $agencyId) {
+        id
+        name
+        description
+        startDate
+        endDate
+        isArchived
+        createdAt
+        projectType
+        status
+        priority
+        currency
+        influencerBudget
+        agencyFee
+        agencyFeeType
+        productionBudget
+        boostingBudget
+        contingency
+        platforms
+        renewalDate
+        tags
+        client {
+          id
+          name
+          logoUrl
+          industry
+        }
+        campaigns {
+          id
+          name
+          status
+          totalBudget
+          startDate
+          endDate
+        }
+        projectManager {
+          id
+          name
+          email
+        }
+      }
+    }
+  `,
+
   deliverable: `
     query GetDeliverable($id: ID!) {
       deliverable(id: $id) {
@@ -823,6 +956,8 @@ export const queries = {
           client {
             id
             name
+            logoUrl
+            industry
             accountManager {
               id
               name
@@ -833,18 +968,36 @@ export const queries = {
         deliverables {
           id
           title
+          description
           status
           trackingRecord {
             id
+            urls { id url platform }
             createdAt
           }
           deliverableType
           dueDate
+          creator { id displayName }
           versions {
             id
             versionNumber
+            fileUrl
+            fileName
+            caption
             createdAt
           }
+          approvals {
+            id
+            status
+            reviewedBy { id name }
+            createdAt
+          }
+          submissionEvents {
+            id
+            eventType
+            createdAt
+          }
+          createdAt
         }
         creators {
           id
@@ -886,6 +1039,9 @@ export const queries = {
             instagramHandle
             youtubeHandle
             tiktokHandle
+            profilePictureUrl
+            followers
+            engagementRate
           }
         }
         attachments {
@@ -894,12 +1050,23 @@ export const queries = {
           fileUrl
           fileSize
           mimeType
+          uploadedBy { id name }
           createdAt
         }
         users {
           id
           role
           user { id name email }
+          createdAt
+        }
+        activityLogs {
+          id
+          action
+          entityType
+          entityId
+          metadata
+          actor { id name email }
+          createdAt
         }
       }
     }
@@ -1469,6 +1636,48 @@ export const queries = {
       }
     }
   `,
+
+  projectNotes: `
+    query GetProjectNotes($projectId: ID!) {
+      projectNotes(projectId: $projectId) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  projectActivityFeed: `
+    query GetProjectActivityFeed($projectId: ID!, $limit: Int) {
+      projectActivityFeed(projectId: $projectId, limit: $limit) {
+        id
+        action
+        entityType
+        entityId
+        metadata
+        actor { id name email }
+        createdAt
+      }
+    }
+  `,
+
+  projectFiles: `
+    query GetProjectFiles($projectId: ID!) {
+      projectFiles(projectId: $projectId) {
+        id
+        fileName
+        fileUrl
+        fileSize
+        fileType
+        uploadedBy { id name email }
+        campaign { id name project { id name } }
+        createdAt
+      }
+    }
+  `,
 };
 
 /**
@@ -1717,8 +1926,88 @@ export const mutations = {
   `,
   
   createProject: `
-    mutation CreateProject($clientId: ID!, $name: String!, $description: String) {
-      createProject(clientId: $clientId, name: $name, description: $description) {
+    mutation CreateProject(
+      $clientId: ID!
+      $name: String!
+      $description: String
+      $projectType: String
+      $status: String
+      $projectManagerId: ID
+      $clientPocId: ID
+      $startDate: DateTime
+      $endDate: DateTime
+      $currency: String
+      $influencerBudget: Float
+      $agencyFee: Float
+      $agencyFeeType: String
+      $productionBudget: Float
+      $boostingBudget: Float
+      $contingency: Float
+      $platforms: [String!]
+      $campaignObjectives: [String!]
+      $influencerTiers: [String!]
+      $plannedCampaigns: Int
+      $targetReach: Float
+      $targetImpressions: Float
+      $targetEngagementRate: Float
+      $targetConversions: Float
+      $influencerApprovalContactId: ID
+      $contentApprovalContactId: ID
+      $approvalTurnaround: String
+      $reportingCadence: String
+      $briefFileUrl: String
+      $contractFileUrl: String
+      $exclusivityClause: Boolean
+      $exclusivityTerms: String
+      $contentUsageRights: String
+      $renewalDate: DateTime
+      $externalFolderLink: String
+      $priority: String
+      $source: String
+      $tags: [String!]
+      $internalNotes: String
+    ) {
+      createProject(
+        clientId: $clientId
+        name: $name
+        description: $description
+        projectType: $projectType
+        status: $status
+        projectManagerId: $projectManagerId
+        clientPocId: $clientPocId
+        startDate: $startDate
+        endDate: $endDate
+        currency: $currency
+        influencerBudget: $influencerBudget
+        agencyFee: $agencyFee
+        agencyFeeType: $agencyFeeType
+        productionBudget: $productionBudget
+        boostingBudget: $boostingBudget
+        contingency: $contingency
+        platforms: $platforms
+        campaignObjectives: $campaignObjectives
+        influencerTiers: $influencerTiers
+        plannedCampaigns: $plannedCampaigns
+        targetReach: $targetReach
+        targetImpressions: $targetImpressions
+        targetEngagementRate: $targetEngagementRate
+        targetConversions: $targetConversions
+        influencerApprovalContactId: $influencerApprovalContactId
+        contentApprovalContactId: $contentApprovalContactId
+        approvalTurnaround: $approvalTurnaround
+        reportingCadence: $reportingCadence
+        briefFileUrl: $briefFileUrl
+        contractFileUrl: $contractFileUrl
+        exclusivityClause: $exclusivityClause
+        exclusivityTerms: $exclusivityTerms
+        contentUsageRights: $contentUsageRights
+        renewalDate: $renewalDate
+        externalFolderLink: $externalFolderLink
+        priority: $priority
+        source: $source
+        tags: $tags
+        internalNotes: $internalNotes
+      ) {
         id
         name
         description
@@ -2541,6 +2830,59 @@ export const mutations = {
   deleteClientNote: `
     mutation DeleteClientNote($id: ID!) {
       deleteClientNote(id: $id)
+    }
+  `,
+
+  // Project Notes mutations
+  createProjectNote: `
+    mutation CreateProjectNote($projectId: ID!, $message: String!) {
+      createProjectNote(projectId: $projectId, message: $message) {
+        id
+        message
+        isPinned
+        createdBy { id name email }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
+  updateProjectNote: `
+    mutation UpdateProjectNote($id: ID!, $message: String, $isPinned: Boolean) {
+      updateProjectNote(id: $id, message: $message, isPinned: $isPinned) {
+        id
+        message
+        isPinned
+        updatedAt
+      }
+    }
+  `,
+
+  deleteProjectNote: `
+    mutation DeleteProjectNote($id: ID!) {
+      deleteProjectNote(id: $id)
+    }
+  `,
+
+  // Project status mutations
+  updateProjectStatus: `
+    mutation UpdateProjectStatus($id: ID!, $status: String!) {
+      updateProjectStatus(id: $id, status: $status) {
+        id
+        status
+      }
+    }
+  `,
+
+  bulkUpdateProjectStatus: `
+    mutation BulkUpdateProjectStatus($projectIds: [ID!]!, $status: String!) {
+      bulkUpdateProjectStatus(projectIds: $projectIds, status: $status)
+    }
+  `,
+
+  bulkArchiveProjects: `
+    mutation BulkArchiveProjects($projectIds: [ID!]!) {
+      bulkArchiveProjects(projectIds: $projectIds)
     }
   `,
 

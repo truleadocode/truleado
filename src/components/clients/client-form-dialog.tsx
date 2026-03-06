@@ -16,12 +16,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
 import {
   Select,
   SelectContent,
@@ -254,19 +254,19 @@ export function ClientFormDialog({ open, onOpenChange, onCreated }: ClientFormDi
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b shrink-0">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="sm:max-w-2xl w-full flex flex-col p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b shrink-0">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
               <Building2 className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle>Add Client</DialogTitle>
-              <DialogDescription>Add a new client to your agency</DialogDescription>
+              <SheetTitle>Add Client</SheetTitle>
+              <SheetDescription>Add a new client to your agency</SheetDescription>
             </div>
           </div>
-        </DialogHeader>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col flex-1 overflow-hidden">
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
@@ -626,7 +626,7 @@ export function ClientFormDialog({ open, onOpenChange, onCreated }: ClientFormDi
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

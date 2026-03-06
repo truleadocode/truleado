@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, memo } from 'react'
+import { memo } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -51,10 +51,14 @@ const bottomNavigation = [
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ]
 
-export const Sidebar = memo(function Sidebar() {
+interface SidebarProps {
+  collapsed: boolean
+  onCollapsedChange: (collapsed: boolean) => void
+}
+
+export const Sidebar = memo(function Sidebar({ collapsed, onCollapsedChange }: SidebarProps) {
   const pathname = usePathname()
   const { user, agencies, currentAgency, setCurrentAgency, signOut } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
 
   const getInitials = (name: string | null | undefined) => {
     if (!name) return 'U'
@@ -105,7 +109,7 @@ export const Sidebar = memo(function Sidebar() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
-                onClick={() => setCollapsed(true)}
+                onClick={() => onCollapsedChange(true)}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -243,7 +247,7 @@ export const Sidebar = memo(function Sidebar() {
                     variant="ghost"
                     size="icon"
                     className="w-full"
-                    onClick={() => setCollapsed(false)}
+                    onClick={() => onCollapsedChange(false)}
                   >
                     <ChevronRight className="h-5 w-5" />
                   </Button>

@@ -123,6 +123,99 @@ export async function removeProjectApprover(
   return true;
 }
 
+/**
+ * Update project status.
+ */
+export async function updateProjectStatus(
+  _: unknown,
+  { id, status }: { id: string; status: string },
+  ctx: GraphQLContext
+) {
+  const clientId = await getProjectClientId(id);
+  if (!clientId) throw notFoundError('Project', id);
+  await requireClientAccess(ctx, clientId, true);
+
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .update({ status })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error('Failed to update project status');
+  }
+
+  const agencyId = await getAgencyIdForProject(id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'project',
+      entityId: id,
+      action: 'updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      metadata: { field: 'status', value: status },
+    });
+  }
+
+  return data;
+}
+
+/**
+ * Bulk update project status.
+ */
+export async function bulkUpdateProjectStatus(
+  _: unknown,
+  { projectIds, status }: { projectIds: string[]; status: string },
+  ctx: GraphQLContext
+) {
+  for (const id of projectIds) {
+    try {
+      const clientId = await getProjectClientId(id);
+      if (!clientId) continue;
+      await requireClientAccess(ctx, clientId, true);
+      await supabaseAdmin.from('projects').update({ status }).eq('id', id);
+    } catch {
+      // skip unauthorized projects
+    }
+  }
+  return true;
+}
+
+/**
+ * Bulk archive projects.
+ */
+export async function bulkArchiveProjects(
+  _: unknown,
+  { projectIds }: { projectIds: string[] },
+  ctx: GraphQLContext
+) {
+  for (const id of projectIds) {
+    try {
+      const clientId = await getProjectClientId(id);
+      if (!clientId) continue;
+      await requireClientAccess(ctx, clientId, true);
+      await supabaseAdmin.from('projects').update({ is_archived: true }).eq('id', id);
+
+      const agencyId = await getAgencyIdForProject(id);
+      if (agencyId) {
+        await logActivity({
+          agencyId,
+          entityType: 'project',
+          entityId: id,
+          action: 'archived',
+          actorId: ctx.user!.id,
+          actorType: 'user',
+        });
+      }
+    } catch {
+      // skip unauthorized projects
+    }
+  }
+  return true;
+}
+
 async function getProjectClientId(projectId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
     .from('projects')

@@ -245,6 +245,17 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # 4.4a2 Project Note
+  type ProjectNote {
+    id: ID!
+    project: Project!
+    message: String!
+    isPinned: Boolean!
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
+  }
+
   # 4.4b Contact Note
   type ContactNote {
     id: ID!
@@ -295,6 +306,47 @@ export const typeDefs = gql`
     projectApprovers: [ProjectApprover!]!
     projectUsers: [ProjectUser!]!
     createdAt: DateTime!
+    # Extended fields
+    projectType: String
+    status: String
+    projectManager: User
+    clientPoc: Contact
+    # Budget
+    currency: String
+    influencerBudget: Float
+    agencyFee: Float
+    agencyFeeType: String
+    productionBudget: Float
+    boostingBudget: Float
+    contingency: Float
+    # Scope
+    platforms: [String!]
+    campaignObjectives: [String!]
+    influencerTiers: [String!]
+    plannedCampaigns: Int
+    # KPI Targets
+    targetReach: Float
+    targetImpressions: Float
+    targetEngagementRate: Float
+    targetConversions: Float
+    # Approvals & Process
+    influencerApprovalContact: Contact
+    contentApprovalContact: Contact
+    approvalTurnaround: String
+    reportingCadence: String
+    # Documents & Commercial
+    briefFileUrl: String
+    contractFileUrl: String
+    exclusivityClause: Boolean
+    exclusivityTerms: String
+    contentUsageRights: String
+    renewalDate: DateTime
+    externalFolderLink: String
+    # Internal
+    priority: String
+    source: String
+    tags: [String!]
+    internalNotes: String
   }
 
   type ProjectApprover {
@@ -1128,6 +1180,7 @@ export const typeDefs = gql`
     projects(clientId: ID!): [Project!]!
     campaigns(projectId: ID!): [Campaign!]!
     allCampaigns(agencyId: ID!): [Campaign!]!
+    agencyProjects(agencyId: ID!): [Project!]!
     deliverables(campaignId: ID!): [Deliverable!]!
     creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     
@@ -1139,6 +1192,11 @@ export const typeDefs = gql`
 
     # Client files (aggregated from campaign attachments)
     clientFiles(clientId: ID!): [CampaignAttachment!]!
+
+    # Project detail queries
+    projectNotes(projectId: ID!): [ProjectNote!]!
+    projectActivityFeed(projectId: ID!, limit: Int): [ActivityLog!]!
+    projectFiles(projectId: ID!): [CampaignAttachment!]!
 
     # Contact detail queries
     contactNotes(contactId: ID!): [ContactNote!]!
@@ -1343,6 +1401,11 @@ export const typeDefs = gql`
     updateClientNote(id: ID!, message: String, isPinned: Boolean): ClientNote!
     deleteClientNote(id: ID!): Boolean!
 
+    # Project notes CRUD
+    createProjectNote(projectId: ID!, message: String!): ProjectNote!
+    updateProjectNote(id: ID!, message: String, isPinned: Boolean): ProjectNote!
+    deleteProjectNote(id: ID!): Boolean!
+
     # Contact notes CRUD
     createContactNote(contactId: ID!, message: String!): ContactNote!
     updateContactNote(id: ID!, message: String, isPinned: Boolean): ContactNote!
@@ -1418,9 +1481,56 @@ export const typeDefs = gql`
     # ---------------------------------------------
     
     # Create a project under a client
-    createProject(clientId: ID!, name: String!, description: String): Project!
+    createProject(
+      clientId: ID!
+      name: String!
+      description: String
+      projectType: String
+      status: String
+      projectManagerId: ID
+      clientPocId: ID
+      startDate: DateTime
+      endDate: DateTime
+      currency: String
+      influencerBudget: Float
+      agencyFee: Float
+      agencyFeeType: String
+      productionBudget: Float
+      boostingBudget: Float
+      contingency: Float
+      platforms: [String!]
+      campaignObjectives: [String!]
+      influencerTiers: [String!]
+      plannedCampaigns: Int
+      targetReach: Float
+      targetImpressions: Float
+      targetEngagementRate: Float
+      targetConversions: Float
+      influencerApprovalContactId: ID
+      contentApprovalContactId: ID
+      approvalTurnaround: String
+      reportingCadence: String
+      briefFileUrl: String
+      contractFileUrl: String
+      exclusivityClause: Boolean
+      exclusivityTerms: String
+      contentUsageRights: String
+      renewalDate: DateTime
+      externalFolderLink: String
+      priority: String
+      source: String
+      tags: [String!]
+      internalNotes: String
+    ): Project!
     
     # Add/remove project approvers (optional approval stage; ANY ONE approval sufficient)
+    # Update project status
+    updateProjectStatus(id: ID!, status: String!): Project!
+
+    # Bulk project operations
+    bulkUpdateProjectStatus(projectIds: [ID!]!, status: String!): Boolean!
+    bulkArchiveProjects(projectIds: [ID!]!): Boolean!
+
     addProjectApprover(projectId: ID!, userId: ID!): ProjectApprover!
     removeProjectApprover(projectApproverId: ID!): Boolean!
     

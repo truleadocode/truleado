@@ -1,972 +1,186 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import {
-  Activity,
-  Megaphone,
-  Building2,
-  Briefcase,
-  Calendar,
-  FileCheck,
-  Users,
-  Plus,
-  MoreHorizontal,
-  AlertCircle,
-  Play,
-  Send,
-  CheckCircle,
-  Flag,
-  Paperclip,
-  FileText,
-  Trash2,
-  Upload,
-  X,
-  XCircle,
-  Pencil,
-  UserPlus,
-  ChevronRight,
-} from 'lucide-react'
+import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Header } from '@/components/layout/header'
-import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
-import { StatusBadge } from '@/components/ui/status-badge'
-import { getCampaignStatusLabel, getDeliverableStatusLabel } from '@/lib/campaign-status'
-import { DatePicker } from '@/components/ui/date-picker'
-import { RichTextEditor, RichTextContent } from '@/components/ui/rich-text-editor'
-import { FileUpload, FileItem } from '@/components/ui/file-upload'
+import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
+import { useGraphQLQuery } from '@/hooks/use-graphql-query'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
-import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
-import { ApproverPicker } from '@/components/approver-picker'
-import { ProposalTimelineSheet } from './components/proposal-timeline-sheet'
-import { FinanceOverviewCard } from '@/components/finance/finance-overview-card'
-import { useGraphQLQuery } from '@/hooks/use-graphql-query'
+import { getIdToken } from '@/lib/firebase/client'
+import { CampaignHeader } from './components/campaign-header'
+import { CampaignSidebar } from './components/campaign-sidebar'
+import { OverviewTab } from './components/overview-tab'
+import { InfluencersDeliverablesTab } from './components/influencers-deliverables-tab'
+import { ApprovalsTab } from './components/approvals-tab'
+import { NotesTab } from './components/notes-tab'
+import { FilesTab } from './components/files-tab'
+import { CreateCampaignDrawer } from '@/components/campaigns/create-campaign-drawer'
+import type { Campaign, CampaignAttachment } from './types'
 
-const PerformanceTab = dynamic(
-  () => import('./components/performance-tab').then((m) => ({ default: m.PerformanceTab })),
-  { loading: () => <div className="p-6 text-muted-foreground">Loading performance data...</div> }
-)
-const FinanceTab = dynamic(
-  () => import('./components/finance-tab').then((m) => ({ default: m.FinanceTab })),
-  { loading: () => <div className="p-6 text-muted-foreground">Loading finance data...</div> }
-)
-
-interface DeliverableVersion {
-  id: string
-  versionNumber: number
-  createdAt: string
-}
-
-interface Deliverable {
-  id: string
-  title: string
-  status: string
-  trackingRecord?: {
-    id: string
-    createdAt: string
-  } | null
-  deliverableType: string
-  dueDate: string | null
-  versions: DeliverableVersion[]
-}
-
-interface Creator {
-  id: string
-  displayName: string
-  email: string | null
-  instagramHandle: string | null
-  youtubeHandle: string | null
-  tiktokHandle: string | null
-}
-
-interface CurrentProposal {
-  id: string
-  versionNumber: number
-  state: string
-  rateAmount: number | null
-  rateCurrency: string | null
-  notes: string | null
-  createdByType: string
-  createdAt: string
-}
-
-interface ProposalVersion {
-  id: string
-  versionNumber: number
-  state: string
-  rateAmount: number | null
-  rateCurrency: string | null
-  notes: string | null
-  createdByType: string
-  createdAt: string
-}
-
-interface ProposalNote {
-  id: string
-  message: string
-  createdByType: string
-  createdAt: string
-}
-
-interface CampaignCreator {
-  id: string
-  status: string
-  rateAmount: number | null
-  rateCurrency: string | null
-  notes: string | null
-  proposalState: string | null
-  currentProposal: CurrentProposal | null
-  proposalVersions: ProposalVersion[]
-  proposalNotes: ProposalNote[]
-  creator: Creator
-}
-
-interface RosterCreator {
-  id: string
-  displayName: string
-  email: string | null
-  instagramHandle: string | null
-  youtubeHandle: string | null
-  tiktokHandle: string | null
-  isActive: boolean
-}
-
-interface Attachment {
-  id: string
-  fileName: string
-  fileUrl: string
-  fileSize: number | null
-  mimeType: string | null
-  createdAt: string
-}
-
-interface CampaignUser {
-  id: string
-  role: string
-  user: { id: string; name: string | null; email: string }
-}
-
-interface Campaign {
-  id: string
-  name: string
-  description: string | null
-  brief: string | null
-  status: string
-  campaignType: string
-  startDate: string | null
-  endDate: string | null
-  // Finance fields
-  totalBudget: number | null
-  currency: string | null
-  budgetControlType: string | null
-  clientContractValue: number | null
-  createdAt: string
-  project: {
-    id: string
-    name: string
-    client: {
-      id: string
-      name: string
-      accountManager: {
-        id: string
-        name: string | null
-        email: string
-      } | null
-    }
-  }
-  deliverables: Deliverable[]
-  creators: CampaignCreator[]
-  attachments: Attachment[]
-  users: CampaignUser[]
-}
-
-// Campaign state machine
-const STATUS_TRANSITIONS: Record<string, { next: string; action: string; icon: React.ReactNode; color: string }> = {
-  draft: { next: 'active', action: 'Activate Campaign', icon: <Play className="h-4 w-4" />, color: 'bg-green-600 hover:bg-green-700' },
-  active: { next: 'in_review', action: 'Submit for Review', icon: <Send className="h-4 w-4" />, color: 'bg-yellow-600 hover:bg-yellow-700' },
-  in_review: { next: 'approved', action: 'Approve Campaign', icon: <CheckCircle className="h-4 w-4" />, color: 'bg-blue-600 hover:bg-blue-700' },
-  approved: { next: 'completed', action: 'Mark Complete', icon: <Flag className="h-4 w-4" />, color: 'bg-purple-600 hover:bg-purple-700' },
-}
-
-interface AgencyUserOption {
-  id: string
-  role: string
-  user: { id: string; name: string | null; email: string }
-}
+// Lazy-load heavy tabs
+const FinanceTab = dynamic(() => import('./components/finance-tab').then((m) => ({ default: m.FinanceTab })), {
+  loading: () => <div className="h-64 bg-muted rounded-lg animate-pulse" />,
+})
+const PerformanceTab = dynamic(() => import('./components/performance-tab').then((m) => ({ default: m.PerformanceTab })), {
+  loading: () => <div className="h-64 bg-muted rounded-lg animate-pulse" />,
+})
 
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
-  const { toast } = useToast()
-  const { currentAgency } = useAuth()
   const campaignId = params.id as string
-  
-  const [campaign, setCampaign] = useState<Campaign | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [transitioning, setTransitioning] = useState(false)
-  const [archiving, setArchiving] = useState(false)
-  
-  // Edit dialogs state
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [datesDialogOpen, setDatesDialogOpen] = useState(false)
-  const [briefEditing, setBriefEditing] = useState(false)
-  const [manageApproversOpen, setManageApproversOpen] = useState(false)
-  
-  // Form states
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editStartDate, setEditStartDate] = useState<Date | undefined>()
-  const [editEndDate, setEditEndDate] = useState<Date | undefined>()
-  const [editBrief, setEditBrief] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [agencyUsers, setAgencyUsers] = useState<AgencyUserOption[]>([])
-  const [loadingAgencyUsers, setLoadingAgencyUsers] = useState(false)
-  const [approverPickerIds, setApproverPickerIds] = useState<string[]>([])
-  const [savingApprovers, setSavingApprovers] = useState(false)
-  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false)
-  const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false)
-  const [trackingUrls, setTrackingUrls] = useState<string[]>([''])
-  const [urlErrors, setUrlErrors] = useState<string[]>([])
-  const [validatedUrls, setValidatedUrls] = useState<string[]>([])
-  const [savingTracking, setSavingTracking] = useState(false)
-  const [trackingDeliverable, setTrackingDeliverable] = useState<Deliverable | null>(null)
+  const { toast } = useToast()
 
-  // Timeline sheet for creator proposals
-  const [timelineSheetOpen, setTimelineSheetOpen] = useState(false)
-  const [selectedCreatorForTimeline, setSelectedCreatorForTimeline] = useState<CampaignCreator | null>(null)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [editDrawerOpen, setEditDrawerOpen] = useState(false)
 
-  // Assign creator dialog
-  const [assignCreatorOpen, setAssignCreatorOpen] = useState(false)
-  const [rosterCreators, setRosterCreators] = useState<RosterCreator[]>([])
-  const [loadingRoster, setLoadingRoster] = useState(false)
-  const [creatorSearch, setCreatorSearch] = useState('')
-  const [selectedCreatorId, setSelectedCreatorId] = useState<string | null>(null)
-  const [assignRate, setAssignRate] = useState('')
-  const [assignCurrency, setAssignCurrency] = useState('INR')
-  const [assignNotes, setAssignNotes] = useState('')
-  const [assigning, setAssigning] = useState(false)
-
-  // Lightweight finance summary for the Overview tab budget card
-  const { data: financeSummaryData } = useGraphQLQuery<{
-    campaignFinanceSummary: {
-      campaignId: string
-      totalBudget: number | null
-      currency: string | null
-      budgetControlType: string | null
-      clientContractValue: number | null
-      committed: number
-      paid: number
-      otherExpenses: number
-      totalSpend: number
-      remainingBudget: number | null
-      profit: number | null
-      marginPercent: number | null
-      budgetUtilization: number | null
-      warningLevel: string
-    }
-  }>(
-    ['campaignFinanceSummary', campaignId],
-    queries.campaignFinanceSummary,
-    { campaignId },
+  // ----- Fetch campaign -----
+  const { data, isLoading, error, refetch } = useGraphQLQuery<{ campaign: Campaign }>(
+    ['campaign', campaignId],
+    queries.campaign,
+    { id: campaignId },
     { enabled: !!campaignId }
   )
-  const financeSummary = financeSummaryData?.campaignFinanceSummary ?? null
 
-  const fetchCampaign = useCallback(async () => {
+  const campaign = data?.campaign
+
+  // ----- Status changes -----
+  const handleStatusChange = useCallback(async (status: string) => {
     try {
-      const data = await graphqlRequest<{ campaign: Campaign }>(
-        queries.campaign,
-        { id: campaignId }
-      )
-      setCampaign(data.campaign)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load campaign')
-    } finally {
-      setLoading(false)
-    }
-  }, [campaignId])
-
-  useEffect(() => {
-    fetchCampaign()
-  }, [fetchCampaign])
-
-  // Initialize edit forms when campaign loads
-  useEffect(() => {
-    if (campaign) {
-      setEditName(campaign.name)
-      setEditDescription(campaign.description || '')
-      setEditStartDate(campaign.startDate ? new Date(campaign.startDate) : undefined)
-      setEditEndDate(campaign.endDate ? new Date(campaign.endDate) : undefined)
-      setEditBrief(campaign.brief || '')
-    }
-  }, [campaign])
-
-  // Open manage approvers: load agency users and set current approver selection
-  useEffect(() => {
-    if (!manageApproversOpen || !campaign) return
-    setApproverPickerIds(
-      (campaign.users ?? [])
-        .filter((cu) => cu.role === 'approver')
-        .map((cu) => cu.user.id)
-    )
-  }, [manageApproversOpen, campaign])
-
-  useEffect(() => {
-    if (!manageApproversOpen || !currentAgency?.id) return
-    setLoadingAgencyUsers(true)
-    graphqlRequest<{ agency: { users: AgencyUserOption[] } }>(
-      queries.agencyUsers,
-      { agencyId: currentAgency.id }
-    )
-      .then((data) => setAgencyUsers(data.agency?.users ?? []))
-      .catch(() => setAgencyUsers([]))
-      .finally(() => setLoadingAgencyUsers(false))
-  }, [manageApproversOpen, currentAgency?.id])
-
-  // Keep selectedCreatorForTimeline in sync when campaign data refreshes
-  useEffect(() => {
-    if (selectedCreatorForTimeline && campaign?.creators) {
-      const updated = campaign.creators.find(c => c.id === selectedCreatorForTimeline.id)
-      if (updated) {
-        setSelectedCreatorForTimeline(updated)
+      // Use explicit transition mutations
+      const currentStatus = campaign?.status
+      if (status === 'ACTIVE' && currentStatus === 'DRAFT') {
+        await graphqlRequest(mutations.activateCampaign, { campaignId })
+      } else if (status === 'IN_REVIEW') {
+        await graphqlRequest(mutations.submitCampaignForReview, { campaignId })
+      } else if (status === 'APPROVED') {
+        await graphqlRequest(mutations.approveCampaign, { campaignId })
+      } else if (status === 'COMPLETED') {
+        await graphqlRequest(mutations.completeCampaign, { campaignId })
+      } else {
+        toast({ title: `Cannot transition from ${currentStatus} to ${status}`, variant: 'destructive' })
+        return
       }
-    }
-  }, [campaign?.creators, selectedCreatorForTimeline?.id])
-
-  const handleStatusTransition = async () => {
-    if (!campaign) return
-    
-    const transition = STATUS_TRANSITIONS[campaign.status.toLowerCase()]
-    if (!transition) return
-    
-    setTransitioning(true)
-    
-    try {
-      let mutation = ''
-      switch (campaign.status.toLowerCase()) {
-        case 'draft':
-          mutation = mutations.activateCampaign
-          break
-        case 'active':
-          mutation = mutations.submitCampaignForReview
-          break
-        case 'in_review':
-          mutation = mutations.approveCampaign
-          break
-        case 'approved':
-          mutation = mutations.completeCampaign
-          break
-        default:
-          return
-      }
-      
-      await graphqlRequest(mutation, { campaignId })
-      toast({
-        title: 'Campaign updated',
-        description: `Campaign is now ${transition.next.replace('_', ' ')}`,
-      })
-      await fetchCampaign()
+      toast({ title: `Campaign status changed to ${status}` })
+      refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update campaign status')
-    } finally {
-      setTransitioning(false)
+      toast({ title: err instanceof Error ? err.message : 'Failed to change status', variant: 'destructive' })
     }
-  }
+  }, [campaign?.status, campaignId, toast, refetch])
 
-  const handleSaveDetails = async () => {
-    if (!campaign) return
-    
-    setSaving(true)
-    try {
-      await graphqlRequest(mutations.updateCampaignDetails, {
-        campaignId,
-        name: editName,
-        description: editDescription || null,
-      })
-      toast({ title: 'Campaign updated', description: 'Campaign details saved successfully' })
-      setEditDialogOpen(false)
-      await fetchCampaign()
-    } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to save', 
-        variant: 'destructive' 
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveDates = async () => {
-    if (!campaign) return
-    
-    setSaving(true)
-    try {
-      await graphqlRequest(mutations.setCampaignDates, {
-        campaignId,
-        startDate: editStartDate?.toISOString() || null,
-        endDate: editEndDate?.toISOString() || null,
-      })
-      toast({ title: 'Dates updated', description: 'Campaign dates saved successfully' })
-      setDatesDialogOpen(false)
-      await fetchCampaign()
-    } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to save dates', 
-        variant: 'destructive' 
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveBrief = async () => {
-    if (!campaign) return
-    
-    setSaving(true)
-    try {
-      await graphqlRequest(mutations.updateCampaignBrief, {
-        campaignId,
-        brief: editBrief,
-      })
-      toast({ title: 'Brief saved', description: 'Campaign brief updated successfully' })
-      setBriefEditing(false)
-      await fetchCampaign()
-    } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to save brief', 
-        variant: 'destructive' 
-      })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const campaignApprovers = (campaign?.users ?? []).filter((cu) => cu.role === 'approver')
-
-  const handleSaveApprovers = async () => {
-    if (!campaign) return
-    if (approverPickerIds.length < 1) {
-      toast({ title: 'At least one approver required', variant: 'destructive' })
-      return
-    }
-    setSavingApprovers(true)
-    try {
-      const currentApproverUserIds = new Set(campaignApprovers.map((cu) => cu.user.id))
-      const selectedSet = new Set(approverPickerIds)
-      const toAdd = approverPickerIds.filter((id) => !currentApproverUserIds.has(id))
-      const toRemove = campaignApprovers.filter((cu) => !selectedSet.has(cu.user.id))
-      for (const userId of toAdd) {
-        await graphqlRequest(mutations.assignUserToCampaign, {
-          campaignId,
-          userId,
-          role: 'approver',
-        })
-      }
-      for (const cu of toRemove) {
-        await graphqlRequest(mutations.removeUserFromCampaign, { campaignUserId: cu.id })
-      }
-      toast({ title: 'Approvers updated', description: 'Campaign approvers saved successfully' })
-      setManageApproversOpen(false)
-      await fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to save approvers',
-        variant: 'destructive',
-      })
-    } finally {
-      setSavingApprovers(false)
-    }
-  }
-
-  const handleFileUpload = async (file: File) => {
-    try {
-      // Upload to Supabase Storage
-      const result = await uploadFile('campaign-attachments', campaignId, file)
-      
-      // Save attachment record to database (store path for signed URL generation)
-      await graphqlRequest(mutations.addCampaignAttachment, {
-        campaignId,
-        fileName: result.fileName,
-        fileUrl: result.path, // Store path, not public URL
-        fileSize: result.fileSize,
-        mimeType: result.mimeType,
-      })
-      
-      toast({ title: 'File uploaded', description: `${file.name} uploaded successfully` })
-      await fetchCampaign()
-    } catch (err) {
-      toast({ 
-        title: 'Upload failed', 
-        description: err instanceof Error ? err.message : 'Failed to upload file', 
-        variant: 'destructive' 
-      })
-      throw err // Re-throw so FileUpload component shows error state
-    }
-  }
-
-  const handleDownloadFile = async (path: string, fileName: string) => {
-    try {
-      const signedUrl = await getSignedDownloadUrl('campaign-attachments', path)
-      // Open in new tab or trigger download
-      window.open(signedUrl, '_blank')
-    } catch (err) {
-      toast({ 
-        title: 'Download failed', 
-        description: err instanceof Error ? err.message : 'Failed to get download link', 
-        variant: 'destructive' 
-      })
-    }
-  }
-
-  const handleRemoveAttachment = async (attachmentId: string) => {
-    if (!confirm('Remove this attachment?')) return
-    
-    try {
-      await graphqlRequest(mutations.removeCampaignAttachment, { attachmentId })
-      toast({ title: 'Attachment removed' })
-      await fetchCampaign()
-    } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to remove attachment', 
-        variant: 'destructive' 
-      })
-    }
-  }
-
-  const handleArchiveCampaign = async () => {
-    if (!campaign) return
-    if (!confirm('Are you sure you want to archive this campaign? This action cannot be undone.')) return
-    
-    setArchiving(true)
+  const handleArchive = useCallback(async () => {
     try {
       await graphqlRequest(mutations.archiveCampaign, { campaignId })
       toast({ title: 'Campaign archived' })
       router.push('/dashboard/campaigns')
     } catch (err) {
-      toast({ 
-        title: 'Error', 
-        description: err instanceof Error ? err.message : 'Failed to archive', 
-        variant: 'destructive' 
-      })
-    } finally {
-      setArchiving(false)
+      toast({ title: err instanceof Error ? err.message : 'Failed to archive', variant: 'destructive' })
     }
-  }
+  }, [campaignId, toast, router])
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Not set'
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
+  // ----- File operations -----
+  const handleFileUpload = useCallback(async (file: File) => {
+    const token = await getIdToken()
+    if (!token) throw new Error('Not authenticated')
+
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('bucket', 'campaign-attachments')
+    formData.append('entityId', campaignId)
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
     })
-  }
 
-  const formatFileSize = (bytes: number | null) => {
-    if (!bytes) return ''
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  const getInitials = (name: string | null | undefined) => {
-    if (!name) return '?'
-    return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-  }
-
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      DRAFT: 'bg-gray-100 text-gray-700',
-      ACTIVE: 'bg-green-100 text-green-700',
-      IN_REVIEW: 'bg-yellow-100 text-yellow-700',
-      APPROVED: 'bg-blue-100 text-blue-700',
-      COMPLETED: 'bg-purple-100 text-purple-700',
-      ARCHIVED: 'bg-gray-100 text-gray-500',
-      PENDING: 'bg-gray-100 text-gray-700',
-      SUBMITTED: 'bg-blue-100 text-blue-700',
-      INTERNAL_REVIEW: 'bg-yellow-100 text-yellow-700',
-      CLIENT_REVIEW: 'bg-orange-100 text-orange-700',
-      TRACKING: 'bg-indigo-100 text-indigo-700',
-      REJECTED: 'bg-red-100 text-red-700',
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.error || 'Upload failed')
     }
-    return colors[status.toUpperCase()] || 'bg-gray-100 text-gray-700'
-  }
 
-  const getDeliverableDisplayStatus = (deliverable: Deliverable) =>
-    deliverable.trackingRecord ? 'TRACKING' : deliverable.status
-
-  const isArchived = campaign?.status.toLowerCase() === 'archived'
-
-  const addUrlField = () => {
-    if (trackingUrls.length >= 10) return
-    setTrackingUrls((prev) => [...prev, ''])
-    setUrlErrors((prev) => [...prev, ''])
-  }
-
-  const removeUrlField = (index: number) => {
-    setTrackingUrls((prev) => prev.filter((_, i) => i !== index))
-    setUrlErrors((prev) => prev.filter((_, i) => i !== index))
-  }
-
-  const updateUrl = (index: number, value: string) => {
-    setTrackingUrls((prev) => {
-      const next = [...prev]
-      next[index] = value
-      return next
+    const data = await res.json()
+    await graphqlRequest(mutations.addCampaignAttachment, {
+      campaignId,
+      fileName: data.fileName,
+      fileUrl: data.path,
+      fileSize: data.fileSize,
+      mimeType: data.mimeType,
     })
-    setUrlErrors((prev) => {
-      const next = [...prev]
-      next[index] = ''
-      return next
-    })
-  }
+    toast({ title: 'File uploaded' })
+    refetch()
+  }, [campaignId, toast, refetch])
 
-  const validateUrl = (url: string): string | null => {
-    if (!url.trim()) return 'URL is required'
+  const handleFileRemove = useCallback(async (attachmentId: string) => {
     try {
-      const urlObj = new URL(url)
-      if (!urlObj.protocol.startsWith('http')) {
-        return 'URL must start with http:// or https://'
-      }
-      return null
+      await graphqlRequest(mutations.removeCampaignAttachment, { attachmentId })
+      toast({ title: 'File removed' })
+      refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to remove file', variant: 'destructive' })
+    }
+  }, [toast, refetch])
+
+  const handleFileDownload = useCallback(async (attachment: CampaignAttachment) => {
+    try {
+      const token = await getIdToken()
+      const res = await fetch(`/api/download?bucket=campaign-attachments&path=${encodeURIComponent(attachment.fileUrl)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Download failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = attachment.fileName
+      a.click()
+      URL.revokeObjectURL(url)
     } catch {
-      return 'Invalid URL format'
+      toast({ title: 'Download failed', variant: 'destructive' })
     }
-  }
+  }, [toast])
 
-  const openTrackingForDeliverable = (deliverable: Deliverable) => {
-    setTrackingDeliverable(deliverable)
-    setTrackingUrls([''])
-    setUrlErrors([])
-    setValidatedUrls([])
-    setTrackingDialogOpen(true)
-  }
-
-  const handleValidateUrls = () => {
-    const trimmedUrls = trackingUrls.map((url) => url.trim())
-    const errors = trimmedUrls.map((url, index) => {
-      if (!url) {
-        return index === 0 ? 'URL is required' : ''
-      }
-      return validateUrl(url) ?? ''
-    })
-    const hasErrors = errors.some((errorMessage) => errorMessage)
-    if (hasErrors) {
-      setUrlErrors(errors)
-      return
-    }
-    const nonEmptyUrls = trimmedUrls.filter((url, index) => index === 0 || url.length > 0)
-    if (nonEmptyUrls.length === 0) {
-      setUrlErrors(['URL is required'])
-      return
-    }
-    setValidatedUrls(nonEmptyUrls)
-    setUrlErrors([])
-    setTrackingDialogOpen(false)
-    setConfirmationDialogOpen(true)
-  }
-
-  const handleStartTracking = async () => {
-    if (!trackingDeliverable || validatedUrls.length === 0) return
-    setSavingTracking(true)
-    try {
-      await graphqlRequest(mutations.startDeliverableTracking, {
-        deliverableId: trackingDeliverable.id,
-        urls: validatedUrls,
-      })
-      toast({ title: 'Tracking started' })
-      setConfirmationDialogOpen(false)
-      setTrackingUrls([''])
-      setValidatedUrls([])
-      setUrlErrors([])
-      setTrackingDeliverable(null)
-      await fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Failed to start tracking',
-        description: err instanceof Error ? err.message : 'Unable to start tracking',
-        variant: 'destructive',
-      })
-    } finally {
-      setSavingTracking(false)
-    }
-  }
-
-  // Timeline sheet handler
-  const openTimelineSheet = (campaignCreator: CampaignCreator) => {
-    setSelectedCreatorForTimeline(campaignCreator)
-    setTimelineSheetOpen(true)
-  }
-
-  // Invite Creator handlers
-  const openAssignCreator = async () => {
-    if (!currentAgency?.id) return
-    setAssignCreatorOpen(true)
-    setSelectedCreatorId(null)
-    setAssignRate('')
-    setAssignCurrency('INR')
-    setAssignNotes('')
-    setCreatorSearch('')
-    setLoadingRoster(true)
-    try {
-      const data = await graphqlRequest<{ creators: RosterCreator[] }>(
-        queries.creators,
-        { agencyId: currentAgency.id }
-      )
-      setRosterCreators(data.creators)
-    } catch {
-      toast({ title: 'Error', description: 'Failed to load creators', variant: 'destructive' })
-    } finally {
-      setLoadingRoster(false)
-    }
-  }
-
-  const handleAssignCreator = async () => {
-    if (!selectedCreatorId || !campaign) return
-    setAssigning(true)
-    try {
-      await graphqlRequest(mutations.inviteCreatorToCampaign, {
-        campaignId: campaign.id,
-        creatorId: selectedCreatorId,
-        rateAmount: assignRate ? parseFloat(assignRate) : null,
-        rateCurrency: assignCurrency || 'INR',
-        notes: assignNotes.trim() || null,
-      })
-      toast({ title: 'Creator assigned to campaign' })
-      setAssignCreatorOpen(false)
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to assign creator',
-        variant: 'destructive',
-      })
-    } finally {
-      setAssigning(false)
-    }
-  }
-
-  const handleRemoveCreator = async (campaignCreatorId: string) => {
-    try {
-      await graphqlRequest(mutations.removeCreatorFromCampaign, { campaignCreatorId })
-      toast({ title: 'Creator removed from campaign' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to remove creator',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleAcceptInvite = async (campaignCreatorId: string) => {
-    try {
-      await graphqlRequest(mutations.acceptCampaignInvite, { campaignCreatorId })
-      toast({ title: 'Invitation accepted' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to accept invitation',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDeclineInvite = async (campaignCreatorId: string) => {
-    try {
-      await graphqlRequest(mutations.declineCampaignInvite, { campaignCreatorId })
-      toast({ title: 'Invitation declined' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to decline invitation',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleAcceptCounter = async (campaignCreatorId: string) => {
-    try {
-      await graphqlRequest(mutations.acceptCounterProposal, { campaignCreatorId })
-      toast({ title: 'Counter offer accepted', description: 'The creator has been confirmed for this campaign.' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to accept counter offer',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDeclineCounter = async (campaignCreatorId: string) => {
-    try {
-      await graphqlRequest(mutations.declineCounterProposal, { campaignCreatorId })
-      toast({ title: 'Counter offer declined' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to decline counter offer',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleAddNote = async (campaignCreatorId: string, message: string) => {
-    try {
-      await graphqlRequest(mutations.addProposalNote, { campaignCreatorId, message })
-      toast({ title: 'Note added' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to add note',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleReCounter = async (campaignCreatorId: string, input: { rateAmount: number; rateCurrency: string; notes?: string }) => {
-    try {
-      await graphqlRequest(mutations.reCounterProposal, {
-        input: {
-          campaignCreatorId,
-          ...input,
-        }
-      })
-      toast({ title: 'Counter proposal sent', description: 'The creator will be notified of your new offer.' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to send counter proposal',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleReopen = async (campaignCreatorId: string, input: { rateAmount: number; rateCurrency: string; notes?: string }) => {
-    try {
-      await graphqlRequest(mutations.reopenProposal, {
-        input: {
-          campaignCreatorId,
-          ...input,
-        }
-      })
-      toast({ title: 'Proposal reopened', description: 'The creator will be notified of your new offer.' })
-      fetchCampaign()
-    } catch (err) {
-      toast({
-        title: 'Error',
-        description: err instanceof Error ? err.message : 'Failed to reopen proposal',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const getCreatorStatusColor = (status: string) => {
-    switch (status) {
-      case 'INVITED': return 'bg-yellow-100 text-yellow-800'
-      case 'ACCEPTED': return 'bg-green-100 text-green-800'
-      case 'DECLINED': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getProposalStateColor = (state: string | null) => {
-    switch (state) {
-      case 'sent': return 'bg-blue-100 text-blue-800'
-      case 'countered': return 'bg-orange-100 text-orange-800'
-      case 'accepted': return 'bg-green-100 text-green-800'
-      case 'rejected': return 'bg-red-100 text-red-800'
-      case 'draft': return 'bg-gray-100 text-gray-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getProposalStateLabel = (state: string | null) => {
-    switch (state) {
-      case 'sent': return 'Proposal Sent'
-      case 'countered': return 'Counter Received'
-      case 'accepted': return 'Accepted'
-      case 'rejected': return 'Rejected'
-      case 'draft': return 'Draft'
-      default: return state || 'No Proposal'
-    }
-  }
-
-
-  const formatRate = (amount: number | null, currency: string | null) => {
-    if (!amount) return null
-    const currencyCode = currency || 'INR'
-    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-    }).format(amount / 100)
-  }
-
-  // Filter available creators (exclude already assigned)
-  const assignedCreatorIds = campaign?.creators.map(cc => cc.creator.id) || []
-  const availableCreators = rosterCreators.filter(
-    (c) =>
-      !assignedCreatorIds.includes(c.id) &&
-      (creatorSearch === '' ||
-        c.displayName.toLowerCase().includes(creatorSearch.toLowerCase()) ||
-        (c.instagramHandle && c.instagramHandle.toLowerCase().includes(creatorSearch.toLowerCase())) ||
-        (c.email && c.email.toLowerCase().includes(creatorSearch.toLowerCase())))
-  )
-
-  if (loading) {
+  // ----- Loading state -----
+  if (isLoading) {
     return (
       <>
-        <Header title="Loading..." />
-        <div className="p-6">
-          <div className="animate-pulse space-y-6">
-            <div className="h-8 w-48 bg-muted rounded" />
-            <div className="h-32 bg-muted rounded-lg" />
-            <div className="h-64 bg-muted rounded-lg" />
+        <Header title="Campaign" />
+        <div className="flex">
+          <div className="w-[280px] shrink-0 border-r p-5 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-muted animate-pulse" />
+              <div className="space-y-1.5 flex-1">
+                <div className="h-4 w-24 bg-muted rounded animate-pulse" />
+                <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+                <div key={i} className="h-7 bg-muted rounded animate-pulse" />
+              ))}
+            </div>
+          </div>
+          <div className="flex-1 p-6 space-y-4">
+            <div className="h-4 w-64 bg-muted rounded animate-pulse" />
+            <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+            <div className="grid grid-cols-5 gap-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
+              ))}
+            </div>
+            <div className="h-64 bg-muted rounded-lg animate-pulse" />
           </div>
         </div>
       </>
     )
   }
 
+  // ----- Error state -----
   if (error || !campaign) {
     return (
       <>
@@ -976,7 +190,7 @@ export default function CampaignDetailPage() {
             <CardContent className="p-6 flex flex-col items-center text-center">
               <AlertCircle className="h-12 w-12 text-destructive mb-4" />
               <h3 className="text-lg font-semibold">Failed to load campaign</h3>
-              <p className="text-muted-foreground mt-2">{error || 'Campaign not found'}</p>
+              <p className="text-muted-foreground mt-2">{error?.message || 'Campaign not found'}</p>
               <Button variant="outline" className="mt-4" onClick={() => router.push('/dashboard/campaigns')}>
                 Back to Campaigns
               </Button>
@@ -987,846 +201,85 @@ export default function CampaignDetailPage() {
     )
   }
 
-  const currentTransition = STATUS_TRANSITIONS[campaign.status.toLowerCase()]
-
   return (
     <>
-      <Header 
-        title={campaign.name} 
-        subtitle={`${campaign.project.client.name} • ${campaign.project.name}`} 
-      />
-      
-      <div className="p-6 space-y-6">
-        {/* Breadcrumb & Actions */}
-        <div className="flex items-center justify-between">
-          <PageBreadcrumb items={[
-            { label: 'Campaigns', href: '/dashboard/campaigns' },
-            { label: campaign.project.client.name, href: `/dashboard/clients/${campaign.project.client.id}` },
-            { label: campaign.project.name },
-            { label: campaign.name },
-          ]} />
-          
-          <div className="flex items-center gap-3">
-            {currentTransition && !isArchived && (
-              <Button
-                className={currentTransition.color}
-                onClick={handleStatusTransition}
-                disabled={transitioning}
-              >
-                {transitioning ? 'Processing...' : (
-                  <>
-                    {currentTransition.icon}
-                    <span className="ml-2">{currentTransition.action}</span>
-                  </>
-                )}
-              </Button>
+      <Header title={campaign.name} />
+
+      <div className="flex min-h-[calc(100vh-57px)]">
+        {/* Left sidebar */}
+        <CampaignSidebar
+          campaign={campaign}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          counts={{
+            deliverables: campaign.deliverables.length,
+            influencers: campaign.creators.filter((c) => c.status !== 'REMOVED').length,
+            attachments: campaign.attachments.length,
+          }}
+        />
+
+        {/* Main content */}
+        <main className="flex-1 min-w-0">
+          <div className="p-6 space-y-4">
+            <CampaignHeader
+              campaign={campaign}
+              onStatusChange={handleStatusChange}
+              onEditCampaign={() => setEditDrawerOpen(true)}
+              onArchive={handleArchive}
+            />
+
+            {activeTab === 'overview' && (
+              <OverviewTab campaign={campaign} onTabChange={setActiveTab} />
             )}
-            {!isArchived && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
-                    <MoreHorizontal className="mr-2 h-4 w-4" />
-                    Actions
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setEditDialogOpen(true)}>
-                    <Pencil className="mr-2 h-4 w-4" />
-                    Edit Campaign
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setManageApproversOpen(true)}>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    Manage approvers
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setDatesDialogOpen(true)}>
-                    <Calendar className="mr-2 h-4 w-4" />
-                    Set Dates
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push(`/dashboard/creators?campaignId=${campaignId}`)}>
-                    <Users className="mr-2 h-4 w-4" />
-                    Manage Creators
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem 
-                    className="text-destructive"
-                    onClick={handleArchiveCampaign}
-                    disabled={archiving}
-                  >
-                    {archiving ? 'Archiving...' : 'Archive Campaign'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+
+            {activeTab === 'influencers' && (
+              <InfluencersDeliverablesTab campaign={campaign} />
+            )}
+
+            {activeTab === 'approvals' && (
+              <ApprovalsTab campaign={campaign} />
+            )}
+
+            {activeTab === 'performance' && (
+              <PerformanceTab campaignId={campaign.id} />
+            )}
+
+            {activeTab === 'finance' && (
+              <FinanceTab
+                campaignId={campaign.id}
+                totalBudget={campaign.totalBudget}
+                budgetControlType={campaign.budgetControlType}
+                clientContractValue={campaign.clientContractValue}
+                currency={campaign.currency}
+                onCampaignRefresh={() => refetch()}
+              />
+            )}
+
+            {activeTab === 'notes' && (
+              <NotesTab activityLogs={campaign.activityLogs || []} />
+            )}
+
+            {activeTab === 'files' && (
+              <FilesTab
+                attachments={campaign.attachments}
+                onUpload={handleFileUpload}
+                onRemove={handleFileRemove}
+                onDownload={handleFileDownload}
+              />
             )}
           </div>
-        </div>
-
-        {/* Status Progress */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              {['DRAFT', 'ACTIVE', 'IN_REVIEW', 'APPROVED', 'COMPLETED'].map((status, index, arr) => {
-                const currentIndex = arr.indexOf(campaign.status.toUpperCase())
-                const isComplete = index < currentIndex
-                const isCurrent = index === currentIndex
-                
-                return (
-                  <div key={status} className="flex items-center">
-                    <div className="flex flex-col items-center">
-                      <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                          isComplete
-                            ? 'bg-green-500 text-white'
-                            : isCurrent
-                            ? 'bg-primary text-white'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {isComplete ? '✓' : index + 1}
-                      </div>
-                      <span className={`text-xs mt-1 ${isCurrent ? 'font-medium' : 'text-muted-foreground'}`}>
-                        {getCampaignStatusLabel(status)}
-                      </span>
-                    </div>
-                    {index < arr.length - 1 && (
-                      <div className={`h-0.5 w-12 mx-2 ${isComplete ? 'bg-green-500' : 'bg-muted'}`} />
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Tabs Container */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
-            <TabsTrigger value="creators">Creators</TabsTrigger>
-            <TabsTrigger value="finance">Finance</TabsTrigger>
-            <TabsTrigger value="performance">Performance</TabsTrigger>
-            <TabsTrigger value="attachments">Attachments</TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-6">
-            {/* Top row: Campaign Info and Approvers side by side */}
-            <div className="grid gap-6 lg:grid-cols-2">
-              {/* Campaign Info Card */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex flex-col sm:flex-row gap-6">
-                    <div className="h-20 w-20 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                      <Megaphone className="h-10 w-10 text-green-600" />
-                    </div>
-                    <div className="flex-1 grid gap-4 grid-cols-2">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Client</p>
-                        <Link
-                          href={`/dashboard/clients/${campaign.project.client.id}`}
-                          className="font-medium hover:underline flex items-center gap-1 mt-1"
-                        >
-                          <Building2 className="h-4 w-4" />
-                          {campaign.project.client.name}
-                        </Link>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Project</p>
-                        <Link
-                          href={`/dashboard/projects/${campaign.project.id}`}
-                          className="font-medium hover:underline flex items-center gap-1 mt-1"
-                        >
-                          <Briefcase className="h-4 w-4" />
-                          {campaign.project.name}
-                        </Link>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Start Date</p>
-                        <p className="font-medium mt-1 flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {formatDate(campaign.startDate)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">End Date</p>
-                        <p className="font-medium mt-1 flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {formatDate(campaign.endDate)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {campaign.description && (
-                    <div className="mt-6 pt-6 border-t">
-                      <p className="text-sm text-muted-foreground mb-1">Description</p>
-                      <p>{campaign.description}</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Campaign approvers */}
-              <Card>
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold flex items-center gap-2">
-                      <Users className="h-5 w-5" />
-                      Campaign Approvers
-                    </h2>
-                    {!isArchived && (
-                      <Button variant="outline" size="sm" onClick={() => setManageApproversOpen(true)}>
-                        <UserPlus className="mr-2 h-4 w-4" />
-                        Manage
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    All selected approvers must approve deliverables at campaign level before project or client review.
-                  </p>
-                  {campaignApprovers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No campaign approvers assigned yet.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {campaignApprovers.map((cu) => (
-                        <li
-                          key={cu.id}
-                          className="flex items-center gap-2 py-2 px-3 rounded-lg bg-muted/50"
-                        >
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs">
-                              {getInitials(cu.user.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-sm">{cu.user.name || cu.user.email}</span>
-                          {cu.user.email && cu.user.name && (
-                            <span className="text-xs text-muted-foreground">({cu.user.email})</span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Finance Overview (above brief) */}
-            {financeSummary && financeSummary.totalBudget != null && (
-              <FinanceOverviewCard summary={financeSummary} />
-            )}
-
-            {/* Campaign Brief Section */}
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Campaign Brief
-                  </h2>
-                  {!isArchived && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => briefEditing ? handleSaveBrief() : setBriefEditing(true)}
-                      disabled={saving}
-                    >
-                      {briefEditing ? (saving ? 'Saving...' : 'Save Brief') : 'Edit Brief'}
-                    </Button>
-                  )}
-                </div>
-
-                {briefEditing ? (
-                  <div className="space-y-3">
-                    <RichTextEditor
-                      content={editBrief}
-                      onChange={setEditBrief}
-                      placeholder="Write your campaign brief here... Include objectives, target audience, key messages, etc."
-                    />
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => {
-                        setEditBrief(campaign.brief || '')
-                        setBriefEditing(false)
-                      }}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : campaign.brief ? (
-                  <RichTextContent content={campaign.brief} />
-                ) : (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <FileText className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                    <p>No campaign brief yet</p>
-                    {!isArchived && (
-                      <Button variant="outline" size="sm" className="mt-3" onClick={() => setBriefEditing(true)}>
-                        Add Brief
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Deliverables Tab */}
-          <TabsContent value="deliverables" className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Deliverables</h2>
-              {!isArchived && (
-                <Button size="sm" asChild>
-                  <Link href={`/dashboard/deliverables/new?campaignId=${campaign.id}`}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Deliverable
-                  </Link>
-                </Button>
-              )}
-            </div>
-
-            {campaign.deliverables.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-8">
-                  <FileCheck className="h-10 w-10 text-muted-foreground mb-3" />
-                  <h3 className="font-medium">No deliverables yet</h3>
-                  <p className="text-sm text-muted-foreground text-center mt-1">
-                    Add deliverables to track content
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {campaign.deliverables.map((deliverable) => (
-                  <Link key={deliverable.id} href={`/dashboard/deliverables/${deliverable.id}`}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
-                            <FileCheck className="h-5 w-5 text-muted-foreground" />
-                            <div>
-                              <p className="font-medium">{deliverable.title}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {deliverable.deliverableType?.replace('_', ' ')} • {deliverable.versions.length} version{deliverable.versions.length !== 1 ? 's' : ''}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {deliverable.status === 'APPROVED' && !deliverable.trackingRecord && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  openTrackingForDeliverable(deliverable)
-                                }}
-                              >
-                                <Activity className="mr-2 h-4 w-4" />
-                                Start Tracking
-                              </Button>
-                            )}
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                getDeliverableDisplayStatus(deliverable)
-                              )}`}
-                            >
-                              {getDeliverableDisplayStatus(deliverable) === 'TRACKING'
-                                ? 'Tracking'
-                                : getDeliverableStatusLabel(deliverable.status)}
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </Link>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Creators Tab */}
-          <TabsContent value="creators" className="space-y-4">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Creators</h2>
-              {!isArchived && (
-                <Button size="sm" variant="outline" onClick={openAssignCreator}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Invite Creator
-                </Button>
-              )}
-            </div>
-
-            {campaign.creators.length === 0 ? (
-              <Card className="border-dashed">
-                <CardContent className="flex flex-col items-center justify-center py-8">
-                  <Users className="h-10 w-10 text-muted-foreground mb-3" />
-                  <h3 className="font-medium">No creators assigned</h3>
-                  <p className="text-sm text-muted-foreground text-center mt-1">
-                    Invite creators from your roster
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {campaign.creators.map((campaignCreator) => (
-                  <Card
-                    key={campaignCreator.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => openTimelineSheet(campaignCreator)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="h-10 w-10">
-                            <AvatarFallback>
-                              {getInitials(campaignCreator.creator.displayName)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <span className="font-medium">
-                              {campaignCreator.creator.displayName}
-                            </span>
-                            <div className="flex flex-wrap items-center gap-2 mt-1">
-                              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getCreatorStatusColor(campaignCreator.status)}`}>
-                                {campaignCreator.status}
-                              </span>
-                              {campaignCreator.proposalState && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${getProposalStateColor(campaignCreator.proposalState)}`}>
-                                  {getProposalStateLabel(campaignCreator.proposalState)}
-                                </span>
-                              )}
-                            </div>
-                            {campaignCreator.rateAmount && (
-                              <div className="text-xs text-muted-foreground mt-1">
-                                Rate: {formatRate(campaignCreator.rateAmount, campaignCreator.rateCurrency)}
-                                {campaignCreator.proposalState === 'countered' && (
-                                  <span className="ml-2 text-orange-600">(Counter pending)</span>
-                                )}
-                              </div>
-                            )}
-                            <div className="flex gap-2 text-xs text-muted-foreground mt-1">
-                              {campaignCreator.creator.instagramHandle && <span>@{campaignCreator.creator.instagramHandle}</span>}
-                              {campaignCreator.creator.youtubeHandle && <span>YT: {campaignCreator.creator.youtubeHandle}</span>}
-                              {campaignCreator.creator.tiktokHandle && <span>TT: @{campaignCreator.creator.tiktokHandle}</span>}
-                            </div>
-                          </div>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Campaign Performance Tab */}
-          <TabsContent value="performance" className="space-y-6">
-            <PerformanceTab campaignId={campaignId} />
-          </TabsContent>
-
-          {/* Finance Tab */}
-          <TabsContent value="finance" className="space-y-6">
-            <FinanceTab
-              campaignId={campaign.id}
-              totalBudget={campaign.totalBudget}
-              budgetControlType={campaign.budgetControlType}
-              clientContractValue={campaign.clientContractValue}
-              currency={campaign.currency}
-              onCampaignRefresh={fetchCampaign}
-            />
-          </TabsContent>
-
-          {/* Attachments Tab */}
-          <TabsContent value="attachments" className="space-y-4">
-            <Card>
-              <CardContent className="p-6">
-                {/* File Upload Area */}
-                {!isArchived && (
-                  <FileUpload
-                    onUpload={handleFileUpload}
-                    maxSize={50 * 1024 * 1024} // 50MB
-                    className="mb-4"
-                  />
-                )}
-
-                {/* Existing Attachments */}
-                {campaign.attachments.length === 0 ? (
-                  !isArchived ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <Paperclip className="h-10 w-10 mx-auto mb-3 opacity-50" />
-                      <p>No attachments yet</p>
-                    </div>
-                  ) : null
-                ) : (
-                  <div className="space-y-2">
-                    {campaign.attachments.map((attachment) => (
-                      <FileItem
-                        key={attachment.id}
-                        fileName={attachment.fileName}
-                        fileSize={attachment.fileSize}
-                        onDownload={() => handleDownloadFile(attachment.fileUrl, attachment.fileName)}
-                        onRemove={!isArchived ? () => handleRemoveAttachment(attachment.id) : undefined}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        </main>
       </div>
 
-      {/* Edit Campaign Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Campaign</DialogTitle>
-            <DialogDescription>
-              Update campaign name and description
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Campaign Name</Label>
-              <Input
-                id="name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                placeholder="Enter campaign name"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <textarea
-                id="description"
-                rows={3}
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Brief description of the campaign"
-                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveDetails} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage approvers Dialog */}
-      <Dialog open={manageApproversOpen} onOpenChange={setManageApproversOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage campaign approvers</DialogTitle>
-            <DialogDescription>
-              Select who must approve deliverables at campaign level. At least one approver is required; all selected must approve.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <ApproverPicker
-              users={agencyUsers.map((au) => ({
-                id: au.user.id,
-                name: au.user.name,
-                email: au.user.email ?? '',
-              }))}
-              value={approverPickerIds}
-              onChange={setApproverPickerIds}
-              multiple
-              minCount={1}
-              loading={loadingAgencyUsers}
-              emptyPlaceholder="No agency users found."
-              hint="Search by name or email, then select one or more approvers."
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setManageApproversOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveApprovers}
-              disabled={savingApprovers || approverPickerIds.length < 1}
-            >
-              {savingApprovers ? 'Saving...' : 'Save approvers'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Set Dates Dialog */}
-      <Dialog open={datesDialogOpen} onOpenChange={setDatesDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Set Campaign Dates</DialogTitle>
-            <DialogDescription>
-              Define the campaign timeline
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Start Date</Label>
-              <DatePicker
-                date={editStartDate}
-                onDateChange={setEditStartDate}
-                placeholder="Select start date"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>End Date</Label>
-              <DatePicker
-                date={editEndDate}
-                onDateChange={setEditEndDate}
-                placeholder="Select end date"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDatesDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSaveDates} disabled={saving}>
-              {saving ? 'Saving...' : 'Save Dates'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Start Tracking Dialog */}
-      <Dialog
-        open={trackingDialogOpen}
-        onOpenChange={(open) => {
-          if (!open && !confirmationDialogOpen) {
-            setTrackingUrls([''])
-            setUrlErrors([])
-            setValidatedUrls([])
-            setTrackingDeliverable(null)
-          }
-          setTrackingDialogOpen(open)
+      {/* Edit Campaign Drawer */}
+      <CreateCampaignDrawer
+        open={editDrawerOpen}
+        onOpenChange={setEditDrawerOpen}
+        preselectedProjectId={campaign.project.id}
+        onSuccess={() => {
+          setEditDrawerOpen(false)
+          refetch()
         }}
-      >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Start Tracking Deliverable</DialogTitle>
-            <DialogDescription>
-              {trackingDeliverable
-                ? `Add the published URL(s) for "${trackingDeliverable.title}". URLs cannot be changed after saving.`
-                : 'Add the published URL(s). URLs cannot be changed after saving.'}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            {trackingUrls.map((url, index) => (
-              <div key={`tracking-url-${index}`} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor={`tracking-url-${index}`}>
-                    URL {index + 1} {index === 0 && <span className="text-destructive">*</span>}
-                  </Label>
-                  {index > 0 && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeUrlField(index)}
-                      aria-label={`Remove URL ${index + 1}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Input
-                  id={`tracking-url-${index}`}
-                  value={url}
-                  onChange={(e) => updateUrl(index, e.target.value)}
-                  placeholder="https://example.com/post"
-                  error={Boolean(urlErrors[index])}
-                />
-                {urlErrors[index] && (
-                  <p className="text-sm text-destructive">{urlErrors[index]}</p>
-                )}
-              </div>
-            ))}
-            <Button
-              variant="outline"
-              onClick={addUrlField}
-              disabled={trackingUrls.length >= 10}
-              className="w-full"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Another URL
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setTrackingDialogOpen(false)
-                setTrackingUrls([''])
-                setUrlErrors([])
-                setValidatedUrls([])
-                setTrackingDeliverable(null)
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleValidateUrls}>Continue</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Tracking Dialog */}
-      <Dialog
-        open={confirmationDialogOpen}
-        onOpenChange={(open) => {
-          if (!open && savingTracking) return
-          setConfirmationDialogOpen(open)
-        }}
-      >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Confirm Tracking URLs</DialogTitle>
-            <DialogDescription>
-              Review the URLs below. They cannot be changed after saving.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
-              <AlertCircle className="h-5 w-5 mt-0.5" />
-              <p className="text-sm">
-                URLs are immutable once tracking starts. Please double-check for accuracy.
-              </p>
-            </div>
-            <Card className="border-amber-200 bg-amber-50/60">
-              <CardContent className="p-4 space-y-2">
-                {validatedUrls.map((url, index) => (
-                  <div key={`confirmed-url-${index}`} className="flex items-start gap-2 text-sm">
-                    <CheckCircle className="h-4 w-4 text-green-600 mt-0.5" />
-                    <span className="break-all">{url}</span>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setConfirmationDialogOpen(false)
-                setTrackingDialogOpen(true)
-              }}
-              disabled={savingTracking}
-            >
-              Go Back
-            </Button>
-            <Button onClick={handleStartTracking} disabled={savingTracking}>
-              {savingTracking ? 'Starting...' : 'Confirm & Start Tracking'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Invite Creator Dialog */}
-      <Dialog open={assignCreatorOpen} onOpenChange={setAssignCreatorOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Invite Creator to Campaign</DialogTitle>
-            <DialogDescription>Select a creator and send them a proposal via email</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Input
-              placeholder="Search creators..."
-              value={creatorSearch}
-              onChange={(e) => setCreatorSearch(e.target.value)}
-            />
-            <div className="max-h-48 overflow-y-auto space-y-2">
-              {loadingRoster ? (
-                <div className="py-4 text-center text-sm text-muted-foreground">Loading creators...</div>
-              ) : availableCreators.length === 0 ? (
-                <div className="py-4 text-center text-sm text-muted-foreground">
-                  {rosterCreators.length === 0 ? 'No creators in roster yet' : 'No matching creators available'}
-                </div>
-              ) : (
-                availableCreators.map((c) => (
-                  <div
-                    key={c.id}
-                    onClick={() => setSelectedCreatorId(c.id)}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedCreatorId === c.id
-                        ? 'border-primary bg-primary/5'
-                        : 'border-border hover:border-primary/50'
-                    }`}
-                  >
-                    <p className="font-medium text-sm">{c.displayName}</p>
-                    <div className="flex gap-2 text-xs text-muted-foreground mt-0.5">
-                      {c.instagramHandle && <span>@{c.instagramHandle}</span>}
-                      {c.youtubeHandle && <span>YT: {c.youtubeHandle}</span>}
-                      {c.email && <span>{c.email}</span>}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-            {selectedCreatorId && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Rate Amount</Label>
-                    <Input
-                      type="number"
-                      placeholder="0.00"
-                      value={assignRate}
-                      onChange={(e) => setAssignRate(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Currency</Label>
-                    <select
-                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                      value={assignCurrency}
-                      onChange={(e) => setAssignCurrency(e.target.value)}
-                    >
-                      <option value="INR">INR</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="GBP">GBP</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Notes</Label>
-                  <textarea
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    placeholder="Optional notes..."
-                    value={assignNotes}
-                    onChange={(e) => setAssignNotes(e.target.value)}
-                  />
-                </div>
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssignCreatorOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAssignCreator} disabled={!selectedCreatorId || assigning}>
-              {assigning ? 'Sending...' : 'Send Invite'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Proposal Timeline Sheet */}
-      <ProposalTimelineSheet
-        open={timelineSheetOpen}
-        onOpenChange={setTimelineSheetOpen}
-        campaignCreator={selectedCreatorForTimeline}
-        onAcceptCounter={handleAcceptCounter}
-        onDeclineCounter={handleDeclineCounter}
-        onReCounter={handleReCounter}
-        onReopen={handleReopen}
-        onRemove={handleRemoveCreator}
-        onAddNote={handleAddNote}
-        isArchived={isArchived}
       />
     </>
   )
