@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import {
   CheckCircle,
   XCircle,
@@ -24,10 +24,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { graphqlRequest, mutations } from '@/lib/graphql/client'
+import { useToast } from '@/hooks/use-toast'
 import type { Campaign, CampaignDeliverable } from '../types'
 
 interface ApprovalsTabProps {
   campaign: Campaign
+  onRefresh?: () => void
 }
 
 function getInitials(name: string | null | undefined) {
@@ -74,10 +77,16 @@ function DeliverableApprovalCard({
   deliverable,
   campaign,
   isPending,
+  onApprove,
+  onReject,
+  onRequestRevision,
 }: {
   deliverable: CampaignDeliverable
   campaign: Campaign
   isPending: boolean
+  onApprove?: (deliverableId: string) => void
+  onReject?: (deliverableId: string) => void
+  onRequestRevision?: (deliverableId: string) => void
 }) {
   const creator = campaign.creators.find((cc) => cc.creator.id === deliverable.creator?.id)
   const daysDue = daysUntilDue(deliverable.dueDate)
@@ -139,15 +148,15 @@ function DeliverableApprovalCard({
         {/* Actions for pending */}
         {isPending && (
           <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-            <Button size="sm" className="h-7 text-xs">
+            <Button size="sm" className="h-7 text-xs" onClick={() => onApprove?.(deliverable.id)}>
               <CheckCircle className="mr-1 h-3.5 w-3.5" />
               Approve
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs">
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onRequestRevision?.(deliverable.id)}>
               <Pencil className="mr-1 h-3.5 w-3.5" />
               Request Revision
             </Button>
-            <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive">
+            <Button variant="outline" size="sm" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => onReject?.(deliverable.id)}>
               <XCircle className="mr-1 h-3.5 w-3.5" />
               Reject
             </Button>
@@ -157,9 +166,9 @@ function DeliverableApprovalCard({
         {/* Approved info */}
         {!isPending && deliverable.approvals.length > 0 && (
           <div className="mt-2 text-xs text-muted-foreground">
-            Approved by {deliverable.approvals[0].reviewedBy?.name || 'System'}
+            Approved by {deliverable.approvals[0].decidedBy?.name || 'System'}
             {' · '}
-            {timeAgo(deliverable.approvals[0].createdAt)}
+            {timeAgo(deliverable.approvals[0].decidedAt)}
           </div>
         )}
       </CardContent>
@@ -167,9 +176,51 @@ function DeliverableApprovalCard({
   )
 }
 
-export function ApprovalsTab({ campaign }: ApprovalsTabProps) {
+export function ApprovalsTab({ campaign, onRefresh }: ApprovalsTabProps) {
+  const { toast } = useToast()
   const [sortBy, setSortBy] = useState<'deadline' | 'submitted' | 'influencer'>('deadline')
   const [approvedExpanded, setApprovedExpanded] = useState(false)
+
+  const handleApprove = useCallback(async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.approveDeliverable, { deliverableId })
+      toast({ title: 'Deliverable approved' })
+      onRefresh?.()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to approve', variant: 'destructive' })
+    }
+  }, [toast, onRefresh])
+
+  const handleReject = useCallback(async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.rejectDeliverable, { deliverableId })
+      toast({ title: 'Deliverable rejected' })
+      onRefresh?.()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to reject', variant: 'destructive' })
+    }
+  }, [toast, onRefresh])
+
+  const handleRequestRevision = useCallback(async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.requestDeliverableRevision, { deliverableId })
+      toast({ title: 'Revision requested' })
+      onRefresh?.()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to request revision', variant: 'destructive' })
+    }
+  }, [toast, onRefresh])
+
+  const handleRemindAll = useCallback(async () => {
+    try {
+      for (const d of campaign.deliverables.filter((d) => PENDING_STATUSES.includes(d.status))) {
+        await graphqlRequest(mutations.sendDeliverableReminder, { deliverableId: d.id }).catch(() => {})
+      }
+      toast({ title: 'Reminders sent' })
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to send reminders', variant: 'destructive' })
+    }
+  }, [campaign.deliverables, toast])
 
   const pending = useMemo(() => {
     let list = campaign.deliverables.filter((d) => PENDING_STATUSES.includes(d.status))
@@ -206,7 +257,7 @@ export function ApprovalsTab({ campaign }: ApprovalsTabProps) {
           <h3 className="text-sm font-semibold">Pending Approvals ({pending.length})</h3>
           <div className="flex items-center gap-2">
             {pending.length > 0 && (
-              <Button variant="outline" size="sm" className="text-xs">
+              <Button variant="outline" size="sm" className="text-xs" onClick={handleRemindAll}>
                 <Send className="mr-1 h-3 w-3" />
                 Remind All
               </Button>
@@ -235,7 +286,7 @@ export function ApprovalsTab({ campaign }: ApprovalsTabProps) {
         ) : (
           <div className="space-y-2">
             {pending.map((d) => (
-              <DeliverableApprovalCard key={d.id} deliverable={d} campaign={campaign} isPending />
+              <DeliverableApprovalCard key={d.id} deliverable={d} campaign={campaign} isPending onApprove={handleApprove} onReject={handleReject} onRequestRevision={handleRequestRevision} />
             ))}
           </div>
         )}

@@ -36,6 +36,7 @@ interface CampaignHeaderProps {
   onStatusChange: (status: string) => void
   onEditCampaign: () => void
   onArchive: () => void
+  onDuplicate?: () => void
 }
 
 const PLATFORM_ICONS: Record<string, string> = {
@@ -52,6 +53,7 @@ export function CampaignHeader({
   onStatusChange,
   onEditCampaign,
   onArchive,
+  onDuplicate,
 }: CampaignHeaderProps) {
   const [confirmDialog, setConfirmDialog] = useState<{ status: string } | null>(null)
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
@@ -122,7 +124,7 @@ export function CampaignHeader({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={onDuplicate}>
                   <Copy className="mr-2 h-4 w-4" />
                   Duplicate Campaign
                 </DropdownMenuItem>

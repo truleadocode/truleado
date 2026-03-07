@@ -172,6 +172,43 @@ export interface CreatorOption {
   tiktokHandle: string | null
 }
 
+export interface EditCampaignData {
+  id: string
+  name: string
+  projectId: string
+  clientId: string
+  clientName: string
+  campaignType: string
+  description: string | null
+  brief: string | null
+  startDate: string | null
+  endDate: string | null
+  totalBudget: number | null
+  budgetControlType: string | null
+  clientContractValue: number | null
+  currency: string | null
+  platforms: string[] | null
+  objective: string | null
+  hashtags: string[] | null
+  mentions: string[] | null
+  postingInstructions: string | null
+  exclusivityClause: boolean | null
+  exclusivityTerms: string | null
+  contentUsageRights: string | null
+  giftingEnabled: boolean | null
+  giftingDetails: string | null
+  targetReach: number | null
+  targetImpressions: number | null
+  targetEngagementRate: number | null
+  targetViews: number | null
+  targetConversions: number | null
+  targetSales: number | null
+  utmSource: string | null
+  utmMedium: string | null
+  utmCampaign: string | null
+  utmContent: string | null
+}
+
 export interface AgencyUser {
   id: string
   role: string

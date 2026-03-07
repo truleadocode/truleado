@@ -453,7 +453,7 @@ export const queries = {
           name
           logoUrl
           industry
-          currencyCode
+          currency
           accountManager {
             id
             name
@@ -469,10 +469,10 @@ export const queries = {
           totalBudget
           creators {
             id
-            fee
+            rateAmount
             creator {
               id
-              name
+              displayName
               profilePictureUrl
             }
           }
@@ -572,6 +572,7 @@ export const queries = {
         name
         description
         status
+        objective
         campaignType
         startDate
         endDate
@@ -605,7 +606,7 @@ export const queries = {
           }
           approvals {
             id
-            status
+            decision
           }
         }
         creators {
@@ -637,6 +638,24 @@ export const queries = {
     }
   `,
   
+  campaignNotes: `
+    query GetCampaignNotes($campaignId: ID!) {
+      campaignNotes(campaignId: $campaignId) {
+        id
+        message
+        noteType
+        isPinned
+        createdBy {
+          id
+          name
+          email
+        }
+        updatedAt
+        createdAt
+      }
+    }
+  `,
+
   agencyProjects: `
     query GetAgencyProjects($agencyId: ID!) {
       agencyProjects(agencyId: $agencyId) {
@@ -949,6 +968,26 @@ export const queries = {
         currency
         budgetControlType
         clientContractValue
+        objective
+        platforms
+        hashtags
+        mentions
+        postingInstructions
+        exclusivityClause
+        exclusivityTerms
+        contentUsageRights
+        giftingEnabled
+        giftingDetails
+        targetReach
+        targetImpressions
+        targetEngagementRate
+        targetViews
+        targetConversions
+        targetSales
+        utmSource
+        utmMedium
+        utmCampaign
+        utmContent
         createdAt
         project {
           id
@@ -972,7 +1011,7 @@ export const queries = {
           status
           trackingRecord {
             id
-            urls { id url platform }
+            urls { id url displayOrder }
             createdAt
           }
           deliverableType
@@ -988,13 +1027,12 @@ export const queries = {
           }
           approvals {
             id
-            status
-            reviewedBy { id name }
-            createdAt
+            decision
+            decidedBy { id name }
+            decidedAt
           }
           submissionEvents {
             id
-            eventType
             createdAt
           }
           createdAt
@@ -1629,7 +1667,7 @@ export const queries = {
         fileName
         fileUrl
         fileSize
-        fileType
+        mimeType
         uploadedBy { id name email }
         campaign { id name project { id name } }
         createdAt
@@ -1671,7 +1709,7 @@ export const queries = {
         fileName
         fileUrl
         fileSize
-        fileType
+        mimeType
         uploadedBy { id name email }
         campaign { id name project { id name } }
         createdAt
@@ -2069,8 +2107,28 @@ export const mutations = {
   `,
   
   createCampaign: `
-    mutation CreateCampaign($projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String, $approverUserIds: [ID!]!, $totalBudget: Money, $budgetControlType: BudgetControlType, $clientContractValue: Money) {
-      createCampaign(projectId: $projectId, name: $name, campaignType: $campaignType, description: $description, approverUserIds: $approverUserIds, totalBudget: $totalBudget, budgetControlType: $budgetControlType, clientContractValue: $clientContractValue) {
+    mutation CreateCampaign(
+      $projectId: ID!, $name: String!, $campaignType: CampaignType!, $description: String, $approverUserIds: [ID!]!,
+      $totalBudget: Money, $budgetControlType: BudgetControlType, $clientContractValue: Money,
+      $objective: String, $platforms: [String!], $hashtags: [String!], $mentions: [String!],
+      $postingInstructions: String, $exclusivityClause: Boolean, $exclusivityTerms: String,
+      $contentUsageRights: String, $giftingEnabled: Boolean, $giftingDetails: String,
+      $targetReach: Float, $targetImpressions: Float, $targetEngagementRate: Float,
+      $targetViews: Float, $targetConversions: Float, $targetSales: Float,
+      $utmSource: String, $utmMedium: String, $utmCampaign: String, $utmContent: String
+    ) {
+      createCampaign(
+        projectId: $projectId, name: $name, campaignType: $campaignType, description: $description,
+        approverUserIds: $approverUserIds, totalBudget: $totalBudget, budgetControlType: $budgetControlType,
+        clientContractValue: $clientContractValue, objective: $objective, platforms: $platforms,
+        hashtags: $hashtags, mentions: $mentions, postingInstructions: $postingInstructions,
+        exclusivityClause: $exclusivityClause, exclusivityTerms: $exclusivityTerms,
+        contentUsageRights: $contentUsageRights, giftingEnabled: $giftingEnabled,
+        giftingDetails: $giftingDetails, targetReach: $targetReach, targetImpressions: $targetImpressions,
+        targetEngagementRate: $targetEngagementRate, targetViews: $targetViews,
+        targetConversions: $targetConversions, targetSales: $targetSales,
+        utmSource: $utmSource, utmMedium: $utmMedium, utmCampaign: $utmCampaign, utmContent: $utmContent
+      ) {
         id
         name
         status
@@ -2082,6 +2140,37 @@ export const mutations = {
     }
   `,
   
+  updateCampaign: `
+    mutation UpdateCampaign(
+      $campaignId: ID!, $name: String, $description: String, $brief: String,
+      $startDate: DateTime, $endDate: DateTime, $totalBudget: Money, $budgetControlType: BudgetControlType,
+      $clientContractValue: Money, $objective: String, $platforms: [String!], $hashtags: [String!],
+      $mentions: [String!], $postingInstructions: String, $exclusivityClause: Boolean,
+      $exclusivityTerms: String, $contentUsageRights: String, $giftingEnabled: Boolean,
+      $giftingDetails: String, $targetReach: Float, $targetImpressions: Float,
+      $targetEngagementRate: Float, $targetViews: Float, $targetConversions: Float,
+      $targetSales: Float, $utmSource: String, $utmMedium: String, $utmCampaign: String, $utmContent: String
+    ) {
+      updateCampaign(
+        campaignId: $campaignId, name: $name, description: $description, brief: $brief,
+        startDate: $startDate, endDate: $endDate, totalBudget: $totalBudget,
+        budgetControlType: $budgetControlType, clientContractValue: $clientContractValue,
+        objective: $objective, platforms: $platforms, hashtags: $hashtags, mentions: $mentions,
+        postingInstructions: $postingInstructions, exclusivityClause: $exclusivityClause,
+        exclusivityTerms: $exclusivityTerms, contentUsageRights: $contentUsageRights,
+        giftingEnabled: $giftingEnabled, giftingDetails: $giftingDetails,
+        targetReach: $targetReach, targetImpressions: $targetImpressions,
+        targetEngagementRate: $targetEngagementRate, targetViews: $targetViews,
+        targetConversions: $targetConversions, targetSales: $targetSales,
+        utmSource: $utmSource, utmMedium: $utmMedium, utmCampaign: $utmCampaign, utmContent: $utmContent
+      ) {
+        id
+        name
+        status
+      }
+    }
+  `,
+
   activateCampaign: `
     mutation ActivateCampaign($campaignId: ID!) {
       activateCampaign(campaignId: $campaignId) {
@@ -2963,6 +3052,89 @@ export const mutations = {
   deleteContactReminder: `
     mutation DeleteContactReminder($id: ID!) {
       deleteContactReminder(id: $id)
+    }
+  `,
+
+  // Project mutations (new)
+  updateProject: `
+    mutation UpdateProject($id: ID!, $input: UpdateProjectInput!) {
+      updateProject(id: $id, input: $input) {
+        id name description isArchived createdAt
+        projectType status priority source currency
+        influencerBudget agencyFee agencyFeeType productionBudget boostingBudget contingency
+        platforms campaignObjectives influencerTiers plannedCampaigns
+        targetReach targetImpressions targetEngagementRate targetConversions
+        approvalTurnaround reportingCadence briefFileUrl contractFileUrl
+        exclusivityClause exclusivityTerms contentUsageRights
+        renewalDate externalFolderLink tags internalNotes
+      }
+    }
+  `,
+
+  // Campaign mutations (new)
+  duplicateCampaign: `
+    mutation DuplicateCampaign($campaignId: ID!) {
+      duplicateCampaign(campaignId: $campaignId) {
+        id name status campaignType createdAt
+      }
+    }
+  `,
+
+  bulkUpdateCampaignStatus: `
+    mutation BulkUpdateCampaignStatus($campaignIds: [ID!]!, $status: String!) {
+      bulkUpdateCampaignStatus(campaignIds: $campaignIds, status: $status)
+    }
+  `,
+
+  bulkArchiveCampaigns: `
+    mutation BulkArchiveCampaigns($campaignIds: [ID!]!) {
+      bulkArchiveCampaigns(campaignIds: $campaignIds)
+    }
+  `,
+
+  // Campaign notes mutations
+  createCampaignNote: `
+    mutation CreateCampaignNote($campaignId: ID!, $message: String!, $noteType: String) {
+      createCampaignNote(campaignId: $campaignId, message: $message, noteType: $noteType) {
+        id message noteType isPinned
+        createdBy { id name email }
+        updatedAt createdAt
+      }
+    }
+  `,
+
+  updateCampaignNote: `
+    mutation UpdateCampaignNote($id: ID!, $message: String, $noteType: String, $isPinned: Boolean) {
+      updateCampaignNote(id: $id, message: $message, noteType: $noteType, isPinned: $isPinned) {
+        id message noteType isPinned updatedAt
+      }
+    }
+  `,
+
+  deleteCampaignNote: `
+    mutation DeleteCampaignNote($id: ID!) {
+      deleteCampaignNote(id: $id)
+    }
+  `,
+
+  // Deliverable management mutations (new)
+  removeDeliverable: `
+    mutation RemoveDeliverable($deliverableId: ID!) {
+      removeDeliverable(deliverableId: $deliverableId)
+    }
+  `,
+
+  requestDeliverableRevision: `
+    mutation RequestDeliverableRevision($deliverableId: ID!, $reason: String) {
+      requestDeliverableRevision(deliverableId: $deliverableId, reason: $reason) {
+        id status
+      }
+    }
+  `,
+
+  sendDeliverableReminder: `
+    mutation SendDeliverableReminder($deliverableId: ID!) {
+      sendDeliverableReminder(deliverableId: $deliverableId)
     }
   `,
 };

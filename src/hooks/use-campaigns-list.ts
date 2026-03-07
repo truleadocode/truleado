@@ -13,7 +13,7 @@ export interface CampaignListDeliverable {
   dueDate: string | null
   creator: { id: string; displayName: string } | null
   trackingRecord: { id: string; urls: { url: string }[] } | null
-  approvals: { id: string; status: string }[]
+  approvals: { id: string; decision: string }[]
 }
 
 export interface CampaignListCreator {
@@ -38,6 +38,7 @@ export interface CampaignListItem {
   name: string
   description: string | null
   status: string
+  objective: string | null
   campaignType: string
   startDate: string | null
   endDate: string | null
@@ -265,7 +266,7 @@ export function useCampaignsList(agencyId: string | undefined) {
       if (filters.clientId && c.project.client.id !== filters.clientId) return false
       if (filters.projectId && c.project.id !== filters.projectId) return false
       if (filters.platforms.length > 0 && !c._platforms.some((p) => filters.platforms.includes(p))) return false
-      if (filters.objective.length > 0) return false // No objective field yet, skip
+      if (filters.objective.length > 0 && (!c.objective || !filters.objective.includes(c.objective))) return false
       if (filters.influencerTier.length > 0) {
         const hasTier = c.creators.some((cc) =>
           filters.influencerTier.includes(getInfluencerTier(cc.creator.followers))

@@ -3,7 +3,7 @@ export interface ProjectClient {
   name: string
   logoUrl: string | null
   industry: string | null
-  currencyCode: string | null
+  currency: string | null
   accountManager: {
     id: string
     name: string | null
@@ -27,10 +27,10 @@ export interface ProjectContact {
 
 export interface CampaignCreator {
   id: string
-  fee: number | null
+  rateAmount: number | null
   creator: {
     id: string
-    name: string | null
+    displayName: string | null
     profilePictureUrl: string | null
   }
 }
@@ -137,7 +137,7 @@ export interface ProjectFile {
   fileName: string
   fileUrl: string
   fileSize: number | null
-  fileType: string | null
+  mimeType: string | null
   uploadedBy: { id: string; name: string | null; email: string } | null
   campaign: {
     id: string

@@ -859,6 +859,194 @@ export async function updateDeliverableVersionCaption(
 }
 
 /**
+ * Remove a deliverable from a campaign.
+ */
+export async function removeDeliverable(
+  _: unknown,
+  { deliverableId }: { deliverableId: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: deliverable, error: fetchError } = await supabaseAdmin
+    .from('deliverables')
+    .select('*, campaigns!inner(id)')
+    .eq('id', deliverableId)
+    .single();
+
+  if (fetchError || !deliverable) {
+    throw notFoundError('Deliverable', deliverableId);
+  }
+
+  const campaigns = deliverable.campaigns as { id: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.CREATE_DELIVERABLE);
+
+  // Don't allow removing approved deliverables
+  if (deliverable.status === 'approved') {
+    throw invalidStateError('Cannot remove an approved deliverable');
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('deliverables')
+    .delete()
+    .eq('id', deliverableId);
+
+  if (deleteError) {
+    throw new Error('Failed to remove deliverable');
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'deliverable',
+      entityId: deliverableId,
+      action: 'deleted',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState: deliverable,
+    });
+  }
+
+  return true;
+}
+
+/**
+ * Request revision on a deliverable (sets status back to PENDING with reason logged).
+ */
+export async function requestDeliverableRevision(
+  _: unknown,
+  { deliverableId, reason }: { deliverableId: string; reason?: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: deliverable, error: fetchError } = await supabaseAdmin
+    .from('deliverables')
+    .select('*, campaigns!inner(id)')
+    .eq('id', deliverableId)
+    .single();
+
+  if (fetchError || !deliverable) {
+    throw notFoundError('Deliverable', deliverableId);
+  }
+
+  const campaigns = deliverable.campaigns as { id: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.APPROVE_INTERNAL);
+
+  const beforeState = { ...deliverable };
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from('deliverables')
+    .update({ status: 'pending' })
+    .eq('id', deliverableId)
+    .select()
+    .single();
+
+  if (updateError || !updated) {
+    throw new Error('Failed to request revision');
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'deliverable',
+      entityId: deliverableId,
+      action: 'revision_requested',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState,
+      afterState: updated,
+      metadata: { reason: reason || null },
+    });
+  }
+
+  return updated;
+}
+
+/**
+ * Send a reminder notification to the creator assigned to a deliverable.
+ */
+export async function sendDeliverableReminder(
+  _: unknown,
+  { deliverableId }: { deliverableId: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: deliverable, error: fetchError } = await supabaseAdmin
+    .from('deliverables')
+    .select('*, campaigns!inner(id, name)')
+    .eq('id', deliverableId)
+    .single();
+
+  if (fetchError || !deliverable) {
+    throw notFoundError('Deliverable', deliverableId);
+  }
+
+  const campaigns = deliverable.campaigns as { id: string; name: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.MANAGE_CAMPAIGN);
+
+  if (!deliverable.creator_id) {
+    throw validationError('No creator assigned to this deliverable');
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+
+  // Get creator info for notification
+  const { data: creator } = await supabaseAdmin
+    .from('creators')
+    .select('email, display_name')
+    .eq('id', deliverable.creator_id)
+    .single();
+
+  if (creator?.email && agencyId) {
+    try {
+      const creatorSubscriberId = deliverable.creator_id;
+      await ensureSubscriber({
+        subscriberId: creatorSubscriberId,
+        email: creator.email,
+        firstName: creator.display_name?.split(' ')[0] ?? null,
+        lastName: creator.display_name?.split(' ').slice(1).join(' ') || null,
+        tenantId: agencyId,
+      });
+      const baseUrl = getBaseUrl();
+      await triggerNotification({
+        workflowId: 'deliverable-reminder',
+        subscriberId: creatorSubscriberId,
+        email: creator.email,
+        agencyId,
+        data: {
+          deliverableId,
+          deliverableTitle: deliverable.title,
+          campaignName: campaigns.name,
+          baseUrl,
+          actionUrl: `/creator/deliverables/${deliverableId}`,
+        },
+      });
+    } catch (err) {
+      console.error('[Novu] Failed to send deliverable reminder:', err);
+      // Don't fail the mutation
+    }
+  }
+
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'deliverable',
+      entityId: deliverableId,
+      action: 'reminder_sent',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      metadata: { creatorId: deliverable.creator_id },
+    });
+  }
+
+  return true;
+}
+
+/**
  * Delete a deliverable version (and its storage file).
  * Allowed only when deliverable is PENDING or REJECTED, user has UPLOAD_VERSION,
  * and the version has no approvals.

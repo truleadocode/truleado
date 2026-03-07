@@ -256,6 +256,27 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # 4.4a3 Campaign Note
+  type CampaignNote {
+    id: ID!
+    campaign: Campaign!
+    message: String!
+    noteType: String
+    isPinned: Boolean!
+    createdBy: User!
+    updatedAt: DateTime!
+    createdAt: DateTime!
+  }
+
+  # 4.4a4 Campaign Promo Code
+  type CampaignPromoCode {
+    id: ID!
+    campaign: Campaign!
+    code: String!
+    creator: Creator
+    createdAt: DateTime!
+  }
+
   # 4.4b Contact Note
   type ContactNote {
     id: ID!
@@ -386,6 +407,32 @@ export const typeDefs = gql`
     activityLogs: [ActivityLog!]!
     createdBy: User
     createdAt: DateTime!
+    # Extended fields (campaign create drawer)
+    objective: String
+    platforms: [String!]
+    hashtags: [String!]
+    mentions: [String!]
+    postingInstructions: String
+    exclusivityClause: Boolean
+    exclusivityTerms: String
+    contentUsageRights: String
+    giftingEnabled: Boolean
+    giftingDetails: String
+    # KPI Targets
+    targetReach: Float
+    targetImpressions: Float
+    targetEngagementRate: Float
+    targetViews: Float
+    targetConversions: Float
+    targetSales: Float
+    # UTM Tracking
+    utmSource: String
+    utmMedium: String
+    utmCampaign: String
+    utmContent: String
+    # Related entities
+    promoCodes: [CampaignPromoCode!]!
+    notes: [CampaignNote!]!
   }
   
   type CampaignAttachment {
@@ -1077,6 +1124,47 @@ export const typeDefs = gql`
     contactLinks: JSON
   }
 
+  input UpdateProjectInput {
+    name: String
+    description: String
+    projectType: String
+    status: String
+    startDate: DateTime
+    endDate: DateTime
+    projectManagerId: ID
+    clientPocId: ID
+    currency: String
+    influencerBudget: Float
+    agencyFee: Float
+    agencyFeeType: String
+    productionBudget: Float
+    boostingBudget: Float
+    contingency: Float
+    platforms: [String!]
+    campaignObjectives: [String!]
+    influencerTiers: [String!]
+    plannedCampaigns: Int
+    targetReach: Float
+    targetImpressions: Float
+    targetEngagementRate: Float
+    targetConversions: Float
+    influencerApprovalContactId: ID
+    contentApprovalContactId: ID
+    approvalTurnaround: String
+    reportingCadence: String
+    briefFileUrl: String
+    contractFileUrl: String
+    exclusivityClause: Boolean
+    exclusivityTerms: String
+    contentUsageRights: String
+    renewalDate: DateTime
+    externalFolderLink: String
+    priority: String
+    source: String
+    tags: [String!]
+    internalNotes: String
+  }
+
   input AgencyEmailConfigInput {
     smtpHost: String!
     smtpPort: Int!
@@ -1197,6 +1285,9 @@ export const typeDefs = gql`
     projectNotes(projectId: ID!): [ProjectNote!]!
     projectActivityFeed(projectId: ID!, limit: Int): [ActivityLog!]!
     projectFiles(projectId: ID!): [CampaignAttachment!]!
+
+    # Campaign notes
+    campaignNotes(campaignId: ID!): [CampaignNote!]!
 
     # Contact detail queries
     contactNotes(contactId: ID!): [ContactNote!]!
@@ -1406,6 +1497,11 @@ export const typeDefs = gql`
     updateProjectNote(id: ID!, message: String, isPinned: Boolean): ProjectNote!
     deleteProjectNote(id: ID!): Boolean!
 
+    # Campaign notes CRUD
+    createCampaignNote(campaignId: ID!, message: String!, noteType: String): CampaignNote!
+    updateCampaignNote(id: ID!, message: String, noteType: String, isPinned: Boolean): CampaignNote!
+    deleteCampaignNote(id: ID!): Boolean!
+
     # Contact notes CRUD
     createContactNote(contactId: ID!, message: String!): ContactNote!
     updateContactNote(id: ID!, message: String, isPinned: Boolean): ContactNote!
@@ -1527,6 +1623,12 @@ export const typeDefs = gql`
     # Update project status
     updateProjectStatus(id: ID!, status: String!): Project!
 
+    # Archive a project (set is_archived = true)
+    archiveProject(id: ID!): Project!
+
+    # Update a project (all fields optional except id)
+    updateProject(id: ID!, input: UpdateProjectInput!): Project!
+
     # Bulk project operations
     bulkUpdateProjectStatus(projectIds: [ID!]!, status: String!): Boolean!
     bulkArchiveProjects(projectIds: [ID!]!): Boolean!
@@ -1544,13 +1646,74 @@ export const typeDefs = gql`
       totalBudget: Money
       budgetControlType: BudgetControlType
       clientContractValue: Money
+      # Extended fields
+      objective: String
+      platforms: [String!]
+      hashtags: [String!]
+      mentions: [String!]
+      postingInstructions: String
+      exclusivityClause: Boolean
+      exclusivityTerms: String
+      contentUsageRights: String
+      giftingEnabled: Boolean
+      giftingDetails: String
+      targetReach: Float
+      targetImpressions: Float
+      targetEngagementRate: Float
+      targetViews: Float
+      targetConversions: Float
+      targetSales: Float
+      utmSource: String
+      utmMedium: String
+      utmCampaign: String
+      utmContent: String
     ): Campaign!
+
+    # Duplicate an existing campaign (deep copy with DRAFT status)
+    duplicateCampaign(campaignId: ID!): Campaign!
+
+    # Bulk campaign operations
+    bulkUpdateCampaignStatus(campaignIds: [ID!]!, status: String!): Boolean!
+    bulkArchiveCampaigns(campaignIds: [ID!]!): Boolean!
     
     # Campaign updates (specific, not generic)
     updateCampaignDetails(
       campaignId: ID!
       name: String
       description: String
+    ): Campaign!
+
+    # Comprehensive campaign update
+    updateCampaign(
+      campaignId: ID!
+      name: String
+      description: String
+      brief: String
+      startDate: DateTime
+      endDate: DateTime
+      totalBudget: Money
+      budgetControlType: BudgetControlType
+      clientContractValue: Money
+      objective: String
+      platforms: [String!]
+      hashtags: [String!]
+      mentions: [String!]
+      postingInstructions: String
+      exclusivityClause: Boolean
+      exclusivityTerms: String
+      contentUsageRights: String
+      giftingEnabled: Boolean
+      giftingDetails: String
+      targetReach: Float
+      targetImpressions: Float
+      targetEngagementRate: Float
+      targetViews: Float
+      targetConversions: Float
+      targetSales: Float
+      utmSource: String
+      utmMedium: String
+      utmCampaign: String
+      utmContent: String
     ): Campaign!
     
     setCampaignDates(
@@ -1637,6 +1800,15 @@ export const typeDefs = gql`
     
     # Delete a deliverable version (and its file). Only when deliverable is PENDING/REJECTED and version has no approvals.
     deleteDeliverableVersion(deliverableVersionId: ID!): Boolean!
+
+    # Remove a deliverable from a campaign
+    removeDeliverable(deliverableId: ID!): Boolean!
+
+    # Request revision on a deliverable (sets status back to PENDING with reason logged)
+    requestDeliverableRevision(deliverableId: ID!, reason: String): Deliverable!
+
+    # Send a reminder notification to the creator assigned to a deliverable
+    sendDeliverableReminder(deliverableId: ID!): Boolean!
     
     # ---------------------------------------------
     # Creator Mutations

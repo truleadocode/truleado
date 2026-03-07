@@ -36,6 +36,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { Switch } from '@/components/ui/switch'
 
 export interface ContactFormData {
   firstName: string
@@ -45,6 +46,7 @@ export interface ContactFormData {
   department: string
   clientId: string
   isPrimaryContact: boolean
+  isClientApprover: boolean
   email: string
   phone: string
   linkedinUrl: string
@@ -64,6 +66,7 @@ export const emptyContactForm: ContactFormData = {
   department: '',
   clientId: '',
   isPrimaryContact: false,
+  isClientApprover: false,
   email: '',
   phone: '',
   linkedinUrl: '',
@@ -345,22 +348,37 @@ export function ContactFormDialog({
                   </div>
                 )}
 
-                {/* Is Primary Contact toggle */}
-                <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-                  <input
-                    id="cf-primary"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input accent-primary"
-                    checked={form.isPrimaryContact}
-                    onChange={(e) => onFormChange({ ...form, isPrimaryContact: e.target.checked })}
-                  />
-                  <div>
-                    <Label htmlFor="cf-primary" className="font-medium cursor-pointer">
-                      Primary Contact
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Main point of contact for this client
-                    </p>
+                {/* Primary Contact & Client Approver toggles */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+                    <div className="mr-3">
+                      <Label htmlFor="cf-primary" className="font-medium cursor-pointer text-sm">
+                        Primary Contact
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Main point of contact
+                      </p>
+                    </div>
+                    <Switch
+                      id="cf-primary"
+                      checked={form.isPrimaryContact}
+                      onCheckedChange={(checked) => onFormChange({ ...form, isPrimaryContact: checked })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+                    <div className="mr-3">
+                      <Label htmlFor="cf-approver" className="font-medium cursor-pointer text-sm">
+                        Client Approver
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Can approve deliverables
+                      </p>
+                    </div>
+                    <Switch
+                      id="cf-approver"
+                      checked={form.isClientApprover}
+                      onCheckedChange={(checked) => onFormChange({ ...form, isClientApprover: checked })}
+                    />
                   </div>
                 </div>
               </div>
@@ -374,21 +392,36 @@ export function ContactFormDialog({
             <>
               <div className="space-y-4">
                 <SectionHeader icon={Building2} label="Client Role" />
-                <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-3">
-                  <input
-                    id="cf-primary"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-input accent-primary"
-                    checked={form.isPrimaryContact}
-                    onChange={(e) => onFormChange({ ...form, isPrimaryContact: e.target.checked })}
-                  />
-                  <div>
-                    <Label htmlFor="cf-primary" className="font-medium cursor-pointer">
-                      Primary Contact
-                    </Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Main point of contact for this client
-                    </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+                    <div className="mr-3">
+                      <Label htmlFor="cf-primary-2" className="font-medium cursor-pointer text-sm">
+                        Primary Contact
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Main point of contact
+                      </p>
+                    </div>
+                    <Switch
+                      id="cf-primary-2"
+                      checked={form.isPrimaryContact}
+                      onCheckedChange={(checked) => onFormChange({ ...form, isPrimaryContact: checked })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">
+                    <div className="mr-3">
+                      <Label htmlFor="cf-approver-2" className="font-medium cursor-pointer text-sm">
+                        Client Approver
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Can approve deliverables
+                      </p>
+                    </div>
+                    <Switch
+                      id="cf-approver-2"
+                      checked={form.isClientApprover}
+                      onCheckedChange={(checked) => onFormChange({ ...form, isClientApprover: checked })}
+                    />
                   </div>
                 </div>
               </div>

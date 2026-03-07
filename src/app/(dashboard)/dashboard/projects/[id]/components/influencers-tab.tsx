@@ -45,11 +45,11 @@ export function InfluencersTab({ project }: InfluencersTabProps) {
       for (const cc of campaign.creators) {
         list.push({
           creatorId: cc.creator.id,
-          creatorName: cc.creator.name,
+          creatorName: cc.creator.displayName,
           profilePictureUrl: cc.creator.profilePictureUrl,
           campaignName: campaign.name,
           campaignId: campaign.id,
-          fee: cc.fee,
+          fee: cc.rateAmount,
         })
       }
     }

@@ -61,7 +61,7 @@ interface CampaignRow {
     dueDate: string | null
     creator: { id: string; displayName: string } | null
     trackingRecord: { id: string; urls: { url: string }[] } | null
-    approvals: { id: string; status: string }[]
+    approvals: { id: string; decision: string }[]
   }>
   creators: Array<{
     id: string
@@ -88,6 +88,8 @@ interface CampaignsTableViewProps {
   onToggleSelection: (id: string) => void
   onSelectAll: () => void
   isAllSelected: boolean
+  onDuplicate?: (campaignId: string) => void
+  onArchive?: (campaignId: string) => void
 }
 
 function getInitials(name: string | null | undefined) {
@@ -133,10 +135,14 @@ function CampaignTableRow({
   campaign,
   selected,
   onToggle,
+  onDuplicate,
+  onArchive,
 }: {
   campaign: CampaignRow
   selected: boolean
   onToggle: () => void
+  onDuplicate?: (campaignId: string) => void
+  onArchive?: (campaignId: string) => void
 }) {
   const router = useRouter()
 
@@ -278,11 +284,11 @@ function CampaignTableRow({
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onDuplicate?.(campaign.id)}>
               <Copy className="mr-2 h-3.5 w-3.5" />
               Duplicate
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">
+            <DropdownMenuItem className="text-destructive" onClick={() => onArchive?.(campaign.id)}>
               <Archive className="mr-2 h-3.5 w-3.5" />
               Archive
             </DropdownMenuItem>
@@ -320,6 +326,8 @@ export function CampaignsTableView({
   onToggleSelection,
   onSelectAll,
   isAllSelected,
+  onDuplicate,
+  onArchive,
 }: CampaignsTableViewProps) {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
@@ -368,6 +376,8 @@ export function CampaignsTableView({
                 onToggle={() => toggleGroup(key)}
                 selectedIds={selectedIds}
                 onToggleSelection={onToggleSelection}
+                onDuplicate={onDuplicate}
+                onArchive={onArchive}
               />
             ))
           ) : (
@@ -377,6 +387,8 @@ export function CampaignsTableView({
                 campaign={c}
                 selected={selectedIds.has(c.id)}
                 onToggle={() => onToggleSelection(c.id)}
+                onDuplicate={onDuplicate}
+                onArchive={onArchive}
               />
             ))
           )}
@@ -393,6 +405,8 @@ function GroupSection({
   onToggle,
   selectedIds,
   onToggleSelection,
+  onDuplicate,
+  onArchive,
 }: {
   groupKey: string
   campaigns: CampaignRow[]
@@ -400,6 +414,8 @@ function GroupSection({
   onToggle: () => void
   selectedIds: Set<string>
   onToggleSelection: (id: string) => void
+  onDuplicate?: (campaignId: string) => void
+  onArchive?: (campaignId: string) => void
 }) {
   return (
     <>
@@ -415,6 +431,8 @@ function GroupSection({
           campaign={c}
           selected={selectedIds.has(c.id)}
           onToggle={() => onToggleSelection(c.id)}
+          onDuplicate={onDuplicate}
+          onArchive={onArchive}
         />
       ))}
     </>

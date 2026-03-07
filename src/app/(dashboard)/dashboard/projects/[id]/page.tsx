@@ -83,15 +83,23 @@ export default function ProjectDetailPage() {
 
   // ----- Project actions -----
   const handleStatusChange = async (status: string) => {
-    // TODO: Add updateProject mutation when available
-    toast({ title: `Status changed to ${status}` })
-    await fetchProject()
+    try {
+      await graphqlRequest(mutations.updateProject, { id: projectId, input: { status } })
+      toast({ title: `Status changed to ${status}` })
+      await fetchProject()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to change status', variant: 'destructive' })
+    }
   }
 
   const handleArchiveProject = async () => {
-    // TODO: Add archiveProject mutation when available
-    toast({ title: 'Project archived' })
-    router.push('/dashboard/projects')
+    try {
+      await graphqlRequest(mutations.archiveProject, { id: projectId })
+      toast({ title: 'Project archived' })
+      router.push('/dashboard/projects')
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to archive project', variant: 'destructive' })
+    }
   }
 
   // ----- Notes actions -----

@@ -19,6 +19,8 @@ import { CampaignsCalendarView } from '@/components/campaigns/campaigns-calendar
 import { CampaignsPagination } from '@/components/campaigns/campaigns-pagination'
 import { exportCampaignsToCSV } from '@/components/campaigns/campaigns-csv-export'
 import { CreateCampaignDrawer } from '@/components/campaigns/create-campaign-drawer'
+import { graphqlRequest, mutations } from '@/lib/graphql/client'
+import { useToast } from '@/hooks/use-toast'
 
 // Map ViewToggle values to campaign view modes
 const VIEW_MAP = {
@@ -34,8 +36,29 @@ const REVERSE_VIEW_MAP = {
 
 export default function CampaignsPage() {
   const { currentAgency } = useAuth()
+  const { toast } = useToast()
   const list = useCampaignsList(currentAgency?.id)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  const handleDuplicate = async (campaignId: string) => {
+    try {
+      await graphqlRequest(mutations.duplicateCampaign, { campaignId })
+      toast({ title: 'Campaign duplicated' })
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to duplicate', variant: 'destructive' })
+    }
+  }
+
+  const handleArchiveSingle = async (campaignId: string) => {
+    try {
+      await graphqlRequest(mutations.archiveCampaign, { campaignId })
+      toast({ title: 'Campaign archived' })
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to archive', variant: 'destructive' })
+    }
+  }
 
   // Loading state
   if (list.loading) {
@@ -195,6 +218,8 @@ export default function CampaignsPage() {
                 onToggleSelection={list.toggleSelection}
                 onSelectAll={list.selectAll}
                 isAllSelected={list.isAllSelected}
+                onDuplicate={handleDuplicate}
+                onArchive={handleArchiveSingle}
               />
             )}
 
@@ -234,8 +259,17 @@ export default function CampaignsPage() {
             {
               label: 'Change Status',
               icon: RefreshCw,
-              onClick: () => {
-                // TODO: Open status change dialog
+              onClick: async () => {
+                const ids = Array.from(list.selectedIds)
+                if (ids.length === 0) return
+                try {
+                  await graphqlRequest(mutations.bulkUpdateCampaignStatus, { campaignIds: ids, status: 'ACTIVE' })
+                  toast({ title: `${ids.length} campaign(s) updated` })
+                  list.clearSelection()
+                  list.refetch()
+                } catch (err) {
+                  toast({ title: err instanceof Error ? err.message : 'Failed to update status', variant: 'destructive' })
+                }
               },
             },
             {
@@ -249,8 +283,17 @@ export default function CampaignsPage() {
             {
               label: 'Archive',
               icon: Archive,
-              onClick: () => {
-                // TODO: Archive selected campaigns
+              onClick: async () => {
+                const ids = Array.from(list.selectedIds)
+                if (ids.length === 0) return
+                try {
+                  await graphqlRequest(mutations.bulkArchiveCampaigns, { campaignIds: ids })
+                  toast({ title: `${ids.length} campaign(s) archived` })
+                  list.clearSelection()
+                  list.refetch()
+                } catch (err) {
+                  toast({ title: err instanceof Error ? err.message : 'Failed to archive', variant: 'destructive' })
+                }
               },
               variant: 'destructive',
             },

@@ -157,10 +157,17 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
       .limit(1);
 
     const authIdentity = authIdentities?.[0] as { user_id: string } | undefined;
-    if (authError || !authIdentity) {
+    if (authError) {
+      console.error(`Supabase error looking up auth_identity for Firebase UID ${decodedToken.uid}:`, authError);
+      return {
+        ...baseContext,
+        decodedToken,
+      };
+    }
+    if (!authIdentity) {
       // User has a valid Firebase account but not registered in our system
       // This can happen if they haven't completed onboarding
-      console.warn(`No auth_identity found for Firebase UID: ${decodedToken.uid}`);
+      console.warn(`No auth_identity found for Firebase UID: ${decodedToken.uid} (email: ${decodedToken.email ?? 'N/A'}, rows returned: ${authIdentities?.length ?? 0})`);
       return {
         ...baseContext,
         decodedToken,
@@ -178,7 +185,12 @@ export async function createContext(req: NextRequest): Promise<GraphQLContext> {
     ]);
 
     if (userResult.error || !userResult.data) {
-      console.error(`User not found for ID: ${userId}`);
+      console.error(`User not found for ID: ${userId}`, {
+        error: userResult.error,
+        status: userResult.status,
+        statusText: userResult.statusText,
+        count: userResult.count,
+      });
       return {
         ...baseContext,
         decodedToken,

@@ -45,11 +45,16 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { graphqlRequest, mutations } from '@/lib/graphql/client'
+import { useToast } from '@/hooks/use-toast'
+import { AddInfluencerDialog } from './add-influencer-dialog'
+import { AddDeliverableDialog } from './add-deliverable-dialog'
 import type { Campaign, CampaignCreator, CampaignDeliverable } from '../types'
 
 interface InfluencersDeliverablesTabProps {
   campaign: Campaign
   onStatusChange?: (deliverableId: string, status: string) => void
+  onRefresh?: () => void
 }
 
 function getInitials(name: string | null | undefined) {
@@ -118,10 +123,16 @@ function InfluencerCard({
   campaignCreator,
   deliverables,
   currency,
+  onSendReminder,
+  onRemoveDeliverable,
+  onAddDeliverable,
 }: {
   campaignCreator: CampaignCreator
   deliverables: CampaignDeliverable[]
   currency: string | null
+  onSendReminder?: (deliverableId: string) => void
+  onRemoveDeliverable?: (deliverableId: string) => void
+  onAddDeliverable?: () => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const c = campaignCreator.creator
@@ -157,6 +168,10 @@ function InfluencerCard({
             <Badge variant={campaignCreator.status === 'ACCEPTED' ? 'default' : 'secondary'} className="text-xs">
               {campaignCreator.status}
             </Badge>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onAddDeliverable}>
+              <Plus className="mr-1 h-3 w-3" />
+              Deliverable
+            </Button>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setExpanded(!expanded)}>
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -236,11 +251,11 @@ function InfluencerCard({
                                 <Eye className="mr-2 h-3.5 w-3.5" />
                                 View Content
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => onSendReminder?.(d.id)}>
                                 <Send className="mr-2 h-3.5 w-3.5" />
                                 Send Reminder
                               </DropdownMenuItem>
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem className="text-destructive" onClick={() => onRemoveDeliverable?.(d.id)}>
                                 <Trash2 className="mr-2 h-3.5 w-3.5" />
                                 Remove
                               </DropdownMenuItem>
@@ -272,9 +287,32 @@ function InfluencerCard({
 
 // ----- Main Tab -----
 
-export function InfluencersDeliverablesTab({ campaign }: InfluencersDeliverablesTabProps) {
+export function InfluencersDeliverablesTab({ campaign, onRefresh }: InfluencersDeliverablesTabProps) {
+  const { toast } = useToast()
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [addInfluencerOpen, setAddInfluencerOpen] = useState(false)
+  const [addDeliverableOpen, setAddDeliverableOpen] = useState(false)
+  const [selectedCreatorForDeliverable, setSelectedCreatorForDeliverable] = useState<{ id: string; name: string } | null>(null)
+
+  const handleSendReminder = async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.sendDeliverableReminder, { deliverableId })
+      toast({ title: 'Reminder sent' })
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to send reminder', variant: 'destructive' })
+    }
+  }
+
+  const handleRemoveDeliverable = async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.removeDeliverable, { deliverableId })
+      toast({ title: 'Deliverable removed' })
+      onRefresh?.()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to remove deliverable', variant: 'destructive' })
+    }
+  }
 
   // Group deliverables by creator
   const creatorDeliverableMap = useMemo(() => {
@@ -340,12 +378,18 @@ export function InfluencersDeliverablesTab({ campaign }: InfluencersDeliverables
             </SelectContent>
           </Select>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{feeSummary.count} influencers</span>
-          <span>·</span>
-          <span>{feeSummary.totalDeliverables} deliverables</span>
-          <span>·</span>
-          <span>{formatCurrency(feeSummary.totalFees, campaign.currency)} total fees</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{feeSummary.count} influencers</span>
+            <span>·</span>
+            <span>{feeSummary.totalDeliverables} deliverables</span>
+            <span>·</span>
+            <span>{formatCurrency(feeSummary.totalFees, campaign.currency)} total fees</span>
+          </div>
+          <Button size="sm" onClick={() => setAddInfluencerOpen(true)}>
+            <UserPlus className="mr-1 h-4 w-4" />
+            Add Influencer
+          </Button>
         </div>
       </div>
 
@@ -358,6 +402,10 @@ export function InfluencersDeliverablesTab({ campaign }: InfluencersDeliverables
             <p className="text-muted-foreground text-center mt-2 max-w-sm">
               Add influencers to this campaign to assign deliverables and track content.
             </p>
+            <Button className="mt-4" onClick={() => setAddInfluencerOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" />
+              Add Influencer
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -368,6 +416,12 @@ export function InfluencersDeliverablesTab({ campaign }: InfluencersDeliverables
               campaignCreator={cc}
               deliverables={creatorDeliverableMap.get(cc.creator.id) || []}
               currency={campaign.currency}
+              onSendReminder={handleSendReminder}
+              onRemoveDeliverable={handleRemoveDeliverable}
+              onAddDeliverable={() => {
+                setSelectedCreatorForDeliverable({ id: cc.creator.id, name: cc.creator.displayName })
+                setAddDeliverableOpen(true)
+              }}
             />
           ))}
         </div>
@@ -434,6 +488,30 @@ export function InfluencersDeliverablesTab({ campaign }: InfluencersDeliverables
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Dialogs */}
+      <AddInfluencerDialog
+        open={addInfluencerOpen}
+        onOpenChange={setAddInfluencerOpen}
+        campaignId={campaign.id}
+        existingCreatorIds={campaign.creators.filter((c) => c.status !== 'REMOVED').map((c) => c.creator.id)}
+        currency={campaign.currency}
+        onSuccess={() => onRefresh?.()}
+      />
+
+      {selectedCreatorForDeliverable && (
+        <AddDeliverableDialog
+          open={addDeliverableOpen}
+          onOpenChange={(isOpen) => {
+            setAddDeliverableOpen(isOpen)
+            if (!isOpen) setSelectedCreatorForDeliverable(null)
+          }}
+          campaignId={campaign.id}
+          creatorId={selectedCreatorForDeliverable.id}
+          creatorName={selectedCreatorForDeliverable.name}
+          onSuccess={() => onRefresh?.()}
+        />
       )}
     </div>
   )

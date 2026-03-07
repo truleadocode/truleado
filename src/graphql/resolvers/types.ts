@@ -630,6 +630,84 @@ export const typeResolvers = {
         .single();
       return data;
     },
+    // Extended field mappings
+    postingInstructions: (parent: { posting_instructions: string | null }) => parent.posting_instructions,
+    exclusivityClause: (parent: { exclusivity_clause: boolean | null }) => parent.exclusivity_clause,
+    exclusivityTerms: (parent: { exclusivity_terms: string | null }) => parent.exclusivity_terms,
+    contentUsageRights: (parent: { content_usage_rights: string | null }) => parent.content_usage_rights,
+    giftingEnabled: (parent: { gifting_enabled: boolean | null }) => parent.gifting_enabled,
+    giftingDetails: (parent: { gifting_details: string | null }) => parent.gifting_details,
+    targetReach: (parent: { target_reach: number | null }) => parent.target_reach,
+    targetImpressions: (parent: { target_impressions: number | null }) => parent.target_impressions,
+    targetEngagementRate: (parent: { target_engagement_rate: number | null }) => parent.target_engagement_rate,
+    targetViews: (parent: { target_views: number | null }) => parent.target_views,
+    targetConversions: (parent: { target_conversions: number | null }) => parent.target_conversions,
+    targetSales: (parent: { target_sales: number | null }) => parent.target_sales,
+    utmSource: (parent: { utm_source: string | null }) => parent.utm_source,
+    utmMedium: (parent: { utm_medium: string | null }) => parent.utm_medium,
+    utmCampaign: (parent: { utm_campaign: string | null }) => parent.utm_campaign,
+    utmContent: (parent: { utm_content: string | null }) => parent.utm_content,
+    promoCodes: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_promo_codes')
+        .select('*')
+        .eq('campaign_id', parent.id)
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+    notes: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_notes')
+        .select('*')
+        .eq('campaign_id', parent.id)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+  },
+
+  CampaignNote: {
+    noteType: (parent: { note_type: string | null }) => parent.note_type,
+    isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    campaign: async (parent: { campaign_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+  },
+
+  CampaignPromoCode: {
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    campaign: async (parent: { campaign_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+    creator: async (parent: { creator_id: string | null }) => {
+      if (!parent.creator_id) return null;
+      const { data } = await supabaseAdmin
+        .from('creators')
+        .select('*')
+        .eq('id', parent.creator_id)
+        .single();
+      return data;
+    },
   },
 
   CampaignAttachment: {

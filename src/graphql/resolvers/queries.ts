@@ -1486,6 +1486,24 @@ export const queryResolvers = {
     return data || [];
   },
 
+  campaignNotes: async (
+    _: unknown,
+    { campaignId }: { campaignId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireCampaignAccess(ctx, campaignId);
+
+    const { data, error } = await supabaseAdmin
+      .from('campaign_notes')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch campaign notes');
+    return data || [];
+  },
+
   projectActivityFeed: async (
     _: unknown,
     { projectId, limit }: { projectId: string; limit?: number },

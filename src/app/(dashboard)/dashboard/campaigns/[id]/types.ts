@@ -11,6 +11,26 @@ export interface Campaign {
   currency: string | null
   budgetControlType: string | null
   clientContractValue: number | null
+  objective: string | null
+  platforms: string[] | null
+  hashtags: string[] | null
+  mentions: string[] | null
+  postingInstructions: string | null
+  exclusivityClause: boolean | null
+  exclusivityTerms: string | null
+  contentUsageRights: string | null
+  giftingEnabled: boolean | null
+  giftingDetails: string | null
+  targetReach: number | null
+  targetImpressions: number | null
+  targetEngagementRate: number | null
+  targetViews: number | null
+  targetConversions: number | null
+  targetSales: number | null
+  utmSource: string | null
+  utmMedium: string | null
+  utmCampaign: string | null
+  utmContent: string | null
   createdAt: string
   project: {
     id: string
@@ -44,7 +64,7 @@ export interface CampaignDeliverable {
   creator: { id: string; displayName: string } | null
   trackingRecord: {
     id: string
-    urls: { id: string; url: string; platform: string }[]
+    urls: { id: string; url: string; displayOrder: number }[]
     createdAt: string
   } | null
   versions: {
@@ -57,13 +77,12 @@ export interface CampaignDeliverable {
   }[]
   approvals: {
     id: string
-    status: string
-    reviewedBy: { id: string; name: string | null } | null
-    createdAt: string
+    decision: string
+    decidedBy: { id: string; name: string | null } | null
+    decidedAt: string
   }[]
   submissionEvents: {
     id: string
-    eventType: string
     createdAt: string
   }[]
   createdAt: string

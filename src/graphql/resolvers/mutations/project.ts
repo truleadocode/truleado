@@ -216,6 +216,141 @@ export async function bulkArchiveProjects(
   return true;
 }
 
+/**
+ * Archive a project (set is_archived = true).
+ */
+export async function archiveProject(
+  _: unknown,
+  { id }: { id: string },
+  ctx: GraphQLContext
+) {
+  const clientId = await getProjectClientId(id);
+  if (!clientId) throw notFoundError('Project', id);
+  await requireClientAccess(ctx, clientId, true);
+
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .update({ is_archived: true })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error('Failed to archive project');
+  }
+
+  const agencyId = await getAgencyIdForProject(id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'project',
+      entityId: id,
+      action: 'archived',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+    });
+  }
+
+  return data;
+}
+
+/**
+ * Update a project (partial update with any subset of fields).
+ */
+export async function updateProject(
+  _: unknown,
+  { id, input }: { id: string; input: Record<string, unknown> },
+  ctx: GraphQLContext
+) {
+  const clientId = await getProjectClientId(id);
+  if (!clientId) throw notFoundError('Project', id);
+  await requireClientAccess(ctx, clientId, true);
+
+  // Map camelCase input to snake_case DB columns
+  const fieldMap: Record<string, string> = {
+    name: 'name',
+    description: 'description',
+    projectType: 'project_type',
+    status: 'status',
+    startDate: 'start_date',
+    endDate: 'end_date',
+    projectManagerId: 'project_manager_id',
+    clientPocId: 'client_poc_id',
+    currency: 'currency',
+    influencerBudget: 'influencer_budget',
+    agencyFee: 'agency_fee',
+    agencyFeeType: 'agency_fee_type',
+    productionBudget: 'production_budget',
+    boostingBudget: 'boosting_budget',
+    contingency: 'contingency',
+    platforms: 'platforms',
+    campaignObjectives: 'campaign_objectives',
+    influencerTiers: 'influencer_tiers',
+    plannedCampaigns: 'planned_campaigns',
+    targetReach: 'target_reach',
+    targetImpressions: 'target_impressions',
+    targetEngagementRate: 'target_engagement_rate',
+    targetConversions: 'target_conversions',
+    influencerApprovalContactId: 'influencer_approval_contact_id',
+    contentApprovalContactId: 'content_approval_contact_id',
+    approvalTurnaround: 'approval_turnaround',
+    reportingCadence: 'reporting_cadence',
+    briefFileUrl: 'brief_file_url',
+    contractFileUrl: 'contract_file_url',
+    exclusivityClause: 'exclusivity_clause',
+    exclusivityTerms: 'exclusivity_terms',
+    contentUsageRights: 'content_usage_rights',
+    renewalDate: 'renewal_date',
+    externalFolderLink: 'external_folder_link',
+    priority: 'priority',
+    source: 'source',
+    tags: 'tags',
+    internalNotes: 'internal_notes',
+  };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {};
+  for (const [camelKey, snakeKey] of Object.entries(fieldMap)) {
+    if (input[camelKey] !== undefined) {
+      updates[snakeKey] = input[camelKey];
+    }
+  }
+
+  if (Object.keys(updates).length === 0) {
+    const { data } = await supabaseAdmin.from('projects').select().eq('id', id).single();
+    return data;
+  }
+
+  const { data: beforeState } = await supabaseAdmin.from('projects').select().eq('id', id).single();
+
+  const { data, error } = await supabaseAdmin
+    .from('projects')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error('Failed to update project');
+  }
+
+  const agencyId = await getAgencyIdForProject(id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'project',
+      entityId: id,
+      action: 'updated',
+      actorId: ctx.user!.id,
+      actorType: 'user',
+      beforeState,
+      afterState: data,
+    });
+  }
+
+  return data;
+}
+
 async function getProjectClientId(projectId: string): Promise<string | null> {
   const { data, error } = await supabaseAdmin
     .from('projects')

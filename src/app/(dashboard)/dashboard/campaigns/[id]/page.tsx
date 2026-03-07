@@ -83,6 +83,16 @@ export default function CampaignDetailPage() {
     }
   }, [campaignId, toast, router])
 
+  const handleDuplicate = useCallback(async () => {
+    try {
+      const result = await graphqlRequest<{ duplicateCampaign: { id: string } }>(mutations.duplicateCampaign, { campaignId })
+      toast({ title: 'Campaign duplicated' })
+      router.push(`/dashboard/campaigns/${result.duplicateCampaign.id}`)
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to duplicate', variant: 'destructive' })
+    }
+  }, [campaignId, toast, router])
+
   // ----- File operations -----
   const handleFileUpload = useCallback(async (file: File) => {
     const token = await getIdToken()
@@ -226,6 +236,7 @@ export default function CampaignDetailPage() {
               onStatusChange={handleStatusChange}
               onEditCampaign={() => setEditDrawerOpen(true)}
               onArchive={handleArchive}
+              onDuplicate={handleDuplicate}
             />
 
             {activeTab === 'overview' && (
@@ -233,11 +244,11 @@ export default function CampaignDetailPage() {
             )}
 
             {activeTab === 'influencers' && (
-              <InfluencersDeliverablesTab campaign={campaign} />
+              <InfluencersDeliverablesTab campaign={campaign} onRefresh={() => refetch()} />
             )}
 
             {activeTab === 'approvals' && (
-              <ApprovalsTab campaign={campaign} />
+              <ApprovalsTab campaign={campaign} onRefresh={() => refetch()} />
             )}
 
             {activeTab === 'performance' && (
@@ -256,7 +267,7 @@ export default function CampaignDetailPage() {
             )}
 
             {activeTab === 'notes' && (
-              <NotesTab activityLogs={campaign.activityLogs || []} />
+              <NotesTab campaignId={campaign.id} />
             )}
 
             {activeTab === 'files' && (
@@ -276,6 +287,42 @@ export default function CampaignDetailPage() {
         open={editDrawerOpen}
         onOpenChange={setEditDrawerOpen}
         preselectedProjectId={campaign.project.id}
+        editCampaign={{
+          id: campaign.id,
+          name: campaign.name,
+          projectId: campaign.project.id,
+          clientId: campaign.project.client.id,
+          clientName: campaign.project.client.name,
+          campaignType: campaign.campaignType,
+          description: campaign.description,
+          brief: campaign.brief,
+          startDate: campaign.startDate,
+          endDate: campaign.endDate,
+          totalBudget: campaign.totalBudget,
+          budgetControlType: campaign.budgetControlType,
+          clientContractValue: campaign.clientContractValue,
+          currency: campaign.currency,
+          platforms: campaign.platforms,
+          objective: campaign.objective,
+          hashtags: campaign.hashtags,
+          mentions: campaign.mentions,
+          postingInstructions: campaign.postingInstructions,
+          exclusivityClause: campaign.exclusivityClause,
+          exclusivityTerms: campaign.exclusivityTerms,
+          contentUsageRights: campaign.contentUsageRights,
+          giftingEnabled: campaign.giftingEnabled,
+          giftingDetails: campaign.giftingDetails,
+          targetReach: campaign.targetReach,
+          targetImpressions: campaign.targetImpressions,
+          targetEngagementRate: campaign.targetEngagementRate,
+          targetViews: campaign.targetViews,
+          targetConversions: campaign.targetConversions,
+          targetSales: campaign.targetSales,
+          utmSource: campaign.utmSource,
+          utmMedium: campaign.utmMedium,
+          utmCampaign: campaign.utmCampaign,
+          utmContent: campaign.utmContent,
+        }}
         onSuccess={() => {
           setEditDrawerOpen(false)
           refetch()
