@@ -397,6 +397,48 @@ export const queryResolvers = {
   },
 
   /**
+   * Get all projects for an agency (single query, no N+1).
+   */
+  agencyProjects: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    const user = requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data, error } = await supabaseAdmin
+      .from('projects')
+      .select('*, clients!inner(*), campaigns(id, name, status, total_budget, start_date, end_date)')
+      .eq('clients.agency_id', agencyId)
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw new Error('Failed to fetch projects');
+    }
+
+    let projects = data || [];
+
+    // Operators only see projects they are assigned to
+    const role = getAgencyRole(user, agencyId);
+    if (role === AgencyRole.OPERATOR && projects.length > 0) {
+      const { data: assigned } = await supabaseAdmin
+        .from('project_users')
+        .select('project_id')
+        .eq('user_id', user.id);
+      const projectIds = new Set(
+        (assigned ?? []).map((r: { project_id: string }) => r.project_id)
+      );
+      projects = projects.filter((p: { id: string }) =>
+        projectIds.has(p.id)
+      );
+    }
+
+    return projects;
+  },
+
+  /**
    * Get a deliverable by ID (agency users via campaign access, creators via assignment, client users via client approver access)
    */
   deliverable: async (_: unknown, { id }: { id: string }, ctx: GraphQLContext) => {
@@ -1419,6 +1461,98 @@ export const queryResolvers = {
       .order('created_at', { ascending: false });
 
     if (error) throw new Error('Failed to fetch client files');
+    return data || [];
+  },
+
+  // -----------------------------------------------
+  // Project Detail Queries
+  // -----------------------------------------------
+
+  projectNotes: async (
+    _: unknown,
+    { projectId }: { projectId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireProjectAccess(ctx, projectId);
+
+    const { data, error } = await supabaseAdmin
+      .from('project_notes')
+      .select('*')
+      .eq('project_id', projectId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch project notes');
+    return data || [];
+  },
+
+  campaignNotes: async (
+    _: unknown,
+    { campaignId }: { campaignId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireCampaignAccess(ctx, campaignId);
+
+    const { data, error } = await supabaseAdmin
+      .from('campaign_notes')
+      .select('*')
+      .eq('campaign_id', campaignId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch campaign notes');
+    return data || [];
+  },
+
+  projectActivityFeed: async (
+    _: unknown,
+    { projectId, limit }: { projectId: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    await requireProjectAccess(ctx, projectId);
+
+    // Get campaign IDs for this project
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id')
+      .eq('project_id', projectId);
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+
+    // Fetch activity logs for project and its campaigns
+    const entityIds = [projectId, ...campaignIds];
+    const { data, error } = await supabaseAdmin
+      .from('activity_logs')
+      .select('*')
+      .in('entity_id', entityIds)
+      .order('created_at', { ascending: false })
+      .limit(limit || 10);
+
+    if (error) throw new Error('Failed to fetch project activity feed');
+    return data || [];
+  },
+
+  projectFiles: async (
+    _: unknown,
+    { projectId }: { projectId: string },
+    ctx: GraphQLContext
+  ) => {
+    await requireProjectAccess(ctx, projectId);
+
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id')
+      .eq('project_id', projectId);
+    const campaignIds = (campaigns || []).map((c: { id: string }) => c.id);
+
+    if (campaignIds.length === 0) return [];
+
+    const { data, error } = await supabaseAdmin
+      .from('campaign_attachments')
+      .select('*')
+      .in('campaign_id', campaignIds)
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch project files');
     return data || [];
   },
 

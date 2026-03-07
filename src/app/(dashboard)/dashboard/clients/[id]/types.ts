@@ -103,7 +103,7 @@ export interface ClientFile {
   fileName: string
   fileUrl: string
   fileSize: number | null
-  fileType: string | null
+  mimeType: string | null
   uploadedBy: { id: string; name: string | null; email: string } | null
   campaign: {
     id: string

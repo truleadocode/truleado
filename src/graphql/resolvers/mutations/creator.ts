@@ -96,7 +96,8 @@ export async function addCreator(
     .single();
   
   if (error || !creator) {
-    throw new Error('Failed to add creator');
+    console.error('Failed to add creator:', error);
+    throw new Error(error?.message || 'Failed to add creator');
   }
 
   if (rates) {

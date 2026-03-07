@@ -233,6 +233,28 @@ export const typeResolvers = {
     },
   },
 
+  ProjectNote: {
+    isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    project: async (parent: { project_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('projects')
+        .select('*')
+        .eq('id', parent.project_id)
+        .single();
+      return data;
+    },
+  },
+
   ContactNote: {
     isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
     createdAt: (parent: { created_at: string }) => parent.created_at,
@@ -344,6 +366,94 @@ export const typeResolvers = {
     endDate: (parent: { end_date: string | null }) => parent.end_date,
     isArchived: (parent: { is_archived: boolean }) => parent.is_archived,
     createdAt: (parent: { created_at: string }) => parent.created_at,
+    // Extended field mappings
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    projectType: (parent: any) => parent.project_type,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agencyFeeType: (parent: any) => parent.agency_fee_type,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    influencerBudget: (parent: any) => parent.influencer_budget,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    agencyFee: (parent: any) => parent.agency_fee,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    productionBudget: (parent: any) => parent.production_budget,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    boostingBudget: (parent: any) => parent.boosting_budget,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    campaignObjectives: (parent: any) => parent.campaign_objectives,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    influencerTiers: (parent: any) => parent.influencer_tiers,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    plannedCampaigns: (parent: any) => parent.planned_campaigns,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    targetReach: (parent: any) => parent.target_reach,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    targetImpressions: (parent: any) => parent.target_impressions,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    targetEngagementRate: (parent: any) => parent.target_engagement_rate,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    targetConversions: (parent: any) => parent.target_conversions,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    approvalTurnaround: (parent: any) => parent.approval_turnaround,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    reportingCadence: (parent: any) => parent.reporting_cadence,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    briefFileUrl: (parent: any) => parent.brief_file_url,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    contractFileUrl: (parent: any) => parent.contract_file_url,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    exclusivityClause: (parent: any) => parent.exclusivity_clause,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    exclusivityTerms: (parent: any) => parent.exclusivity_terms,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    contentUsageRights: (parent: any) => parent.content_usage_rights,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    renewalDate: (parent: any) => parent.renewal_date,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    externalFolderLink: (parent: any) => parent.external_folder_link,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    internalNotes: (parent: any) => parent.internal_notes,
+    // Relationship resolvers for extended fields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    projectManager: async (parent: any) => {
+      if (!parent.project_manager_id) return null;
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.project_manager_id)
+        .single();
+      return data;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    clientPoc: async (parent: any) => {
+      if (!parent.client_poc_id) return null;
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.client_poc_id)
+        .single();
+      return data;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    influencerApprovalContact: async (parent: any) => {
+      if (!parent.influencer_approval_contact_id) return null;
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.influencer_approval_contact_id)
+        .single();
+      return data;
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    contentApprovalContact: async (parent: any) => {
+      if (!parent.content_approval_contact_id) return null;
+      const { data } = await supabaseAdmin
+        .from('contacts')
+        .select('*')
+        .eq('id', parent.content_approval_contact_id)
+        .single();
+      return data;
+    },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     client: async (parent: UserRow & { clients?: any }) => {
       if (parent.clients) return parent.clients;
@@ -517,6 +627,84 @@ export const typeResolvers = {
         .from('users')
         .select('*')
         .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    // Extended field mappings
+    postingInstructions: (parent: { posting_instructions: string | null }) => parent.posting_instructions,
+    exclusivityClause: (parent: { exclusivity_clause: boolean | null }) => parent.exclusivity_clause,
+    exclusivityTerms: (parent: { exclusivity_terms: string | null }) => parent.exclusivity_terms,
+    contentUsageRights: (parent: { content_usage_rights: string | null }) => parent.content_usage_rights,
+    giftingEnabled: (parent: { gifting_enabled: boolean | null }) => parent.gifting_enabled,
+    giftingDetails: (parent: { gifting_details: string | null }) => parent.gifting_details,
+    targetReach: (parent: { target_reach: number | null }) => parent.target_reach,
+    targetImpressions: (parent: { target_impressions: number | null }) => parent.target_impressions,
+    targetEngagementRate: (parent: { target_engagement_rate: number | null }) => parent.target_engagement_rate,
+    targetViews: (parent: { target_views: number | null }) => parent.target_views,
+    targetConversions: (parent: { target_conversions: number | null }) => parent.target_conversions,
+    targetSales: (parent: { target_sales: number | null }) => parent.target_sales,
+    utmSource: (parent: { utm_source: string | null }) => parent.utm_source,
+    utmMedium: (parent: { utm_medium: string | null }) => parent.utm_medium,
+    utmCampaign: (parent: { utm_campaign: string | null }) => parent.utm_campaign,
+    utmContent: (parent: { utm_content: string | null }) => parent.utm_content,
+    promoCodes: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_promo_codes')
+        .select('*')
+        .eq('campaign_id', parent.id)
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+    notes: async (parent: WithId) => {
+      const { data } = await supabaseAdmin
+        .from('campaign_notes')
+        .select('*')
+        .eq('campaign_id', parent.id)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: false });
+      return data || [];
+    },
+  },
+
+  CampaignNote: {
+    noteType: (parent: { note_type: string | null }) => parent.note_type,
+    isPinned: (parent: { is_pinned: boolean }) => parent.is_pinned,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    updatedAt: (parent: { updated_at: string }) => parent.updated_at,
+    createdBy: async (parent: { created_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.created_by)
+        .single();
+      return data;
+    },
+    campaign: async (parent: { campaign_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+  },
+
+  CampaignPromoCode: {
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    campaign: async (parent: { campaign_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('campaigns')
+        .select('*')
+        .eq('id', parent.campaign_id)
+        .single();
+      return data;
+    },
+    creator: async (parent: { creator_id: string | null }) => {
+      if (!parent.creator_id) return null;
+      const { data } = await supabaseAdmin
+        .from('creators')
+        .select('*')
+        .eq('id', parent.creator_id)
         .single();
       return data;
     },

@@ -76,7 +76,7 @@ export function FilesTab({ files, projects }: FilesTabProps) {
 
   const filtered = useMemo(() => {
     return files.filter((f) => {
-      if (typeFilter !== 'all' && getFileCategory(f.fileType) !== typeFilter) return false
+      if (typeFilter !== 'all' && getFileCategory(f.mimeType) !== typeFilter) return false
       if (projectFilter !== 'all' && f.campaign?.project?.id !== projectFilter) return false
       return true
     })
@@ -156,7 +156,7 @@ export function FilesTab({ files, projects }: FilesTabProps) {
             </TableHeader>
             <TableBody>
               {filtered.map((f) => {
-                const Icon = getFileIcon(f.fileType)
+                const Icon = getFileIcon(f.mimeType)
                 return (
                   <TableRow key={f.id}>
                     <TableCell>

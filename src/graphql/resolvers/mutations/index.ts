@@ -7,10 +7,11 @@
 import { createUser, ensureClientUser, ensureCreatorUser } from './user';
 import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale } from './agency';
 import { createContact, updateContact, deleteContact } from './contact';
-import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser } from './project';
+import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser, updateProjectStatus, bulkUpdateProjectStatus, bulkArchiveProjects, archiveProject, updateProject } from './project';
 import {
   createProject,
   createCampaign,
+  updateCampaign,
   updateCampaignDetails,
   setCampaignDates,
   updateCampaignBrief,
@@ -23,6 +24,9 @@ import {
   archiveCampaign,
   assignUserToCampaign,
   removeUserFromCampaign,
+  duplicateCampaign,
+  bulkUpdateCampaignStatus,
+  bulkArchiveCampaigns,
 } from './campaign';
 import {
   createDeliverable,
@@ -32,7 +36,15 @@ import {
   rejectDeliverable,
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
+  removeDeliverable,
+  requestDeliverableRevision,
+  sendDeliverableReminder,
 } from './deliverable';
+import {
+  createCampaignNote,
+  updateCampaignNote,
+  deleteCampaignNote,
+} from './campaign-notes';
 import { startDeliverableTracking } from './deliverable-tracking';
 import { addDeliverableComment } from './deliverable-comment';
 import {
@@ -83,6 +95,11 @@ import {
   updateDiscoverySearch,
 } from './discovery';
 import {
+  createProjectNote,
+  updateProjectNote,
+  deleteProjectNote,
+} from './project-notes';
+import {
   createContactNote,
   updateContactNote,
   deleteContactNote,
@@ -118,7 +135,13 @@ export const mutationResolvers = {
   removeProjectApprover,
   addProjectUser,
   removeProjectUser,
+  updateProjectStatus,
+  bulkUpdateProjectStatus,
+  bulkArchiveProjects,
+  archiveProject,
+  updateProject,
   createCampaign,
+  updateCampaign,
   updateCampaignDetails,
   setCampaignDates,
   updateCampaignBrief,
@@ -129,7 +152,10 @@ export const mutationResolvers = {
   approveCampaign,
   completeCampaign,
   archiveCampaign,
-  
+  duplicateCampaign,
+  bulkUpdateCampaignStatus,
+  bulkArchiveCampaigns,
+
   setAgencyUserRole,
   assignUserToCampaign,
   removeUserFromCampaign,
@@ -142,6 +168,9 @@ export const mutationResolvers = {
   rejectDeliverable,
   updateDeliverableVersionCaption,
   deleteDeliverableVersion,
+  removeDeliverable,
+  requestDeliverableRevision,
+  sendDeliverableReminder,
   startDeliverableTracking,
   addDeliverableComment,
   
@@ -203,6 +232,16 @@ export const mutationResolvers = {
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
+
+  // Project Notes
+  createProjectNote,
+  updateProjectNote,
+  deleteProjectNote,
+
+  // Campaign Notes
+  createCampaignNote,
+  updateCampaignNote,
+  deleteCampaignNote,
 
   // Contact Detail
   createContactNote,

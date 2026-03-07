@@ -1,206 +1,279 @@
 "use client"
 
-import { useState, useEffect, useCallback } from 'react'
-import { Briefcase, MoreHorizontal, Building2 } from 'lucide-react'
-import Link from 'next/link'
+import { useState } from 'react'
+import { Briefcase, Download, Plus, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { ListPageShell } from '@/components/layout/list-page-shell'
-import { StatusBadge } from '@/components/ui/status-badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Header } from '@/components/layout/header'
+import { ViewToggle } from '@/components/ui/view-toggle'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
-
-interface Campaign {
-  id: string
-  name: string
-  status: string
-}
-
-interface Project {
-  id: string
-  name: string
-  description: string | null
-  isArchived: boolean
-  createdAt: string
-  client: {
-    id: string
-    name: string
-  }
-  campaigns: Campaign[]
-}
-
-interface Client {
-  id: string
-  name: string
-  projects: Project[]
-}
+import { graphqlRequest, mutations } from '@/lib/graphql/client'
+import { useToast } from '@/hooks/use-toast'
+import { useProjectsList } from '@/hooks/use-projects-list'
+import { CreateProjectSheet } from '@/components/projects/create-project-sheet'
+import { ProjectsStatsBar } from '@/components/projects/projects-stats-bar'
+import { ProjectsFilterBar } from '@/components/projects/projects-filter-bar'
+import { ProjectFilterChips } from '@/components/projects/project-filter-chips'
+import { ProjectsTableView } from '@/components/projects/projects-table-view'
+import { ProjectsCardView } from '@/components/projects/projects-card-view'
+import { ProjectsBoardView } from '@/components/projects/projects-board-view'
+import { ProjectsPagination } from '@/components/projects/projects-pagination'
+import { ProjectsBulkActions } from '@/components/projects/projects-bulk-actions'
+import { ProjectsRenewalBanner } from '@/components/projects/projects-renewal-banner'
+import { exportProjectsToCSV } from '@/components/projects/projects-csv-export'
 
 export default function ProjectsPage() {
   const { currentAgency } = useAuth()
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const { toast } = useToast()
+  const list = useProjectsList(currentAgency?.id)
 
-  const fetchProjects = useCallback(async () => {
-    if (!currentAgency?.id) return
+  const [sheetOpen, setSheetOpen] = useState(false)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
-    setLoading(true)
-    setError(null)
-
+  // ----- Mutation handlers -----
+  const handleStatusChange = async (projectId: string, status: string) => {
     try {
-      const data = await graphqlRequest<{ clients: Client[] }>(
-        queries.clients,
-        { agencyId: currentAgency.id }
-      )
-
-      const allProjects: Project[] = []
-      for (const client of data.clients) {
-        try {
-          const projectData = await graphqlRequest<{ projects: Project[] }>(
-            queries.projects,
-            { clientId: client.id }
-          )
-          allProjects.push(...projectData.projects)
-        } catch (err) {
-          console.error(`Failed to fetch projects for client ${client.id}:`, err)
-        }
-      }
-
-      setProjects(allProjects)
+      await graphqlRequest(mutations.updateProjectStatus, { id: projectId, status })
+      toast({ title: 'Status updated' })
+      list.refetch()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load projects')
-    } finally {
-      setLoading(false)
+      toast({ title: err instanceof Error ? err.message : 'Failed to update status', variant: 'destructive' })
     }
-  }, [currentAgency?.id])
-
-  useEffect(() => {
-    fetchProjects()
-  }, [fetchProjects])
-
-  const filteredProjects = projects.filter((project) =>
-    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    project.client.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
   }
 
-  const columns = [
-    { label: 'Project', className: 'w-[280px]' },
-    { label: 'Client' },
-    { label: 'Status' },
-    { label: 'Campaigns', className: 'text-center' },
-    { label: 'Created' },
-    { label: '', className: 'w-[50px]' },
-  ]
+  const handleArchive = async (projectId: string) => {
+    try {
+      await graphqlRequest(mutations.bulkArchiveProjects, { projectIds: [projectId] })
+      toast({ title: 'Project archived' })
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to archive', variant: 'destructive' })
+    }
+  }
+
+  const handleBulkStatusChange = async (status: string) => {
+    try {
+      await graphqlRequest(mutations.bulkUpdateProjectStatus, {
+        projectIds: Array.from(list.selectedIds),
+        status,
+      })
+      toast({ title: `${list.selectedIds.size} projects updated` })
+      list.clearSelection()
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Bulk update failed', variant: 'destructive' })
+    }
+  }
+
+  const handleBulkArchive = async () => {
+    try {
+      await graphqlRequest(mutations.bulkArchiveProjects, {
+        projectIds: Array.from(list.selectedIds),
+      })
+      toast({ title: `${list.selectedIds.size} projects archived` })
+      list.clearSelection()
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Bulk archive failed', variant: 'destructive' })
+    }
+  }
+
+  const handleBulkExport = () => {
+    const selected = list.filteredProjects.filter((p) => list.selectedIds.has(p.id))
+    exportProjectsToCSV(selected, 'selected-projects.csv')
+    toast({ title: `Exported ${selected.length} projects` })
+  }
+
+  const handleExportAll = () => {
+    exportProjectsToCSV(list.filteredProjects, 'projects.csv')
+    toast({ title: 'Projects exported' })
+  }
+
+  const handleViewRenewals = () => {
+    list.setFilter('projectType', 'retainer')
+    setBannerDismissed(true)
+  }
+
+  // ----- Loading state -----
+  if (list.loading) {
+    return (
+      <>
+        <Header title="Projects" />
+        <div className="p-6 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 bg-muted rounded-lg animate-pulse" />
+            ))}
+          </div>
+          <div className="h-10 bg-muted rounded animate-pulse" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-14 bg-muted rounded animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  // ----- Error state -----
+  if (list.error) {
+    return (
+      <>
+        <Header title="Projects" />
+        <div className="p-6">
+          <Card className="border-destructive bg-destructive/10">
+            <CardContent className="p-6 flex flex-col items-center text-center">
+              <AlertCircle className="h-12 w-12 text-destructive mb-4" />
+              <h3 className="text-lg font-semibold">Failed to load projects</h3>
+              <p className="text-muted-foreground mt-2">{list.error}</p>
+            </CardContent>
+          </Card>
+        </div>
+      </>
+    )
+  }
 
   return (
-    <ListPageShell
-      title="Projects"
-      subtitle="Organize campaigns under projects"
-      searchPlaceholder="Search projects..."
-      searchQuery={searchQuery}
-      onSearchChange={setSearchQuery}
-      addButton={{ label: 'New Project', href: '/dashboard/projects/new' }}
-      loading={loading}
-      error={error}
-      columns={columns}
-      emptyState={{
-        icon: Briefcase,
-        title: 'No projects yet',
-        description: 'Projects help you organize campaigns for your clients. Create a client first, then add projects to it.',
-        addLabel: 'View Clients',
-        addHref: '/dashboard/clients',
-      }}
-      itemCount={projects.length}
-      filteredCount={filteredProjects.length}
-    >
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[280px]">Project</TableHead>
-              <TableHead>Client</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-center">Campaigns</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="w-[50px]" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredProjects.map((project) => (
-              <TableRow
-                key={project.id}
-                className="cursor-pointer"
-                onClick={() => window.location.href = `/dashboard/projects/${project.id}`}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-purple-100 flex items-center justify-center shrink-0">
-                      <Briefcase className="h-4 w-4 text-purple-600" />
-                    </div>
-                    <span className="font-medium truncate">{project.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-sm">{project.client.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    status={project.isArchived ? 'archived' : 'active'}
-                    type="project"
-                  />
-                </TableCell>
-                <TableCell className="text-center">
-                  <span className="text-sm">{project.campaigns.length}</span>
-                </TableCell>
-                <TableCell>
-                  <span className="text-sm text-muted-foreground">{formatDate(project.createdAt)}</span>
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem asChild>
-                        <Link href={`/dashboard/projects/${project.id}`}>View Details</Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem>Edit</DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive">Archive</DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <>
+      <Header
+        title="Projects"
+        subtitle={`${list.stats.total} total projects · ${list.stats.active} active`}
+      />
+
+      <div className="p-6 space-y-4">
+        {/* Header row: Add Project + Export + View Toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button onClick={() => setSheetOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Project
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExportAll}>
+              <Download className="mr-1.5 h-4 w-4" />
+              Export CSV
+            </Button>
+          </div>
+          <ViewToggle view={list.view} onViewChange={list.setView} />
+        </div>
+
+        {/* Stats */}
+        <ProjectsStatsBar stats={list.stats} />
+
+        {/* Filters */}
+        <ProjectsFilterBar
+          searchQuery={list.searchQuery}
+          onSearchChange={list.setSearchQuery}
+          filters={list.filters}
+          onFilterChange={list.setFilter}
+          sortBy={list.sortBy}
+          sortDirection={list.sortDirection}
+          onSortChange={list.setSortBy}
+          groupBy={list.groupBy}
+          onGroupByChange={list.setGroupBy}
+          activeFilterCount={list.activeFilterCount}
+          clients={list.uniqueClients}
+          projectManagers={list.uniquePMs}
+        />
+
+        {/* Active filter chips */}
+        <ProjectFilterChips
+          filters={list.filters}
+          onClearFilter={list.clearFilter}
+          onClearAll={list.clearAllFilters}
+          activeFilterCount={list.activeFilterCount}
+          clients={list.uniqueClients}
+          projectManagers={list.uniquePMs}
+        />
+
+        {/* Renewal banner */}
+        {!bannerDismissed && list.renewalAlerts.length > 0 && (
+          <ProjectsRenewalBanner
+            renewalProjects={list.renewalAlerts}
+            onViewRenewals={handleViewRenewals}
+            onDismiss={() => setBannerDismissed(true)}
+          />
+        )}
+
+        {/* Empty state (no projects at all) */}
+        {list.stats.total === 0 ? (
+          <Card className="border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <Briefcase className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="font-semibold">No projects yet</h3>
+              <p className="text-muted-foreground text-center mt-2 max-w-sm">
+                Projects help you organize campaigns for your clients. Create your first project to get started.
+              </p>
+              <Button className="mt-4" onClick={() => setSheetOpen(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Project
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Views */}
+            {list.view === 'table' && (
+              <ProjectsTableView
+                projects={list.groupBy ? list.filteredProjects : list.paginatedProjects}
+                groupedProjects={list.groupedProjects}
+                groupBy={list.groupBy}
+                selectedIds={list.selectedIds}
+                onToggleSelection={list.toggleSelection}
+                onSelectAll={list.selectAll}
+                isAllSelected={list.isAllSelected}
+                onStatusChange={handleStatusChange}
+                onArchive={handleArchive}
+                getProjectBudget={list.getProjectBudget}
+              />
+            )}
+
+            {list.view === 'card' && (
+              <ProjectsCardView
+                projects={list.paginatedProjects}
+                selectedIds={list.selectedIds}
+                onToggleSelection={list.toggleSelection}
+                getProjectBudget={list.getProjectBudget}
+              />
+            )}
+
+            {list.view === 'board' && (
+              <ProjectsBoardView
+                projects={list.filteredProjects}
+                onStatusChange={handleStatusChange}
+                getProjectBudget={list.getProjectBudget}
+              />
+            )}
+
+            {/* Pagination (not for board view) */}
+            {list.view !== 'board' && !list.groupBy && (
+              <ProjectsPagination
+                page={list.page}
+                totalPages={list.totalPages}
+                pageSize={list.pageSize}
+                totalItems={list.filteredProjects.length}
+                onPageChange={list.setPage}
+                onPageSizeChange={list.setPageSize}
+              />
+            )}
+          </>
+        )}
+
+        {/* Bulk actions */}
+        <ProjectsBulkActions
+          selectedCount={list.selectedIds.size}
+          onClearSelection={list.clearSelection}
+          onBulkStatusChange={handleBulkStatusChange}
+          onBulkExport={handleBulkExport}
+          onBulkArchive={handleBulkArchive}
+        />
       </div>
-    </ListPageShell>
+
+      <CreateProjectSheet
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        onSuccess={() => list.refetch()}
+      />
+    </>
   )
 }

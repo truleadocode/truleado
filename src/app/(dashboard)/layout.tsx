@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
@@ -52,10 +53,12 @@ export default function DashboardLayout({
 }
 
 function DashboardContent({ children }: { children: React.ReactNode }) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
-      <main className="lg:pl-64 transition-all duration-300">
+      <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      <main className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-64'}`}>
         {children}
       </main>
     </div>
