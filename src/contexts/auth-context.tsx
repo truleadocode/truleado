@@ -1,12 +1,12 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { 
   User as FirebaseUser,
   onAuthStateChanged,
   signOut as firebaseSignOut 
 } from 'firebase/auth'
-import { auth, signInWithEmail, signUpWithEmail, resetPassword, getIdToken } from '@/lib/firebase/client'
+import { auth, signInWithEmail, signUpWithEmail, resetPassword, getIdToken, sendVerificationEmail } from '@/lib/firebase/client'
 
 interface User {
   id: string
@@ -60,6 +60,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [contact, setContact] = useState<LinkedContact | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Ref gate: when true, onAuthStateChanged skips processing.
+  // Prevents the listener from racing with explicit signIn/signUp handlers.
+  const isExplicitAuthAction = useRef(false)
+
+  const clearAuthState = useCallback(() => {
+    setFirebaseUser(null)
+    setUser(null)
+    setAgencies([])
+    setCurrentAgencyState(null)
+    setContact(null)
+  }, [])
 
   const FETCH_ME_TIMEOUT_MS = 15_000
 
@@ -152,24 +164,34 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setFirebaseUser(firebaseUser)
-      try {
-        if (firebaseUser) {
-          await fetchUserData(firebaseUser)
-        } else {
-          setUser(null)
-          setAgencies([])
-          setCurrentAgencyState(null)
-          setContact(null)
+    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      // Gate: explicit signIn/signUp in progress — let the handler manage state
+      if (isExplicitAuthAction.current) return
+
+      if (fbUser) {
+        // Enforce email verification for password-based auth
+        if (!fbUser.emailVerified) {
+          // Stale unverified session — sign out silently
+          firebaseSignOut(auth).catch(() => {})
+          clearAuthState()
+          setLoading(false)
+          return
         }
-      } finally {
+
+        setFirebaseUser(fbUser)
+        try {
+          await fetchUserData(fbUser)
+        } finally {
+          setLoading(false)
+        }
+      } else {
+        clearAuthState()
         setLoading(false)
       }
     })
 
     return () => unsubscribe()
-  }, [fetchUserData])
+  }, [fetchUserData, clearAuthState])
 
   const refetchUser = useCallback(async () => {
     if (firebaseUser) {
@@ -180,25 +202,47 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const handleSignIn = async (email: string, password: string) => {
     setError(null)
     setLoading(true)
+    isExplicitAuthAction.current = true
     try {
-      await signInWithEmail(email, password)
+      const userCredential = await signInWithEmail(email, password)
+
+      // Enforce email verification
+      if (!userCredential.user.emailVerified) {
+        // Resend verification email as a convenience
+        await sendVerificationEmail(userCredential.user)
+        await firebaseSignOut(auth)
+        clearAuthState()
+        setLoading(false)
+        isExplicitAuthAction.current = false
+        const msg = 'Please verify your email address. A new verification email has been sent.'
+        setError(msg)
+        throw new Error(msg)
+      }
+
+      // Email verified — fetch user data from our DB
+      setFirebaseUser(userCredential.user)
+      await fetchUserData(userCredential.user)
+      setLoading(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign in'
-      setError(message)
+      if (!error) setError(message)
       setLoading(false)
       throw err
+    } finally {
+      isExplicitAuthAction.current = false
     }
   }
 
   const handleSignUp = async (email: string, password: string, name?: string) => {
     setError(null)
     setLoading(true)
+    isExplicitAuthAction.current = true
     try {
+      // Step 1: Create Firebase user
       const userCredential = await signUpWithEmail(email, password)
-      
-      // Create user in our database
+
+      // Step 2: Create user in our database (must succeed)
       const token = await userCredential.user.getIdToken()
-      
       const response = await fetch('/api/graphql', {
         method: 'POST',
         headers: {
@@ -226,13 +270,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       const result = await response.json()
       if (result.errors) {
-        console.error('Error creating user:', result.errors)
+        throw new Error(result.errors[0]?.message || 'Failed to create user account')
       }
+
+      // Step 3: Send verification email
+      await sendVerificationEmail(userCredential.user)
+
+      // Step 4: Sign out immediately — user must verify email before logging in
+      await firebaseSignOut(auth)
+      clearAuthState()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to sign up'
       setError(message)
-      setLoading(false)
+      // If Firebase user was created but something else failed, sign out to be safe
+      if (auth.currentUser) {
+        await firebaseSignOut(auth).catch(() => {})
+      }
+      clearAuthState()
       throw err
+    } finally {
+      isExplicitAuthAction.current = false
+      setLoading(false)
     }
   }
 
@@ -240,10 +298,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setError(null)
     try {
       await firebaseSignOut(auth)
-      setUser(null)
-      setAgencies([])
-      setCurrentAgencyState(null)
-      setContact(null)
+      clearAuthState()
       if (typeof window !== 'undefined') {
         localStorage.removeItem('currentAgencyId')
       }

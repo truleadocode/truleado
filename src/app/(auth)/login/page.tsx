@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Loader2, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -95,8 +95,15 @@ export default function LoginPage() {
           ) : (
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             {error && (
-              <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
-                <AlertCircle className="h-4 w-4 shrink-0" />
+              <div className={`flex items-center gap-2 p-3 text-sm rounded-lg ${
+                error.includes('verify your email')
+                  ? 'text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/30'
+                  : 'text-destructive bg-destructive/10'
+              }`}>
+                {error.includes('verify your email')
+                  ? <Info className="h-4 w-4 shrink-0" />
+                  : <AlertCircle className="h-4 w-4 shrink-0" />
+                }
                 <span>{error}</span>
               </div>
             )}

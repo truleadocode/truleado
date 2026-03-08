@@ -13,6 +13,7 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   onAuthStateChanged,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
@@ -76,6 +77,14 @@ export async function signOut(): Promise<void> {
  */
 export async function resetPassword(email: string): Promise<void> {
   return sendPasswordResetEmail(auth, email);
+}
+
+/**
+ * Send email verification to the given Firebase user.
+ * Called during signup after user + DB record creation.
+ */
+export async function sendVerificationEmail(user: User): Promise<void> {
+  return sendEmailVerification(user);
 }
 
 /**

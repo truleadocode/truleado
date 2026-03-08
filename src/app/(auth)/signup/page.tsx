@@ -2,11 +2,10 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,11 +30,12 @@ const signupSchema = z.object({
 type SignupFormData = z.infer<typeof signupSchema>
 
 export default function SignupPage() {
-  const router = useRouter()
   const { signUp, loading, error, clearError } = useAuth()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
 
   const {
     register,
@@ -60,12 +60,71 @@ export default function SignupPage() {
     setIsSubmitting(true)
     try {
       await signUp(data.email, data.password, data.name)
-      router.push('/choose-agency')
+      setUserEmail(data.email)
+      setSignupSuccess(true)
     } catch {
       // Error is handled by auth context
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (signupSuccess) {
+    return (
+      <div className="space-y-6">
+        {/* Mobile logo */}
+        <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
+            <svg
+              className="h-6 w-6 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+          </div>
+          <span className="text-2xl font-bold">Truleado</span>
+        </div>
+
+        <Card className="border-0 shadow-none lg:border lg:shadow-sm">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Mail className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold">Check your email</h2>
+                <p className="text-muted-foreground text-sm">
+                  We&apos;ve sent a verification link to{' '}
+                  <span className="font-medium text-foreground">{userEmail}</span>
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Click the link in the email to verify your account, then come back here to sign in.
+              </p>
+              <div className="pt-4">
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Go to Sign In
+                </Link>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Didn&apos;t receive the email? Check your spam folder.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
