@@ -1,21 +1,26 @@
 "use client"
 
-import { 
-  Users, 
-  Briefcase, 
-  Megaphone, 
-  FileCheck, 
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  Users,
+  Briefcase,
+  Megaphone,
+  FileCheck,
   TrendingUp,
   ArrowRight,
   Plus,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Check,
+  X,
+  PartyPopper
 } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
+import { graphqlRequest } from '@/lib/graphql/client'
 
 const stats = [
   { name: 'Active Clients', value: '0', icon: Users, href: '/dashboard/clients', color: 'text-blue-600 bg-blue-100' },
@@ -31,8 +36,135 @@ const quickActions = [
   { name: 'Upload Deliverable', href: '/dashboard/deliverables/new', icon: FileCheck },
 ]
 
+const checklistItems = [
+  {
+    key: 'add-client',
+    title: 'Add your first client',
+    description: 'Create a client profile to start organizing your work',
+    href: '/dashboard/clients/new',
+    cta: 'Add Client',
+  },
+  {
+    key: 'create-project',
+    title: 'Create a project',
+    description: 'Projects help you organize campaigns for each client',
+    href: '/dashboard/projects/new',
+    cta: 'Create Project',
+  },
+  {
+    key: 'launch-campaign',
+    title: 'Launch your first campaign',
+    description: 'Start managing influencer content and approvals',
+    href: '/dashboard/campaigns/new',
+    cta: 'Start Campaign',
+  },
+]
+
+function getStorageKey(agencyId: string) {
+  return `truleado_onboarding_${agencyId}`
+}
+
+interface OnboardingState {
+  dismissed: boolean
+  completed: string[]
+}
+
+function loadOnboardingState(agencyId: string): OnboardingState {
+  try {
+    const raw = localStorage.getItem(getStorageKey(agencyId))
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return { dismissed: false, completed: [] }
+}
+
+function saveOnboardingState(agencyId: string, state: OnboardingState) {
+  localStorage.setItem(getStorageKey(agencyId), JSON.stringify(state))
+}
+
+const ONBOARDING_CHECK_QUERY = `
+  query OnboardingCheck($agencyId: ID!) {
+    clients(agencyId: $agencyId) { id }
+    agencyProjects(agencyId: $agencyId) { id }
+    allCampaigns(agencyId: $agencyId) { id }
+  }
+`
+
+interface OnboardingCheckResult {
+  clients: { id: string }[]
+  agencyProjects: { id: string }[]
+  allCampaigns: { id: string }[]
+}
+
 export default function DashboardPage() {
   const { user, currentAgency } = useAuth()
+  const [onboarding, setOnboarding] = useState<OnboardingState>({ dismissed: false, completed: [] })
+  const [loaded, setLoaded] = useState(false)
+  const syncedRef = useRef(false)
+
+  const agencyId = currentAgency?.id
+
+  // Load from cache immediately, then sync with real data in background
+  useEffect(() => {
+    if (!agencyId) return
+    const cached = loadOnboardingState(agencyId)
+    setOnboarding(cached)
+    setLoaded(true)
+
+    // Skip background sync if already dismissed or already synced this session
+    if (cached.dismissed || syncedRef.current) return
+    syncedRef.current = true
+
+    // Background fetch — non-blocking, fire-and-forget
+    graphqlRequest<OnboardingCheckResult>(ONBOARDING_CHECK_QUERY, { agencyId })
+      .then(data => {
+        const detected: string[] = []
+        if (data.clients?.length > 0) detected.push('add-client')
+        if (data.agencyProjects?.length > 0) detected.push('create-project')
+        if (data.allCampaigns?.length > 0) detected.push('launch-campaign')
+
+        if (detected.length === 0) return
+
+        setOnboarding(prev => {
+          // Merge: keep anything already completed + add newly detected
+          const merged = Array.from(new Set([...prev.completed, ...detected]))
+          if (merged.length === prev.completed.length) return prev // no change
+          const next = { ...prev, completed: merged }
+          saveOnboardingState(agencyId, next)
+          return next
+        })
+      })
+      .catch(() => {
+        // Silent — onboarding check is non-critical
+      })
+  }, [agencyId])
+
+  const updateOnboarding = useCallback((updater: (prev: OnboardingState) => OnboardingState) => {
+    if (!agencyId) return
+    setOnboarding(prev => {
+      const next = updater(prev)
+      saveOnboardingState(agencyId, next)
+      return next
+    })
+  }, [agencyId])
+
+  const toggleItem = (key: string) => {
+    updateOnboarding(prev => {
+      const completed = prev.completed.includes(key)
+        ? prev.completed.filter(k => k !== key)
+        : [...prev.completed, key]
+      return { ...prev, completed }
+    })
+  }
+
+  const dismiss = () => {
+    updateOnboarding(prev => ({ ...prev, dismissed: true }))
+  }
+
+  const completedCount = onboarding.completed.length
+  const totalCount = checklistItems.length
+  const allDone = completedCount === totalCount
+  const progressPercent = Math.round((completedCount / totalCount) * 100)
+  const showOnboarding = loaded && !onboarding.dismissed
 
   const getGreeting = () => {
     const hour = new Date().getHours()
@@ -43,12 +175,109 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header 
+      <Header
         title={`${getGreeting()}, ${user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'}`}
         subtitle={currentAgency?.name ? `Managing ${currentAgency.name}` : undefined}
       />
-      
+
       <div className="p-6 space-y-6">
+        {/* Getting Started - moved to top */}
+        {showOnboarding && (
+          <Card className="border-dashed">
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {allDone
+                      ? <PartyPopper className="h-5 w-5 text-primary" />
+                      : <TrendingUp className="h-5 w-5 text-primary" />
+                    }
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">
+                      {allDone ? 'You\'re all set!' : 'Get Started with Truleado'}
+                    </CardTitle>
+                    <CardDescription>
+                      {allDone
+                        ? 'You\'ve completed all the setup steps'
+                        : `${completedCount} of ${totalCount} steps complete`
+                      }
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  onClick={dismiss}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-3">
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500 ease-out"
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </div>
+              </div>
+            </CardHeader>
+
+            {!allDone && (
+              <CardContent className="pt-0">
+                <div className="space-y-3">
+                  {checklistItems.map((item) => {
+                    const done = onboarding.completed.includes(item.key)
+                    return (
+                      <div
+                        key={item.key}
+                        className={`flex items-start gap-4 p-4 rounded-lg bg-muted/50 transition-opacity ${done ? 'opacity-50' : ''}`}
+                      >
+                        <button
+                          onClick={() => toggleItem(item.key)}
+                          className={`h-7 w-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                            done
+                              ? 'bg-primary border-primary text-white'
+                              : 'border-muted-foreground/30 hover:border-primary/50'
+                          }`}
+                        >
+                          {done && <Check className="h-4 w-4" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <h4 className={`font-medium text-sm ${done ? 'line-through text-muted-foreground' : ''}`}>
+                            {item.title}
+                          </h4>
+                          <p className="text-sm text-muted-foreground mt-0.5">
+                            {item.description}
+                          </p>
+                        </div>
+                        {!done && (
+                          <Button size="sm" variant="outline" asChild className="shrink-0">
+                            <Link href={item.href}>
+                              {item.cta}
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            )}
+
+            {allDone && (
+              <CardContent className="pt-0">
+                <Button variant="outline" size="sm" onClick={dismiss}>
+                  Dismiss
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat) => (
@@ -123,66 +352,6 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Getting Started */}
-        <Card className="border-dashed">
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Get Started with Truleado</CardTitle>
-                <CardDescription>Complete these steps to set up your workspace</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50">
-                <div className="h-8 w-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-medium shrink-0">
-                  1
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium">Add your first client</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Create a client profile to start organizing your work
-                  </p>
-                  <Button size="sm" className="mt-3" asChild>
-                    <Link href="/dashboard/clients/new">
-                      <Plus className="mr-1 h-4 w-4" />
-                      Add Client
-                    </Link>
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 opacity-60">
-                <div className="h-8 w-8 rounded-full bg-muted-foreground/20 text-muted-foreground flex items-center justify-center text-sm font-medium shrink-0">
-                  2
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-muted-foreground">Create a project</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Projects help you organize campaigns for each client
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 p-4 rounded-lg bg-muted/50 opacity-60">
-                <div className="h-8 w-8 rounded-full bg-muted-foreground/20 text-muted-foreground flex items-center justify-center text-sm font-medium shrink-0">
-                  3
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-muted-foreground">Launch your first campaign</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Start managing influencer content and approvals
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Alerts / Notifications */}
         <Card className="border-warning/50 bg-warning/5">
