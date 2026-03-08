@@ -30,7 +30,11 @@ export async function createAgency(
     throw validationError('Agency name must be at least 2 characters', 'name');
   }
   
-  // Create the agency
+  // Create the agency with 30-day trial
+  const now = new Date();
+  const trialEnd = new Date(now);
+  trialEnd.setDate(trialEnd.getDate() + 30);
+
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
     .insert({
@@ -38,6 +42,10 @@ export async function createAgency(
       billing_email: billingEmail,
       status: 'active',
       token_balance: 0,
+      trial_start_date: now.toISOString(),
+      trial_end_date: trialEnd.toISOString(),
+      trial_days: 30,
+      subscription_status: 'trial',
     })
     .select()
     .single();

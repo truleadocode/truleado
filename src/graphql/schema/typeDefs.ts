@@ -172,6 +172,10 @@ export const typeDefs = gql`
     primaryEmail: String
     phone: String
     website: String
+    trialStartDate: DateTime
+    trialEndDate: DateTime
+    trialDays: Int
+    subscriptionStatus: String
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
