@@ -529,7 +529,27 @@ export const queries = {
       }
     }
   `,
-  
+
+  agencyProfile: `
+    query GetAgencyProfile($agencyId: ID!) {
+      agency(id: $agencyId) {
+        id
+        name
+        logoUrl
+        description
+        addressLine1
+        addressLine2
+        city
+        state
+        postalCode
+        country
+        primaryEmail
+        phone
+        website
+      }
+    }
+  `,
+
   campaigns: `
     query GetCampaigns($projectId: ID!) {
       campaigns(projectId: $projectId) {
@@ -2417,6 +2437,26 @@ export const mutations = {
         currencyCode
         timezone
         languageCode
+      }
+    }
+  `,
+
+  updateAgencyProfile: `
+    mutation UpdateAgencyProfile($agencyId: ID!, $input: UpdateAgencyProfileInput!) {
+      updateAgencyProfile(agencyId: $agencyId, input: $input) {
+        id
+        name
+        logoUrl
+        description
+        addressLine1
+        addressLine2
+        city
+        state
+        postalCode
+        country
+        primaryEmail
+        phone
+        website
       }
     }
   `,

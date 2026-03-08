@@ -161,6 +161,17 @@ export const typeDefs = gql`
     currencyCode: String!
     timezone: String!
     languageCode: String!
+    logoUrl: String
+    description: String
+    addressLine1: String
+    addressLine2: String
+    city: String
+    state: String
+    postalCode: String
+    country: String
+    primaryEmail: String
+    phone: String
+    website: String
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -1182,6 +1193,21 @@ export const typeDefs = gql`
     languageCode: String!
   }
 
+  input UpdateAgencyProfileInput {
+    name: String
+    logoUrl: String
+    description: String
+    addressLine1: String
+    addressLine2: String
+    city: String
+    state: String
+    postalCode: String
+    country: String
+    primaryEmail: String
+    phone: String
+    website: String
+  }
+
   input CreatorRateInput {
     platform: String!
     deliverableType: String!
@@ -1571,7 +1597,9 @@ export const typeDefs = gql`
 
     # Update agency locale settings; agency_admin only.
     updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
-    
+    # Update agency profile (name, logo, address, etc.); agency_admin only.
+    updateAgencyProfile(agencyId: ID!, input: UpdateAgencyProfileInput!): Agency!
+
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
     # ---------------------------------------------
