@@ -17,9 +17,13 @@ export const runtime = 'nodejs';
 const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET!;
 
-const PRICE_PAISE: Record<string, number> = {
-  basic: 50,    // ₹0.50
-  premium: 7500, // ₹75.00
+/**
+ * Prices in smallest currency unit (paise for INR, cents for USD).
+ * INR agencies pay in INR; everyone else pays in USD.
+ */
+const PRICES: Record<string, Record<string, number>> = {
+  INR: { basic: 50, premium: 7500 },     // ₹0.50, ₹75.00
+  USD: { basic: 1, premium: 90 },        // $0.01, $0.90
 };
 
 function getRazorpay() {
@@ -68,6 +72,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'quantity must be an integer between 1 and 100,000' }, { status: 400 });
     }
 
+    // --- Resolve agency currency ---
+    const { data: agencyRow } = await supabaseAdmin
+      .from('agencies')
+      .select('currency_code')
+      .eq('id', agencyId)
+      .single();
+
+    const billingCurrency = agencyRow?.currency_code === 'INR' ? 'INR' : 'USD';
+    const priceTable = PRICES[billingCurrency];
+
     // --- Resolve user via auth_identities ---
     const { data: identity } = await supabaseAdmin
       .from('auth_identities')
@@ -94,12 +108,13 @@ export async function POST(request: NextRequest) {
     }
 
     // --- Create Razorpay order ---
-    const amountPaise = PRICE_PAISE[purchaseType] * quantity;
+    const unitPrice = priceTable[purchaseType];
+    const totalAmount = unitPrice * quantity;
     const razorpay = getRazorpay();
 
     const order = await razorpay.orders.create({
-      amount: amountPaise,
-      currency: 'INR',
+      amount: totalAmount,
+      currency: billingCurrency,
       receipt: `tp_${Date.now()}`,
       notes: {
         agencyId,
@@ -115,8 +130,8 @@ export async function POST(request: NextRequest) {
         agency_id: agencyId,
         purchase_type: purchaseType,
         token_quantity: quantity,
-        amount_paise: amountPaise,
-        currency: 'INR',
+        amount_paise: totalAmount,
+        currency: billingCurrency,
         razorpay_order_id: order.id,
         status: 'pending',
         created_by: dbUserId,
@@ -131,8 +146,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       orderId: order.id,
-      amount: amountPaise,
-      currency: 'INR',
+      amount: totalAmount,
+      currency: billingCurrency,
       purchaseId: purchase.id,
       keyId: RAZORPAY_KEY_ID,
     });

@@ -18,9 +18,20 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
+import { useCurrency } from '@/hooks/use-currency'
 import { useToast } from '@/hooks/use-toast'
+import { formatSmallestUnit } from '@/lib/currency'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
 import { getIdToken } from '@/lib/firebase/client'
+
+/**
+ * Prices in smallest currency unit (paise for INR, cents for USD).
+ * Must stay in sync with the server-side PRICES in create-order/route.ts.
+ */
+const PRICES: Record<string, Record<string, number>> = {
+  INR: { basic: 50, premium: 7500 },
+  USD: { basic: 1, premium: 90 },
+}
 
 declare global {
   interface Window {
@@ -78,13 +89,12 @@ function formatDate(dateString: string) {
   })
 }
 
-function formatAmountINR(paise: number) {
-  return `₹${(paise / 100).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
-}
-
 export default function BillingSettingsPage() {
   const { user, currentAgency, getToken } = useAuth()
+  const { currencyCode } = useCurrency()
   const { toast } = useToast()
+  const billingCurrency = currencyCode === 'INR' ? 'INR' : 'USD'
+  const priceTable = PRICES[billingCurrency]
 
   const [balance, setBalance] = useState<AgencyBalance | null>(null)
   const [purchases, setPurchases] = useState<TokenPurchase[]>([])
@@ -323,7 +333,7 @@ export default function BillingSettingsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-base">Basic Scraping Tokens</CardTitle>
-                      <CardDescription>₹0.50 per token</CardDescription>
+                      <CardDescription>{formatSmallestUnit(priceTable.basic, billingCurrency)} per token</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -363,7 +373,7 @@ export default function BillingSettingsPage() {
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t">
                     <span className="text-sm font-medium">
-                      Total: {formatAmountINR(basicQty * 50)}
+                      Total: {formatSmallestUnit(basicQty * priceTable.basic, billingCurrency)}
                     </span>
                     <Button
                       onClick={() => handlePurchase('basic')}
@@ -385,7 +395,7 @@ export default function BillingSettingsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-base">Premium Tokens</CardTitle>
-                      <CardDescription>₹75.00 per token</CardDescription>
+                      <CardDescription>{formatSmallestUnit(priceTable.premium, billingCurrency)} per token</CardDescription>
                     </div>
                   </div>
                 </CardHeader>
@@ -425,7 +435,7 @@ export default function BillingSettingsPage() {
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t">
                     <span className="text-sm font-medium">
-                      Total: {formatAmountINR(premiumQty * 7500)}
+                      Total: {formatSmallestUnit(premiumQty * priceTable.premium, billingCurrency)}
                     </span>
                     <Button
                       onClick={() => handlePurchase('premium')}
@@ -504,7 +514,7 @@ export default function BillingSettingsPage() {
                             {p.tokenQuantity.toLocaleString()}
                           </td>
                           <td className="p-3 text-right">
-                            {formatAmountINR(p.amountPaise)}
+                            {formatSmallestUnit(p.amountPaise, p.currency || 'INR')}
                           </td>
                           <td className="p-3 text-center">
                             {statusBadge(p.status)}
