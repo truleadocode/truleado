@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { StatsCard } from '@/components/ui/stats-card'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { Campaign, ActivityLog } from '../types'
 
 interface OverviewTabProps {
@@ -21,14 +22,6 @@ function formatNumber(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
   return String(n)
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency || 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function timeAgo(dateStr: string) {

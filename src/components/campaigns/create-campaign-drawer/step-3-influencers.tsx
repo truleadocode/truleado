@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { formatCurrency } from '@/lib/currency'
 import type { CampaignFormState, CampaignFormInfluencer, CampaignFormDeliverable, CreatorOption } from './types'
 import { CONTENT_TYPE_OPTIONS, PLATFORM_OPTIONS } from './types'
 
@@ -33,14 +34,6 @@ function getInitials(name: string | null | undefined) {
 
 function getCreatorHandle(c: CreatorOption) {
   return c.instagramHandle || c.youtubeHandle || c.tiktokHandle || c.email || ''
-}
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 // ----- Inline Add New Creator Form -----

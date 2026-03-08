@@ -10,16 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { formatCurrency } from '@/lib/currency'
 import type { Project } from '../types'
 
 interface BudgetTabProps {
   project: Project
-}
-
-function formatMoney(amount: number | null, currency: string | null) {
-  if (amount === null || amount === undefined) return '—'
-  const cur = currency || 'USD'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount)
 }
 
 export function BudgetTab({ project }: BudgetTabProps) {
@@ -62,14 +57,14 @@ export function BudgetTab({ project }: BudgetTabProps) {
                   <TableRow key={line.label}>
                     <TableCell className="text-sm">{line.label}</TableCell>
                     <TableCell className="text-sm text-right font-medium">
-                      {formatMoney(line.planned || null, project.currency)}
+                      {formatCurrency(line.planned || null, project.currency || 'USD')}
                     </TableCell>
                   </TableRow>
                 ))}
                 <TableRow className="bg-muted/50 font-semibold">
                   <TableCell className="text-sm">Total</TableCell>
                   <TableCell className="text-sm text-right">
-                    {formatMoney(totalPlanned, project.currency)}
+                    {formatCurrency(totalPlanned, project.currency || 'USD')}
                   </TableCell>
                 </TableRow>
               </TableBody>

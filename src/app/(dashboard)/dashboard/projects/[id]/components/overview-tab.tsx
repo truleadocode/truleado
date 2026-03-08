@@ -8,17 +8,12 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { Project, ActivityLog } from '../types'
 
 interface OverviewTabProps {
   project: Project
   activityFeed: ActivityLog[]
-}
-
-function formatMoney(amount: number | null, currency: string | null) {
-  if (amount === null || amount === undefined) return '—'
-  const cur = currency || 'USD'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount)
 }
 
 function formatNumber(n: number | null) {
@@ -89,7 +84,7 @@ export function OverviewTab({ project, activityFeed }: OverviewTabProps) {
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold">Budget Summary</h3>
-              <span className="text-sm font-semibold">{formatMoney(totalBudget, project.currency)}</span>
+              <span className="text-sm font-semibold">{formatCurrency(totalBudget, project.currency || 'USD')}</span>
             </div>
             <div className="space-y-3">
               {budgetLines.map((line) => {
@@ -99,7 +94,7 @@ export function OverviewTab({ project, activityFeed }: OverviewTabProps) {
                   <div key={line.label} className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">{line.label}</span>
-                      <span className="font-medium">{formatMoney(line.value, project.currency)}</span>
+                      <span className="font-medium">{formatCurrency(line.value, project.currency || 'USD')}</span>
                     </div>
                     <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div className="h-full bg-primary/60 rounded-full" style={{ width: `${pct}%` }} />

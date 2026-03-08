@@ -12,16 +12,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { formatCurrency } from '@/lib/currency'
 import type { Project } from '../types'
 
 interface InfluencersTabProps {
   project: Project
-}
-
-function formatMoney(amount: number | null, currency: string | null) {
-  if (amount === null || amount === undefined) return '—'
-  const cur = currency || 'USD'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount)
 }
 
 function getInitials(name: string | null | undefined) {
@@ -79,7 +74,7 @@ export function InfluencersTab({ project }: InfluencersTabProps) {
           {flatCreators.length} influencer{flatCreators.length !== 1 ? 's' : ''} across {project.campaigns.length} campaign{project.campaigns.length !== 1 ? 's' : ''}
         </p>
         {totalFees > 0 && (
-          <p className="text-sm font-medium">Total Fees: {formatMoney(totalFees, project.currency)}</p>
+          <p className="text-sm font-medium">Total Fees: {formatCurrency(totalFees, project.currency || 'USD')}</p>
         )}
       </div>
 
@@ -105,7 +100,7 @@ export function InfluencersTab({ project }: InfluencersTabProps) {
                   </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{c.campaignName}</TableCell>
-                <TableCell className="text-sm text-right">{formatMoney(c.fee, project.currency)}</TableCell>
+                <TableCell className="text-sm text-right">{formatCurrency(c.fee, project.currency || 'USD')}</TableCell>
               </TableRow>
             ))}
           </TableBody>

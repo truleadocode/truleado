@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { CampaignGroupField } from '@/hooks/use-campaigns-list'
 
 interface CampaignRow {
@@ -95,14 +96,6 @@ interface CampaignsTableViewProps {
 function getInitials(name: string | null | undefined) {
   if (!name) return '?'
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency || 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 const PLATFORM_ICONS: Record<string, string> = {
@@ -261,7 +254,7 @@ function CampaignTableRow({
       </TableCell>
       <TableCell>
         {campaign.totalBudget ? (
-          <span className="text-xs font-medium">{formatCurrency(campaign.totalBudget, campaign.currency)}</span>
+          <span className="text-xs font-medium">{formatCurrency(campaign.totalBudget, campaign.currency || 'INR')}</span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, memo } from "react"
+import { useState, memo } from "react"
 import {
   Table,
   TableBody,
@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast"
 import { graphqlRequest, mutations } from "@/lib/graphql/client"
 import { MoreHorizontal, Check, XCircle } from "lucide-react"
 import { format } from "date-fns"
+import { formatCurrency } from "@/lib/currency"
 
 interface CreatorAgreement {
   id: string
@@ -72,17 +73,8 @@ export const CreatorPaymentsTable = memo(function CreatorPaymentsTable({
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const { toast } = useToast()
 
-  const locale = campaignCurrency === "INR" ? "en-IN" : "en-US"
-  const formatMoney = useCallback(
-    (amount: number, currency?: string) =>
-      new Intl.NumberFormat(locale, {
-        style: "currency",
-        currency: currency || campaignCurrency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(amount),
-    [locale, campaignCurrency]
-  )
+  const formatMoney = (amount: number, currency?: string) =>
+    formatCurrency(amount, currency || campaignCurrency, { maximumFractionDigits: 2 })
 
   const filteredAgreements = agreements.filter((a) => {
     if (statusFilter !== "all" && a.status !== statusFilter.toLowerCase()) return false

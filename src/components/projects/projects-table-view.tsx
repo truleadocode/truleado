@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { ProjectListItem, GroupField } from '@/hooks/use-projects-list'
 
 interface ProjectsTableViewProps {
@@ -80,14 +81,6 @@ const PLATFORM_ICONS: Record<string, string> = {
   facebook: '📘',
   linkedin: '💼',
   twitter: '🐦',
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency || 'USD',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function formatDate(dateString: string | null) {
@@ -246,7 +239,7 @@ function ProjectRow({
       {/* Budget */}
       <TableCell>
         {budget > 0 ? (
-          <span className="text-sm font-medium">{formatCurrency(budget, project.currency)}</span>
+          <span className="text-sm font-medium">{formatCurrency(budget, project.currency || 'USD')}</span>
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         )}

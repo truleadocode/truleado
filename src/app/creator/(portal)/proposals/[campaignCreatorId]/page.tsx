@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
+import { formatSmallestUnit } from '@/lib/currency'
 
 interface ProposalVersion {
   id: string
@@ -217,17 +218,9 @@ export default function CreatorProposalPage() {
     return null
   }
 
-  const formatCurrency = (amount: number | null, currency: string | null) => {
+  const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return 'Not specified'
-    const currencyCode = currency || 'INR'
-    // Use appropriate locale for the currency
-    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-    const formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-    })
-    return formatter.format(amount / 100)
+    return formatSmallestUnit(amount, currency || 'INR')
   }
 
   const formatDate = (date: string | null) => {
@@ -338,7 +331,7 @@ export default function CreatorProposalPage() {
                 <div className="flex items-center gap-2 mt-1">
                   <Banknote className="h-5 w-5 text-green-600" />
                   <span className="text-2xl font-bold">
-                    {formatCurrency(proposal.rateAmount, proposal.rateCurrency)}
+                    {formatCreatorCurrency(proposal.rateAmount, proposal.rateCurrency)}
                   </span>
                 </div>
               </div>
@@ -622,13 +615,7 @@ export default function CreatorProposalPage() {
 
                   const formatRate = (amount: number | null, currency: string | null) => {
                     if (!amount) return null
-                    const currencyCode = currency || 'INR'
-                    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-                    return new Intl.NumberFormat(locale, {
-                      style: 'currency',
-                      currency: currencyCode,
-                      minimumFractionDigits: 0,
-                    }).format(amount / 100)
+                    return formatSmallestUnit(amount, currency || 'INR')
                   }
 
                   const getActionText = (createdByType: string, state: string) => {

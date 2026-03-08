@@ -26,6 +26,7 @@ import {
 import { StatusBadge } from '@/components/ui/status-badge'
 import { getCampaignStatusLabel } from '@/lib/campaign-status'
 import type { Project, Campaign } from '../types'
+import { formatCurrency } from '@/lib/currency'
 
 interface CampaignsTabProps {
   projects: Project[]
@@ -45,8 +46,7 @@ function formatDate(dateString: string | null) {
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  const cur = currency || 'USD'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount)
+  return formatCurrency(amount, currency || 'USD')
 }
 
 export function CampaignsTab({ projects, clientCurrency }: CampaignsTabProps) {

@@ -45,6 +45,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 import { AddInfluencerDialog } from './add-influencer-dialog'
@@ -60,14 +61,6 @@ interface InfluencersDeliverablesTabProps {
 function getInitials(name: string | null | undefined) {
   if (!name) return '?'
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency || 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function getCreatorHandle(c: CampaignCreator['creator']) {
@@ -184,7 +177,7 @@ function InfluencerCard({
             <span className="text-muted-foreground">Fee: </span>
             <span className="font-medium">
               {campaignCreator.rateAmount
-                ? formatCurrency(campaignCreator.rateAmount, campaignCreator.rateCurrency || currency)
+                ? formatCurrency(campaignCreator.rateAmount, campaignCreator.rateCurrency || currency || 'INR')
                 : '—'}
             </span>
           </div>
@@ -384,7 +377,7 @@ export function InfluencersDeliverablesTab({ campaign, onRefresh }: InfluencersD
             <span>·</span>
             <span>{feeSummary.totalDeliverables} deliverables</span>
             <span>·</span>
-            <span>{formatCurrency(feeSummary.totalFees, campaign.currency)} total fees</span>
+            <span>{formatCurrency(feeSummary.totalFees, campaign.currency || 'INR')} total fees</span>
           </div>
           <Button size="sm" onClick={() => setAddInfluencerOpen(true)}>
             <UserPlus className="mr-1 h-4 w-4" />
@@ -466,7 +459,7 @@ export function InfluencersDeliverablesTab({ campaign, onRefresh }: InfluencersD
                             </div>
                           </TableCell>
                           <TableCell className="text-xs text-right font-medium">
-                            {cc.rateAmount ? formatCurrency(cc.rateAmount, cc.rateCurrency || campaign.currency) : '—'}
+                            {cc.rateAmount ? formatCurrency(cc.rateAmount, cc.rateCurrency || campaign.currency || 'INR') : '—'}
                           </TableCell>
                           <TableCell>
                             <Badge variant={cc.proposalState === 'ACCEPTED' ? 'default' : 'secondary'} className="text-[10px]">
@@ -478,7 +471,7 @@ export function InfluencersDeliverablesTab({ campaign, onRefresh }: InfluencersD
                     <TableRow className="font-medium">
                       <TableCell className="text-xs">Total</TableCell>
                       <TableCell className="text-xs text-right">
-                        {formatCurrency(feeSummary.totalFees, campaign.currency)}
+                        {formatCurrency(feeSummary.totalFees, campaign.currency || 'INR')}
                       </TableCell>
                       <TableCell />
                     </TableRow>

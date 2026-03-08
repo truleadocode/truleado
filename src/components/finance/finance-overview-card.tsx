@@ -13,6 +13,7 @@ import {
   Percent,
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+import { formatCurrency } from "@/lib/currency"
 
 interface FinanceSummary {
   totalBudget: number | null
@@ -42,17 +43,9 @@ const DONUT_COLORS = {
 
 export function FinanceOverviewCard({ summary }: FinanceOverviewCardProps) {
   const currency = summary.currency || "INR"
-  const locale = currency === "INR" ? "en-IN" : "en-US"
 
-  const formatMoney = (amount: number | null) => {
-    if (amount == null) return "—"
-    return new Intl.NumberFormat(locale, {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
+  const formatMoney = (amount: number | null) =>
+    formatCurrency(amount, currency)
 
   const warningBadge = () => {
     if (summary.warningLevel === "critical") {

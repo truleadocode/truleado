@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, memo } from "react"
+import { useState, memo } from "react"
 import {
   Table,
   TableBody,
@@ -29,6 +29,7 @@ import { graphqlRequest, mutations } from "@/lib/graphql/client"
 import { ExpenseDialog } from "./expense-dialog"
 import { MoreHorizontal, Check, Trash2, Download } from "lucide-react"
 import { format } from "date-fns"
+import { formatCurrency } from "@/lib/currency"
 
 interface Expense {
   id: string
@@ -74,17 +75,8 @@ export const ExpensesTable = memo(function ExpensesTable({
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const { toast } = useToast()
 
-  const locale = campaignCurrency === "INR" ? "en-IN" : "en-US"
-  const formatMoney = useCallback(
-    (amount: number, currency?: string) =>
-      new Intl.NumberFormat(locale, {
-        style: "currency",
-        currency: currency || campaignCurrency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 2,
-      }).format(amount),
-    [locale, campaignCurrency]
-  )
+  const formatMoney = (amount: number, currency?: string) =>
+    formatCurrency(amount, currency || campaignCurrency, { maximumFractionDigits: 2 })
 
   const filteredExpenses = expenses.filter((e) => {
     if (categoryFilter !== "all" && e.category !== categoryFilter) return false

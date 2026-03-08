@@ -24,6 +24,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { formatSmallestUnit } from '@/lib/currency'
 
 interface ProposalVersion {
   id: string
@@ -95,13 +96,7 @@ const getInitials = (name: string) => {
 
 const formatRate = (amount: number | null, currency: string | null) => {
   if (!amount) return null
-  const currencyCode = currency || 'INR'
-  const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: currencyCode,
-    minimumFractionDigits: 0,
-  }).format(amount / 100)
+  return formatSmallestUnit(amount, currency || 'INR')
 }
 
 const formatShortDateTime = (dateString: string) => {
