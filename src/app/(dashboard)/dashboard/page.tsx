@@ -44,7 +44,7 @@ export default function DashboardPage() {
   return (
     <>
       <Header 
-        title={`${getGreeting()}, ${user?.name?.split(' ')[0] || 'there'}`}
+        title={`${getGreeting()}, ${user?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there'}`}
         subtitle={currentAgency?.name ? `Managing ${currentAgency.name}` : undefined}
       />
       

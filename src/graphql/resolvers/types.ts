@@ -50,7 +50,7 @@ export const typeResolvers = {
       
       return data?.provider_uid || '';
     },
-    name: (parent: { full_name: string | null }) => parent.full_name,
+    name: (parent: { full_name?: string | null; name?: string | null }) => parent.full_name ?? parent.name ?? null,
     avatarUrl: (parent: { avatar_url: string | null }) => parent.avatar_url,
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
