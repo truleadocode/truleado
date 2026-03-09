@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { queries } from '@/lib/graphql/client'
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -59,17 +59,23 @@ export default function SignupPage() {
     resolver: zodResolver(signupSchema),
   })
 
-  // Fetch invitation details if token is present
+  // Fetch invitation details if token is present (no auth needed — public query)
   useEffect(() => {
     if (!inviteToken) return
-    graphqlRequest<{ invitationByToken: { email: string; role: string; agencyName: string | null } | null }>(
-      queries.invitationByToken,
-      { token: inviteToken }
-    )
-      .then((data) => {
-        if (data.invitationByToken) {
-          setInviteInfo(data.invitationByToken)
-          setValue('email', data.invitationByToken.email)
+    fetch('/api/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: queries.invitationByToken,
+        variables: { token: inviteToken },
+      }),
+    })
+      .then((r) => r.json())
+      .then((result) => {
+        const info = result.data?.invitationByToken
+        if (info) {
+          setInviteInfo(info)
+          setValue('email', info.email)
         }
       })
       .catch(() => {
