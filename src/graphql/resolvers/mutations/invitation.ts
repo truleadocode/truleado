@@ -75,29 +75,55 @@ export async function inviteTeamMembers(
       }
     }
 
-    // Upsert invitation (handles unique constraint on pending)
-    const { data: invitation, error } = await supabaseAdmin
+    // Check for existing pending invitation (partial unique index can't be used with upsert)
+    const { data: existingInvite } = await supabaseAdmin
       .from('agency_invitations')
-      .upsert(
-        {
+      .select('id')
+      .eq('agency_id', agencyId)
+      .eq('email', email)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (existingInvite) {
+      // Update existing pending invite (refresh expiry, update role)
+      const { data: invitation, error } = await supabaseAdmin
+        .from('agency_invitations')
+        .update({
+          role,
+          invited_by: user.id,
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        })
+        .eq('id', existingInvite.id)
+        .select('*')
+        .single();
+
+      if (error || !invitation) {
+        console.warn('[Invitation] Failed to update for', email, error?.message);
+        continue;
+      }
+      results.push(invitation);
+    } else {
+      const { data: invitation, error } = await supabaseAdmin
+        .from('agency_invitations')
+        .insert({
           agency_id: agencyId,
           email,
           role,
           invited_by: user.id,
           status: 'pending',
           expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        },
-        { onConflict: 'agency_id,email', ignoreDuplicates: false }
-      )
-      .select('*')
-      .single();
+        })
+        .select('*')
+        .single();
 
-    if (error || !invitation) {
-      console.warn('[Invitation] Failed to create for', email, error?.message);
-      continue;
+      if (error || !invitation) {
+        console.warn('[Invitation] Failed to create for', email, error?.message);
+        continue;
+      }
+      results.push(invitation);
     }
 
-    results.push(invitation);
+    const invitation = results[results.length - 1];
 
     // Send invitation email via Novu (fire-and-forget)
     const signupUrl = `${getBaseUrl()}/signup?invite=${invitation.token}`;
