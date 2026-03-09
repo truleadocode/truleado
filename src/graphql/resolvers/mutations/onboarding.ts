@@ -14,22 +14,41 @@ import { logActivity } from '@/lib/audit';
 
 interface IdName { id: string; name: string }
 
-/** Shared cleanup: removes all is_dummy entities for an agency (idempotent). */
+const DUMMY_CLIENT_NAMES = ['Luminara Beauty', 'FreshBite Foods'];
+const DUMMY_CREATOR_EMAILS = [
+  'aisha@example.com', 'rohan@example.com', 'meera@example.com',
+  'karan@example.com', 'divya@example.com', 'amit@example.com',
+];
+
+/** Shared cleanup: removes all dummy entities for an agency (idempotent).
+ *  Matches by is_dummy=true OR by known dummy names/emails to handle
+ *  orphaned rows from partial seeds before migration was applied. */
 async function cleanupDummyData(agencyId: string) {
-  const { data: dummyClients } = await supabaseAdmin
+  // Find dummy clients by flag OR by known names
+  const { data: byFlag } = await supabaseAdmin
     .from('clients')
     .select('id')
     .eq('agency_id', agencyId)
     .eq('is_dummy', true);
 
-  const clientIds = (dummyClients || []).map((c: { id: string }) => c.id);
+  const { data: byName } = await supabaseAdmin
+    .from('clients')
+    .select('id')
+    .eq('agency_id', agencyId)
+    .in('name', DUMMY_CLIENT_NAMES);
+
+  const allClientIds = [
+    ...(byFlag || []).map((c: { id: string }) => c.id),
+    ...(byName || []).map((c: { id: string }) => c.id),
+  ];
+  const clientIds = [...new Set(allClientIds)];
 
   if (clientIds.length > 0) {
+    // Find projects under dummy clients
     const { data: dummyProjects } = await supabaseAdmin
       .from('projects')
       .select('id')
-      .in('client_id', clientIds)
-      .eq('is_dummy', true);
+      .in('client_id', clientIds);
 
     const projectIds = (dummyProjects || []).map((p: { id: string }) => p.id);
 
@@ -37,13 +56,12 @@ async function cleanupDummyData(agencyId: string) {
       const { data: dummyCampaigns } = await supabaseAdmin
         .from('campaigns')
         .select('id')
-        .in('project_id', projectIds)
-        .eq('is_dummy', true);
+        .in('project_id', projectIds);
 
       const campaignIds = (dummyCampaigns || []).map((c: { id: string }) => c.id);
 
       if (campaignIds.length > 0) {
-        await supabaseAdmin.from('deliverables').delete().in('campaign_id', campaignIds).eq('is_dummy', true);
+        await supabaseAdmin.from('deliverables').delete().in('campaign_id', campaignIds);
         await supabaseAdmin.from('campaign_users').delete().in('campaign_id', campaignIds);
         await supabaseAdmin.from('campaign_creators').delete().in('campaign_id', campaignIds);
         await supabaseAdmin.from('campaigns').delete().in('id', campaignIds);
@@ -52,13 +70,15 @@ async function cleanupDummyData(agencyId: string) {
       await supabaseAdmin.from('projects').delete().in('id', projectIds);
     }
 
-    await supabaseAdmin.from('contacts').delete().in('client_id', clientIds).eq('is_dummy', true);
+    await supabaseAdmin.from('contacts').delete().in('client_id', clientIds);
     await supabaseAdmin.from('clients').delete().in('id', clientIds);
   }
 
+  // Delete dummy creators by flag OR known emails
   await supabaseAdmin.from('creators').delete().eq('agency_id', agencyId).eq('is_dummy', true);
+  await supabaseAdmin.from('creators').delete().eq('agency_id', agencyId).in('email', DUMMY_CREATOR_EMAILS);
 
-  // Clear flag (safe even if column doesn't exist — update is a no-op)
+  // Clear flag
   try {
     await supabaseAdmin.from('agencies').update({ has_dummy_data: false }).eq('id', agencyId);
   } catch {
