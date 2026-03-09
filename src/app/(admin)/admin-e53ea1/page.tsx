@@ -15,6 +15,8 @@ interface AgencySummary {
   trialEndDate: string | null
   trialDays: number | null
   subscriptionStatus: string | null
+  subscriptionTier: string | null
+  billingInterval: string | null
   userCount: number
 }
 
@@ -113,9 +115,9 @@ export default function AdminDashboard() {
                 <thead>
                   <tr className="border-b bg-muted/50">
                     <th className="text-left font-medium p-3">Agency</th>
-                    <th className="text-left font-medium p-3">Status</th>
+                    <th className="text-left font-medium p-3">Plan</th>
                     <th className="text-center font-medium p-3">Users</th>
-                    <th className="text-left font-medium p-3">Trial</th>
+                    <th className="text-left font-medium p-3">Details</th>
                     <th className="text-left font-medium p-3">Created</th>
                     <th className="text-left font-medium p-3">Currency</th>
                   </tr>
@@ -136,13 +138,17 @@ export default function AdminDashboard() {
                       </td>
                       <td className="p-3">
                         <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full ${statusColor(a.subscriptionStatus)}`}>
-                          {a.subscriptionStatus || '—'}
+                          {a.subscriptionTier
+                            ? `${a.subscriptionTier.charAt(0).toUpperCase() + a.subscriptionTier.slice(1)} · ${a.subscriptionStatus || '—'}`
+                            : a.subscriptionStatus || '—'}
                         </span>
                       </td>
                       <td className="p-3 text-center">{a.userCount}</td>
                       <td className="p-3 text-xs">
                         <span className="text-muted-foreground">
-                          {a.trialDays}d &middot; {daysRemaining(a.trialEndDate)}
+                          {a.subscriptionStatus === 'trial'
+                            ? `${a.trialDays}d trial · ${daysRemaining(a.trialEndDate)}`
+                            : a.billingInterval || '—'}
                         </span>
                       </td>
                       <td className="p-3 text-muted-foreground text-xs">

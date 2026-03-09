@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Lock } from 'lucide-react'
+import Link from 'next/link'
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [authed, setAuthed] = useState<boolean | null>(null)
@@ -81,8 +82,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 items-center px-6">
-          <h1 className="font-semibold">Truleado Admin</h1>
+        <div className="container flex h-14 items-center px-6 gap-6">
+          <Link href="/admin-e53ea1" className="font-semibold hover:text-primary">
+            Truleado Admin
+          </Link>
+          <nav className="flex items-center gap-4 text-sm">
+            <Link href="/admin-e53ea1" className="text-muted-foreground hover:text-foreground">
+              Agencies
+            </Link>
+            <Link href="/admin-e53ea1/pricing" className="text-muted-foreground hover:text-foreground">
+              Pricing
+            </Link>
+          </nav>
         </div>
       </header>
       {children}

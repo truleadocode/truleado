@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: agencies, error } = await supabaseAdmin
     .from('agencies')
-    .select('id, name, status, created_at, trial_start_date, trial_end_date, trial_days, subscription_status, currency_code, billing_email')
+    .select('id, name, status, created_at, trial_start_date, trial_end_date, trial_days, subscription_status, subscription_tier, billing_interval, currency_code, billing_email')
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -52,6 +52,8 @@ export async function GET() {
     trialEndDate: a.trial_end_date,
     trialDays: a.trial_days,
     subscriptionStatus: a.subscription_status,
+    subscriptionTier: a.subscription_tier,
+    billingInterval: a.billing_interval,
     userCount: countMap[a.id] || 0,
   }));
 

@@ -47,11 +47,11 @@ export async function GET(
   const userIds = (agencyUsers || []).map((u: any) => u.user_id);
   const { data: users } = await supabaseAdmin
     .from('users')
-    .select('id, name, email')
+    .select('id, full_name, email')
     .in('id', userIds.length > 0 ? userIds : ['__none__']);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userMap = new Map((users || []).map((u: any) => [u.id, u]));
+  const userMap = new Map((users || []).map((u: any) => [u.id, { id: u.id, name: u.full_name, email: u.email }]));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const enrichedUsers = (agencyUsers || []).map((au: any) => ({
@@ -81,6 +81,13 @@ export async function PATCH(
     trialDays?: number;
     trialEndDate?: string;
     subscriptionStatus?: string;
+    subscriptionTier?: string;
+    billingInterval?: string;
+    subscriptionStartDate?: string;
+    subscriptionEndDate?: string;
+    enterprisePriceMonthly?: number | null;
+    enterprisePriceYearly?: number | null;
+    enterpriseCurrency?: string | null;
   };
 
   const updateFields: Record<string, unknown> = {};
@@ -97,6 +104,38 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid subscription status' }, { status: 400 });
     }
     updateFields.subscription_status = body.subscriptionStatus;
+  }
+  if (body.subscriptionTier !== undefined) {
+    const validTiers = ['basic', 'pro', 'enterprise'];
+    if (body.subscriptionTier && !validTiers.includes(body.subscriptionTier)) {
+      return NextResponse.json({ error: 'Invalid subscription tier' }, { status: 400 });
+    }
+    updateFields.subscription_tier = body.subscriptionTier || null;
+  }
+  if (body.billingInterval !== undefined) {
+    const validIntervals = ['monthly', 'yearly'];
+    if (body.billingInterval && !validIntervals.includes(body.billingInterval)) {
+      return NextResponse.json({ error: 'Invalid billing interval' }, { status: 400 });
+    }
+    updateFields.billing_interval = body.billingInterval || null;
+  }
+  if (body.subscriptionStartDate !== undefined) {
+    updateFields.subscription_start_date = body.subscriptionStartDate;
+  }
+  if (body.subscriptionEndDate !== undefined) {
+    updateFields.subscription_end_date = body.subscriptionEndDate;
+  }
+  if (body.enterprisePriceMonthly !== undefined) {
+    updateFields.enterprise_price_monthly = body.enterprisePriceMonthly;
+  }
+  if (body.enterprisePriceYearly !== undefined) {
+    updateFields.enterprise_price_yearly = body.enterprisePriceYearly;
+  }
+  if (body.enterpriseCurrency !== undefined) {
+    if (body.enterpriseCurrency && !['INR', 'USD'].includes(body.enterpriseCurrency)) {
+      return NextResponse.json({ error: 'Invalid enterprise currency' }, { status: 400 });
+    }
+    updateFields.enterprise_currency = body.enterpriseCurrency;
   }
 
   if (Object.keys(updateFields).length === 0) {
