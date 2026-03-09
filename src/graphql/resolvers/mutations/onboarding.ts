@@ -21,16 +21,28 @@ export async function seedDummyData(
 ) {
   const user = requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN]);
 
-  // Guard against double-seeding
-  const { data: agency } = await supabaseAdmin
+  // Verify agency exists
+  const { data: agency, error: agencyErr } = await supabaseAdmin
     .from('agencies')
-    .select('has_dummy_data')
+    .select('id')
     .eq('id', agencyId)
     .single();
 
-  if (!agency) throw notFoundError('Agency', agencyId);
-  if (agency.has_dummy_data) {
-    throw validationError('Sample data already exists. Delete it first to re-seed.');
+  if (agencyErr || !agency) throw notFoundError('Agency', agencyId);
+
+  // Guard against double-seeding (has_dummy_data may not exist before migration 00051)
+  try {
+    const { data: dummyRow } = await supabaseAdmin
+      .from('agencies')
+      .select('has_dummy_data')
+      .eq('id', agencyId)
+      .single();
+    if (dummyRow?.has_dummy_data) {
+      throw validationError('Sample data already exists. Delete it first to re-seed.');
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Sample data already exists. Delete it first to re-seed.') throw e;
+    // Column doesn't exist yet — proceed
   }
 
   // --- Clients (2) ---
@@ -61,7 +73,7 @@ export async function seedDummyData(
     .select('id, name');
 
   if (clientErr || !clients || clients.length !== 2)
-    throw new Error('Failed to seed clients');
+    throw new Error(`Failed to seed clients: ${clientErr?.message || 'unexpected result'}`);
 
   const luminara = clients.find((c: IdName) => c.name === 'Luminara Beauty')!;
   const freshbite = clients.find((c: IdName) => c.name === 'FreshBite Foods')!;
@@ -75,7 +87,7 @@ export async function seedDummyData(
     { client_id: freshbite.id, first_name: 'Neha', last_name: 'Gupta', email: 'neha@freshbite.example', job_title: 'Marketing Manager', is_dummy: true, contact_status: 'active' },
     { client_id: freshbite.id, first_name: 'Arjun', last_name: 'Reddy', email: 'arjun@freshbite.example', job_title: 'Digital Lead', is_dummy: true, contact_status: 'active' },
   ]);
-  if (contactErr) throw new Error('Failed to seed contacts');
+  if (contactErr) throw new Error(`Failed to seed contacts: ${contactErr.message}`);
 
   // --- Projects (3) ---
   const { data: projects, error: projErr } = await supabaseAdmin
@@ -87,7 +99,7 @@ export async function seedDummyData(
     ])
     .select('id, name');
 
-  if (projErr || !projects) throw new Error('Failed to seed projects');
+  if (projErr || !projects) throw new Error(`Failed to seed projects: ${projErr?.message || 'no data returned'}`);
 
   const proj1 = projects.find((p: IdName) => p.name === 'Luminara Summer Glow Campaign')!;
   const proj2 = projects.find((p: IdName) => p.name === 'FreshBite Health Series')!;
@@ -105,16 +117,17 @@ export async function seedDummyData(
     ])
     .select('id, name');
 
-  if (campErr || !campaigns) throw new Error('Failed to seed campaigns');
+  if (campErr || !campaigns) throw new Error(`Failed to seed campaigns: ${campErr?.message || 'no data returned'}`);
 
   // Assign current user as approver for all campaigns
-  await supabaseAdmin.from('campaign_users').insert(
+  const { error: cuErr } = await supabaseAdmin.from('campaign_users').insert(
     campaigns.map((c: IdName) => ({
       campaign_id: c.id,
       user_id: user.id,
       role: 'approver',
     }))
   );
+  if (cuErr) throw new Error(`Failed to assign campaign approvers: ${cuErr.message}`);
 
   // --- Creators (6) ---
   const { error: creatorErr } = await supabaseAdmin.from('creators').insert([
@@ -125,7 +138,7 @@ export async function seedDummyData(
     { agency_id: agencyId, display_name: 'Divya Joshi', email: 'divya@example.com', instagram_handle: 'divya.creates', youtube_handle: 'DivyaCreates', is_active: true, is_dummy: true, notes: 'DIY & Crafts niche' },
     { agency_id: agencyId, display_name: 'Amit Tiwari', email: 'amit@example.com', instagram_handle: 'amit.techreview', youtube_handle: 'AmitTechReview', is_active: true, is_dummy: true, notes: 'Tech Reviews niche' },
   ]);
-  if (creatorErr) throw new Error('Failed to seed creators');
+  if (creatorErr) throw new Error(`Failed to seed creators: ${creatorErr.message}`);
 
   // --- Deliverables (7) ---
   const camp1 = campaigns.find((c: IdName) => c.name === 'Summer Skincare Reels')!;
@@ -143,7 +156,7 @@ export async function seedDummyData(
     { campaign_id: camp4.id, title: 'FreshBite Recipe Tutorial', deliverable_type: 'youtube_video', status: 'pending', is_dummy: true, description: 'Full recipe tutorial using FreshBite ingredients' },
     { campaign_id: camp5.id, title: 'Diwali Feast IG Carousel', deliverable_type: 'instagram_carousel', status: 'pending', is_dummy: true, description: '10-slide carousel of festive food spread' },
   ]);
-  if (delErr) throw new Error('Failed to seed deliverables');
+  if (delErr) throw new Error(`Failed to seed deliverables: ${delErr.message}`);
 
   // Mark agency
   await supabaseAdmin.from('agencies').update({ has_dummy_data: true }).eq('id', agencyId);

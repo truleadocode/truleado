@@ -744,13 +744,26 @@ export const queryResolvers = {
     requireAuth(ctx);
     requireAgencyMembership(ctx, agencyId);
 
-    const { data: agency } = await supabaseAdmin
+    const { data: agency, error: agencyErr } = await supabaseAdmin
       .from('agencies')
-      .select('name, primary_email, phone, website, address_line1, city, country, has_dummy_data')
+      .select('name, primary_email, phone, website, address_line1, city, country')
       .eq('id', agencyId)
       .single();
 
-    if (!agency) throw notFoundError('Agency', agencyId);
+    if (agencyErr || !agency) throw notFoundError('Agency', agencyId);
+
+    // has_dummy_data may not exist if migration 00051 hasn't been applied yet
+    let hasDummyData = false;
+    try {
+      const { data: dummyRow } = await supabaseAdmin
+        .from('agencies')
+        .select('has_dummy_data')
+        .eq('id', agencyId)
+        .single();
+      hasDummyData = dummyRow?.has_dummy_data || false;
+    } catch {
+      // Column doesn't exist yet — safe to ignore
+    }
 
     const hasName = !!agency.name?.trim();
     const hasPrimaryEmail = !!agency.primary_email?.trim();
@@ -795,7 +808,7 @@ export const queryResolvers = {
       contactCount,
       isProfileComplete,
       isOnboardingComplete,
-      hasDummyData: agency.has_dummy_data || false,
+      hasDummyData,
     };
   },
 
