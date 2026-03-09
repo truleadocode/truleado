@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   requireAuth,
   requireAgencyMembership,
+  requireAgencyRole,
   requireCampaignAccess,
   requireClientAccess,
   requireProjectAccess,
@@ -638,6 +639,53 @@ export const queryResolvers = {
       .maybeSingle();
 
     if (error) throw new Error('Failed to fetch email config');
+    return data;
+  },
+
+  // =============================================================================
+  // TEAM INVITATIONS
+  // =============================================================================
+
+  pendingInvitations: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN, AgencyRole.ACCOUNT_MANAGER]);
+
+    const { data, error } = await supabaseAdmin
+      .from('agency_invitations')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch invitations');
+    return data || [];
+  },
+
+  invitationByToken: async (
+    _: unknown,
+    { token }: { token: string }
+  ) => {
+    const { data } = await supabaseAdmin
+      .from('agency_invitations')
+      .select('*')
+      .eq('token', token)
+      .eq('status', 'pending')
+      .single();
+
+    if (!data) return null;
+
+    // Check if expired
+    if (new Date(data.expires_at) < new Date()) {
+      await supabaseAdmin
+        .from('agency_invitations')
+        .update({ status: 'expired' })
+        .eq('id', data.id);
+      return null;
+    }
+
     return data;
   },
 

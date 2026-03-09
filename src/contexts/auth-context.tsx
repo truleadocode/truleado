@@ -130,7 +130,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           name: userData.name,
         })
 
-        const userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string; agencyCode?: string | null; currencyCode?: string | null; timezone?: string | null; languageCode?: string | null }; role: string }) => ({
+        let userAgencies = userData.agencies?.map((membership: { agency: { id: string; name: string; agencyCode?: string | null; currencyCode?: string | null; timezone?: string | null; languageCode?: string | null }; role: string }) => ({
           id: membership.agency.id,
           name: membership.agency.name,
           agencyCode: membership.agency.agencyCode,
@@ -140,14 +140,54 @@ export function AuthProvider({ children }: AuthProviderProps) {
           role: membership.role,
         })) || []
 
+        // Auto-accept pending invite if user has no agencies and a token is stored
+        const pendingToken = typeof window !== 'undefined' ? localStorage.getItem('pendingInviteToken') : null
+        if (pendingToken && userAgencies.length === 0) {
+          try {
+            const acceptRes = await fetch('/api/graphql', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              body: JSON.stringify({
+                query: `mutation AcceptInvitation($token: String!) { acceptInvitation(token: $token) { id name agencyCode currencyCode timezone languageCode } }`,
+                variables: { token: pendingToken },
+              }),
+            })
+            const acceptResult = await acceptRes.json()
+            if (acceptResult.data?.acceptInvitation) {
+              const agency = acceptResult.data.acceptInvitation
+              // Re-fetch to get role info
+              const reFetch = await fetch('/api/graphql', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ query: `query { me { agencies { agency { id name agencyCode currencyCode timezone languageCode } role } } }` }),
+              })
+              const reResult = await reFetch.json()
+              if (reResult.data?.me?.agencies) {
+                const updatedAgencies = reResult.data.me.agencies.map((m: { agency: { id: string; name: string; agencyCode?: string | null; currencyCode?: string | null; timezone?: string | null; languageCode?: string | null }; role: string }) => ({
+                  id: m.agency.id, name: m.agency.name, agencyCode: m.agency.agencyCode,
+                  currencyCode: m.agency.currencyCode, timezone: m.agency.timezone, languageCode: m.agency.languageCode, role: m.role,
+                }))
+                userAgencies = updatedAgencies
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to accept invite:', err)
+          } finally {
+            localStorage.removeItem('pendingInviteToken')
+          }
+        } else if (pendingToken) {
+          // User already has agencies, clear the token
+          localStorage.removeItem('pendingInviteToken')
+        }
+
         setAgencies(userAgencies)
         setContact(userData.contact ?? null)
 
         // Set current agency from localStorage or first agency
-        const savedAgencyId = typeof window !== 'undefined' 
-          ? localStorage.getItem('currentAgencyId') 
+        const savedAgencyId = typeof window !== 'undefined'
+          ? localStorage.getItem('currentAgencyId')
           : null
-        
+
         const savedAgency = userAgencies.find((a: Agency) => a.id === savedAgencyId)
         setCurrentAgencyState(savedAgency || userAgencies[0] || null)
       }

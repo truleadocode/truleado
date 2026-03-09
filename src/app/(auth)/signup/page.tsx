@@ -1,16 +1,18 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check, ArrowLeft } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check, ArrowLeft, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/auth-context'
+import { graphqlRequest, queries } from '@/lib/graphql/client'
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -29,22 +31,51 @@ const signupSchema = z.object({
 
 type SignupFormData = z.infer<typeof signupSchema>
 
+interface InviteInfo {
+  email: string
+  role: string
+  agencyName: string | null
+}
+
 export default function SignupPage() {
   const { signUp, loading, error, clearError } = useAuth()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
+
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [signupSuccess, setSignupSuccess] = useState(false)
   const [userEmail, setUserEmail] = useState('')
+  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null)
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
   })
+
+  // Fetch invitation details if token is present
+  useEffect(() => {
+    if (!inviteToken) return
+    graphqlRequest<{ invitationByToken: { email: string; role: string; agencyName: string | null } | null }>(
+      queries.invitationByToken,
+      { token: inviteToken }
+    )
+      .then((data) => {
+        if (data.invitationByToken) {
+          setInviteInfo(data.invitationByToken)
+          setValue('email', data.invitationByToken.email)
+        }
+      })
+      .catch(() => {
+        // Token invalid or expired, continue with normal signup
+      })
+  }, [inviteToken, setValue])
 
   const password = watch('password', '')
 
@@ -59,6 +90,10 @@ export default function SignupPage() {
     clearError()
     setIsSubmitting(true)
     try {
+      // Store invite token for post-signup acceptance
+      if (inviteToken) {
+        localStorage.setItem('pendingInviteToken', inviteToken)
+      }
       await signUp(data.email, data.password, data.name)
       setUserEmail(data.email)
       setSignupSuccess(true)
@@ -151,13 +186,27 @@ export default function SignupPage() {
 
       <Card className="border-0 shadow-none lg:border lg:shadow-sm">
         <CardHeader className="space-y-1 pb-4">
-          <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">
+            {inviteInfo ? 'Accept Invitation' : 'Create an account'}
+          </CardTitle>
           <CardDescription>
-            Get started with your free account today
+            {inviteInfo
+              ? `You've been invited to join ${inviteInfo.agencyName || 'an agency'}`
+              : 'Get started with your free account today'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {inviteInfo && (
+              <div className="flex items-center gap-2 p-3 text-sm text-primary bg-primary/10 rounded-lg">
+                <UserPlus className="h-4 w-4 shrink-0" />
+                <span>
+                  You&apos;ll join <strong>{inviteInfo.agencyName}</strong> as{' '}
+                  <strong>{inviteInfo.role.replace(/_/g, ' ')}</strong> after signing up.
+                </span>
+              </div>
+            )}
+
             {error && (
               <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -193,6 +242,7 @@ export default function SignupPage() {
                   placeholder="name@company.com"
                   className="pl-10"
                   error={!!errors.email}
+                  disabled={!!inviteInfo}
                   {...register('email')}
                 />
               </div>

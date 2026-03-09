@@ -189,6 +189,20 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  type AgencyInvitation {
+    id: ID!
+    agencyId: ID!
+    agencyName: String
+    email: String!
+    role: String!
+    invitedBy: User
+    token: String!
+    status: String!
+    expiresAt: DateTime!
+    createdAt: DateTime!
+    acceptedAt: DateTime
+  }
+
   # 4.3 Client
   type Client {
     id: ID!
@@ -1197,6 +1211,11 @@ export const typeDefs = gql`
     languageCode: String!
   }
 
+  input TeamInviteInput {
+    email: String!
+    role: String!
+  }
+
   input UpdateAgencyProfileInput {
     name: String
     logoUrl: String
@@ -1328,6 +1347,11 @@ export const typeDefs = gql`
     notifications(agencyId: ID!, unreadOnly: Boolean): [Notification!]!
     # Agency email (SMTP) config for notifications (agency members; password never returned)
     agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
+
+    # Pending invitations for an agency (agency admin / account manager)
+    pendingInvitations(agencyId: ID!): [AgencyInvitation!]!
+    # Look up invitation by token (public, for pre-filling signup)
+    invitationByToken(token: String!): AgencyInvitation
 
     # ---------------------------------------------
     # Social Media Analytics Queries
@@ -1603,6 +1627,12 @@ export const typeDefs = gql`
     updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
     # Update agency profile (name, logo, address, etc.); agency_admin only.
     updateAgencyProfile(agencyId: ID!, input: UpdateAgencyProfileInput!): Agency!
+    # Invite team members by email (batch); agency_admin / account_manager only.
+    inviteTeamMembers(agencyId: ID!, invites: [TeamInviteInput!]!): [AgencyInvitation!]!
+    # Revoke a pending invitation; agency_admin only.
+    revokeInvitation(id: ID!): Boolean!
+    # Accept an invitation by token (post-signup); authenticated users only.
+    acceptInvitation(token: String!): Agency!
 
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations

@@ -550,6 +550,33 @@ export const queries = {
     }
   `,
 
+  pendingInvitations: `
+    query GetPendingInvitations($agencyId: ID!) {
+      pendingInvitations(agencyId: $agencyId) {
+        id
+        email
+        role
+        status
+        expiresAt
+        createdAt
+        invitedBy { name email }
+      }
+    }
+  `,
+
+  invitationByToken: `
+    query GetInvitationByToken($token: String!) {
+      invitationByToken(token: $token) {
+        id
+        email
+        role
+        agencyName
+        status
+        expiresAt
+      }
+    }
+  `,
+
   campaigns: `
     query GetCampaigns($projectId: ID!) {
       campaigns(projectId: $projectId) {
@@ -2457,6 +2484,34 @@ export const mutations = {
         primaryEmail
         phone
         website
+      }
+    }
+  `,
+
+  inviteTeamMembers: `
+    mutation InviteTeamMembers($agencyId: ID!, $invites: [TeamInviteInput!]!) {
+      inviteTeamMembers(agencyId: $agencyId, invites: $invites) {
+        id
+        email
+        role
+        status
+        createdAt
+      }
+    }
+  `,
+
+  revokeInvitation: `
+    mutation RevokeInvitation($id: ID!) {
+      revokeInvitation(id: $id)
+    }
+  `,
+
+  acceptInvitation: `
+    mutation AcceptInvitation($token: String!) {
+      acceptInvitation(token: $token) {
+        id
+        name
+        agencyCode
       }
     }
   `,

@@ -6,6 +6,7 @@
 
 import { createUser, ensureClientUser, ensureCreatorUser } from './user';
 import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale, updateAgencyProfile } from './agency';
+import { inviteTeamMembers, revokeInvitation, acceptInvitation } from './invitation';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser, updateProjectStatus, bulkUpdateProjectStatus, bulkArchiveProjects, archiveProject, updateProject } from './project';
 import {
@@ -120,6 +121,9 @@ export const mutationResolvers = {
   joinAgencyByCode,
   updateAgencyLocale,
   updateAgencyProfile,
+  inviteTeamMembers,
+  revokeInvitation,
+  acceptInvitation,
   createClient,
   updateClient,
   archiveClient,

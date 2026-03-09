@@ -120,6 +120,29 @@ export const typeResolvers = {
     },
   },
 
+  AgencyInvitation: {
+    agencyId: (parent: { agency_id: string }) => parent.agency_id,
+    agencyName: async (parent: { agency_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('agencies')
+        .select('name')
+        .eq('id', parent.agency_id)
+        .single();
+      return data?.name || null;
+    },
+    invitedBy: async (parent: { invited_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.invited_by)
+        .single();
+      return data;
+    },
+    expiresAt: (parent: { expires_at: string }) => parent.expires_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    acceptedAt: (parent: { accepted_at: string | null }) => parent.accepted_at,
+  },
+
   AgencyUser: {
     // Field mappings
     isActive: (parent: { is_active: boolean }) => parent.is_active,
