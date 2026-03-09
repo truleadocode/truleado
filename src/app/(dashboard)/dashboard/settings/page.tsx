@@ -36,7 +36,7 @@ const settingsSections = [
   },
   {
     title: 'Security',
-    description: 'Update password, enable 2FA, and view login history',
+    description: 'Update your account password',
     icon: Shield,
     href: '/dashboard/settings/security',
   },

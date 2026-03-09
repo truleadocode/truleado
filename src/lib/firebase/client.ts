@@ -18,6 +18,9 @@ import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User,
   UserCredential,
   ActionCodeSettings,
@@ -149,4 +152,21 @@ export async function signInWithClientLink(
   emailLink: string
 ): Promise<UserCredential> {
   return signInWithEmailLink(auth, email, emailLink);
+}
+
+/**
+ * Change the current user's password.
+ * Requires reauthentication with the current password first.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('No authenticated user');
+  }
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
 }
