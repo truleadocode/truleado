@@ -1798,6 +1798,23 @@ export const queries = {
       }
     }
   `,
+
+  onboardingStatus: `
+    query GetOnboardingStatus($agencyId: ID!) {
+      onboardingStatus(agencyId: $agencyId) {
+        hasName
+        hasPrimaryEmail
+        hasPhone
+        hasWebsite
+        hasAddress
+        clientCount
+        contactCount
+        isProfileComplete
+        isOnboardingComplete
+        hasDummyData
+      }
+    }
+  `,
 };
 
 /**
@@ -3265,6 +3282,18 @@ export const mutations = {
   sendDeliverableReminder: `
     mutation SendDeliverableReminder($deliverableId: ID!) {
       sendDeliverableReminder(deliverableId: $deliverableId)
+    }
+  `,
+
+  seedDummyData: `
+    mutation SeedDummyData($agencyId: ID!) {
+      seedDummyData(agencyId: $agencyId)
+    }
+  `,
+
+  deleteDummyData: `
+    mutation DeleteDummyData($agencyId: ID!) {
+      deleteDummyData(agencyId: $agencyId)
     }
   `,
 };

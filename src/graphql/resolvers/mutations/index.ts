@@ -110,6 +110,7 @@ import {
   dismissContactReminder,
   deleteContactReminder,
 } from './contact-detail';
+import { seedDummyData, deleteDummyData } from './onboarding';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -257,4 +258,8 @@ export const mutationResolvers = {
   createContactReminder,
   dismissContactReminder,
   deleteContactReminder,
+
+  // Onboarding
+  seedDummyData,
+  deleteDummyData,
 };

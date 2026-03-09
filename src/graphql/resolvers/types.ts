@@ -104,6 +104,7 @@ export const typeResolvers = {
     billingInterval: (parent: { billing_interval: string | null }) => parent.billing_interval,
     subscriptionStartDate: (parent: { subscription_start_date: string | null }) => parent.subscription_start_date,
     subscriptionEndDate: (parent: { subscription_end_date: string | null }) => parent.subscription_end_date,
+    hasDummyData: (parent: { has_dummy_data: boolean | null }) => parent.has_dummy_data || false,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     clients: async (parent: WithId) => {
       const { data } = await supabaseAdmin

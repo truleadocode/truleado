@@ -733,6 +733,73 @@ export const queryResolvers = {
   },
 
   // =============================================================================
+  // ONBOARDING
+  // =============================================================================
+
+  onboardingStatus: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data: agency } = await supabaseAdmin
+      .from('agencies')
+      .select('name, primary_email, phone, website, address_line1, city, country, has_dummy_data')
+      .eq('id', agencyId)
+      .single();
+
+    if (!agency) throw notFoundError('Agency', agencyId);
+
+    const hasName = !!agency.name?.trim();
+    const hasPrimaryEmail = !!agency.primary_email?.trim();
+    const hasPhone = !!agency.phone?.trim();
+    const hasWebsite = !!agency.website?.trim();
+    const hasAddress = !!(agency.address_line1?.trim() && agency.city?.trim() && agency.country?.trim());
+
+    // Count clients
+    const { count: clientCount } = await supabaseAdmin
+      .from('clients')
+      .select('id', { count: 'exact', head: true })
+      .eq('agency_id', agencyId)
+      .eq('is_active', true);
+
+    // Count contacts via client IDs
+    const { data: clientIds } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('agency_id', agencyId)
+      .eq('is_active', true);
+
+    const clientIdList = (clientIds || []).map((c: { id: string }) => c.id);
+    let contactCount = 0;
+    if (clientIdList.length > 0) {
+      const { count } = await supabaseAdmin
+        .from('contacts')
+        .select('id', { count: 'exact', head: true })
+        .in('client_id', clientIdList);
+      contactCount = count || 0;
+    }
+
+    const isProfileComplete = hasName && hasPrimaryEmail && hasPhone && hasWebsite && hasAddress;
+    const isOnboardingComplete = isProfileComplete && (clientCount || 0) >= 1 && contactCount >= 1;
+
+    return {
+      hasName,
+      hasPrimaryEmail,
+      hasPhone,
+      hasWebsite,
+      hasAddress,
+      clientCount: clientCount || 0,
+      contactCount,
+      isProfileComplete,
+      isOnboardingComplete,
+      hasDummyData: agency.has_dummy_data || false,
+    };
+  },
+
+  // =============================================================================
   // SOCIAL MEDIA ANALYTICS QUERIES
   // =============================================================================
 

@@ -180,6 +180,7 @@ export const typeDefs = gql`
     billingInterval: String
     subscriptionStartDate: DateTime
     subscriptionEndDate: DateTime
+    hasDummyData: Boolean
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -227,6 +228,19 @@ export const typeDefs = gql`
     periodEnd: DateTime
     createdAt: DateTime!
     completedAt: DateTime
+  }
+
+  type OnboardingStatus {
+    hasName: Boolean!
+    hasPrimaryEmail: Boolean!
+    hasPhone: Boolean!
+    hasWebsite: Boolean!
+    hasAddress: Boolean!
+    clientCount: Int!
+    contactCount: Int!
+    isProfileComplete: Boolean!
+    isOnboardingComplete: Boolean!
+    hasDummyData: Boolean!
   }
 
   # 4.3 Client
@@ -1385,6 +1399,9 @@ export const typeDefs = gql`
     subscriptionPlans(currency: String!): [SubscriptionPlan!]!
     subscriptionPayments(agencyId: ID!): [SubscriptionPayment!]!
 
+    # Onboarding
+    onboardingStatus(agencyId: ID!): OnboardingStatus!
+
     # ---------------------------------------------
     # Social Media Analytics Queries
     # ---------------------------------------------
@@ -2193,5 +2210,9 @@ export const typeDefs = gql`
       sortField: String
       sortOrder: String
     ): SavedSearch!
+
+    # Onboarding dummy data
+    seedDummyData(agencyId: ID!): Boolean!
+    deleteDummyData(agencyId: ID!): Boolean!
   }
 `;
