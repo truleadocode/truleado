@@ -176,6 +176,10 @@ export const typeDefs = gql`
     trialEndDate: DateTime
     trialDays: Int
     subscriptionStatus: String
+    subscriptionTier: String
+    billingInterval: String
+    subscriptionStartDate: DateTime
+    subscriptionEndDate: DateTime
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -201,6 +205,28 @@ export const typeDefs = gql`
     expiresAt: DateTime!
     createdAt: DateTime!
     acceptedAt: DateTime
+  }
+
+  type SubscriptionPlan {
+    id: ID!
+    tier: String!
+    billingInterval: String!
+    currency: String!
+    priceAmount: Int!
+    isActive: Boolean!
+  }
+
+  type SubscriptionPayment {
+    id: ID!
+    planTier: String!
+    billingInterval: String!
+    amount: Int!
+    currency: String!
+    status: String!
+    periodStart: DateTime
+    periodEnd: DateTime
+    createdAt: DateTime!
+    completedAt: DateTime
   }
 
   # 4.3 Client
@@ -1352,6 +1378,12 @@ export const typeDefs = gql`
     pendingInvitations(agencyId: ID!): [AgencyInvitation!]!
     # Look up invitation by token (public, for pre-filling signup)
     invitationByToken(token: String!): AgencyInvitation
+
+    # ---------------------------------------------
+    # Subscription Queries
+    # ---------------------------------------------
+    subscriptionPlans(currency: String!): [SubscriptionPlan!]!
+    subscriptionPayments(agencyId: ID!): [SubscriptionPayment!]!
 
     # ---------------------------------------------
     # Social Media Analytics Queries

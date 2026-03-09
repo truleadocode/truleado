@@ -690,6 +690,49 @@ export const queryResolvers = {
   },
 
   // =============================================================================
+  // SUBSCRIPTION QUERIES
+  // =============================================================================
+
+  /**
+   * Get active subscription plans for a currency (public pricing)
+   */
+  subscriptionPlans: async (
+    _: unknown,
+    { currency }: { currency: string }
+  ) => {
+    const { data } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .eq('currency', currency.toUpperCase())
+      .eq('is_active', true)
+      .order('tier')
+      .order('billing_interval');
+
+    return data || [];
+  },
+
+  /**
+   * Get subscription payment history for an agency
+   */
+  subscriptionPayments: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data } = await supabaseAdmin
+      .from('subscription_payments')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    return data || [];
+  },
+
+  // =============================================================================
   // SOCIAL MEDIA ANALYTICS QUERIES
   // =============================================================================
 

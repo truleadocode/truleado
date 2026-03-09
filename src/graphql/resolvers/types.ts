@@ -100,6 +100,10 @@ export const typeResolvers = {
     trialEndDate: (parent: { trial_end_date: string | null }) => parent.trial_end_date,
     trialDays: (parent: { trial_days: number | null }) => parent.trial_days,
     subscriptionStatus: (parent: { subscription_status: string | null }) => parent.subscription_status,
+    subscriptionTier: (parent: { subscription_tier: string | null }) => parent.subscription_tier,
+    billingInterval: (parent: { billing_interval: string | null }) => parent.billing_interval,
+    subscriptionStartDate: (parent: { subscription_start_date: string | null }) => parent.subscription_start_date,
+    subscriptionEndDate: (parent: { subscription_end_date: string | null }) => parent.subscription_end_date,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     clients: async (parent: WithId) => {
       const { data } = await supabaseAdmin
@@ -141,6 +145,21 @@ export const typeResolvers = {
     expiresAt: (parent: { expires_at: string }) => parent.expires_at,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     acceptedAt: (parent: { accepted_at: string | null }) => parent.accepted_at,
+  },
+
+  SubscriptionPlan: {
+    billingInterval: (parent: { billing_interval: string }) => parent.billing_interval,
+    priceAmount: (parent: { price_amount: number }) => parent.price_amount,
+    isActive: (parent: { is_active: boolean }) => parent.is_active,
+  },
+
+  SubscriptionPayment: {
+    planTier: (parent: { plan_tier: string }) => parent.plan_tier,
+    billingInterval: (parent: { billing_interval: string }) => parent.billing_interval,
+    periodStart: (parent: { period_start: string | null }) => parent.period_start,
+    periodEnd: (parent: { period_end: string | null }) => parent.period_end,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    completedAt: (parent: { completed_at: string | null }) => parent.completed_at,
   },
 
   AgencyUser: {

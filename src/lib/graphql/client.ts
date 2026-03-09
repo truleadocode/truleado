@@ -1375,6 +1375,41 @@ export const queries = {
         id
         tokenBalance
         premiumTokenBalance
+        subscriptionStatus
+        subscriptionTier
+        billingInterval
+        trialEndDate
+        subscriptionEndDate
+      }
+    }
+  `,
+
+  subscriptionPlans: `
+    query GetSubscriptionPlans($currency: String!) {
+      subscriptionPlans(currency: $currency) {
+        id
+        tier
+        billingInterval
+        currency
+        priceAmount
+        isActive
+      }
+    }
+  `,
+
+  subscriptionPayments: `
+    query GetSubscriptionPayments($agencyId: ID!) {
+      subscriptionPayments(agencyId: $agencyId) {
+        id
+        planTier
+        billingInterval
+        amount
+        currency
+        status
+        periodStart
+        periodEnd
+        createdAt
+        completedAt
       }
     }
   `,
