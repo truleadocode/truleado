@@ -7,6 +7,7 @@ import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { getQueryClient } from '@/lib/query-client'
 import { Sidebar } from '@/components/layout/sidebar'
 import { ProtectedRoute } from '@/components/layout/protected-route'
+import { OnboardingProvider } from '@/components/onboarding/onboarding-provider'
 import { useAuth } from '@/contexts/auth-context'
 
 const applicationIdentifier = process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER
@@ -56,11 +57,13 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   return (
-    <div className="min-h-screen bg-background">
-      <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
-      <main className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-64'}`}>
-        {children}
-      </main>
-    </div>
+    <OnboardingProvider>
+      <div className="min-h-screen bg-background">
+        <Sidebar collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+        <main className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:pl-[68px]' : 'lg:pl-64'}`}>
+          {children}
+        </main>
+      </div>
+    </OnboardingProvider>
   )
 }
