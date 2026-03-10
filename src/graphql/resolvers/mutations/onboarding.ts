@@ -141,11 +141,11 @@ export async function seedDummyData(
   // --- Contacts (6) ---
   const { error: contactErr } = await supabaseAdmin.from('contacts').insert([
     { client_id: luminara.id, first_name: 'Priya', last_name: 'Sharma', email: 'priya@luminara.example', job_title: 'Marketing Director', is_dummy: true, is_primary_contact: true, contact_status: 'active' },
-    { client_id: luminara.id, first_name: 'Rahul', last_name: 'Menon', email: 'rahul@luminara.example', job_title: 'Brand Manager', is_dummy: true, contact_status: 'active' },
-    { client_id: luminara.id, first_name: 'Anita', last_name: 'Desai', email: 'anita@luminara.example', job_title: 'Social Media Lead', is_dummy: true, contact_status: 'active' },
+    { client_id: luminara.id, first_name: 'Rahul', last_name: 'Menon', email: 'rahul@luminara.example', job_title: 'Brand Manager', is_dummy: true, is_primary_contact: false, contact_status: 'active' },
+    { client_id: luminara.id, first_name: 'Anita', last_name: 'Desai', email: 'anita@luminara.example', job_title: 'Social Media Lead', is_dummy: true, is_primary_contact: false, contact_status: 'active' },
     { client_id: freshbite.id, first_name: 'Vikram', last_name: 'Patel', email: 'vikram@freshbite.example', job_title: 'CMO', is_dummy: true, is_primary_contact: true, contact_status: 'active' },
-    { client_id: freshbite.id, first_name: 'Neha', last_name: 'Gupta', email: 'neha@freshbite.example', job_title: 'Marketing Manager', is_dummy: true, contact_status: 'active' },
-    { client_id: freshbite.id, first_name: 'Arjun', last_name: 'Reddy', email: 'arjun@freshbite.example', job_title: 'Digital Lead', is_dummy: true, contact_status: 'active' },
+    { client_id: freshbite.id, first_name: 'Neha', last_name: 'Gupta', email: 'neha@freshbite.example', job_title: 'Marketing Manager', is_dummy: true, is_primary_contact: false, contact_status: 'active' },
+    { client_id: freshbite.id, first_name: 'Arjun', last_name: 'Reddy', email: 'arjun@freshbite.example', job_title: 'Digital Lead', is_dummy: true, is_primary_contact: false, contact_status: 'active' },
   ]);
   if (contactErr) throw new Error(`Failed to seed contacts: ${contactErr.message}`);
 
