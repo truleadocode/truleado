@@ -467,6 +467,7 @@ export const queries = {
           startDate
           endDate
           totalBudget
+          currency
           creators {
             id
             rateAmount
@@ -1601,6 +1602,29 @@ export const queries = {
           name
         }
         createdAt
+      }
+    }
+  `,
+
+  projectBudgetAllocation: `
+    query ProjectBudgetAllocation($projectId: ID!) {
+      projectBudgetAllocation(projectId: $projectId) {
+        projectId
+        projectCurrency
+        hasBudget
+        totalPlanned
+        totalAllocated
+        unallocated
+        utilizationPercent
+        campaigns {
+          campaignId
+          campaignName
+          status
+          totalBudget
+          currency
+          convertedAmount
+          includedInAllocation
+        }
       }
     }
   `,
@@ -2820,11 +2844,14 @@ export const mutations = {
   setCampaignBudget: `
     mutation SetCampaignBudget($campaignId: ID!, $totalBudget: Money!, $budgetControlType: BudgetControlType, $clientContractValue: Money) {
       setCampaignBudget(campaignId: $campaignId, totalBudget: $totalBudget, budgetControlType: $budgetControlType, clientContractValue: $clientContractValue) {
-        id
-        totalBudget
-        currency
-        budgetControlType
-        clientContractValue
+        campaign {
+          id
+          totalBudget
+          currency
+          budgetControlType
+          clientContractValue
+        }
+        projectBudgetWarning
       }
     }
   `,

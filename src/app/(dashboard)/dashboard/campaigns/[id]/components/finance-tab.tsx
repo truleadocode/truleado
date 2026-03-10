@@ -8,9 +8,11 @@ import { ExpensesTable } from '@/components/finance/expenses-table'
 import { CreatorPaymentsTable } from '@/components/finance/creator-payments-table'
 import { FinanceAuditLog } from '@/components/finance/finance-audit-log'
 import { useQueryClient } from '@tanstack/react-query'
+import { useAuth } from '@/contexts/auth-context'
 
 interface FinanceTabProps {
   campaignId: string
+  projectId?: string
   totalBudget: number | null
   budgetControlType: string | null
   clientContractValue: number | null
@@ -20,6 +22,7 @@ interface FinanceTabProps {
 
 export function FinanceTab({
   campaignId,
+  projectId,
   totalBudget,
   budgetControlType,
   clientContractValue,
@@ -27,6 +30,8 @@ export function FinanceTab({
   onCampaignRefresh,
 }: FinanceTabProps) {
   const queryClient = useQueryClient()
+  const { currentAgency } = useAuth()
+  const defaultCurrency = currency || currentAgency?.currencyCode || 'USD'
 
   const { data: summaryData } = useGraphQLQuery<{
     campaignFinanceSummary: {
@@ -95,6 +100,7 @@ export function FinanceTab({
         <h2 className="text-lg font-semibold">Campaign Finance</h2>
         <BudgetConfigDialog
           campaignId={campaignId}
+          projectId={projectId}
           currentBudget={totalBudget}
           currentControlType={budgetControlType}
           currentContractValue={clientContractValue}
@@ -113,7 +119,7 @@ export function FinanceTab({
       {/* Creator Payments */}
       <CreatorPaymentsTable
         agreements={creatorAgreements}
-        campaignCurrency={currency || 'INR'}
+        campaignCurrency={defaultCurrency}
         onRefresh={refreshFinance}
       />
 
@@ -121,7 +127,7 @@ export function FinanceTab({
       <ExpensesTable
         campaignId={campaignId}
         expenses={campaignExpenses}
-        campaignCurrency={currency || 'INR'}
+        campaignCurrency={defaultCurrency}
         onRefresh={refreshFinance}
       />
 

@@ -1,15 +1,25 @@
 "use client"
 
+import { useCallback, useEffect, useState } from 'react'
 import {
   TrendingUp,
   Activity,
+  DollarSign,
 } from 'lucide-react'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+} from 'recharts'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
-import type { Project, ActivityLog } from '../types'
+import { graphqlRequest, queries } from '@/lib/graphql/client'
+import type { Project, ActivityLog, ProjectBudgetAllocation } from '../types'
 
 interface OverviewTabProps {
   project: Project
@@ -50,7 +60,28 @@ function getActionColors(action: string) {
   return colors[action] || 'bg-gray-100 text-gray-600'
 }
 
+const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#6b7280']
+const CAMPAIGN_COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#f97316']
+
 export function OverviewTab({ project, activityFeed }: OverviewTabProps) {
+  const [allocation, setAllocation] = useState<ProjectBudgetAllocation | null>(null)
+
+  const fetchAllocation = useCallback(async () => {
+    try {
+      const res = await graphqlRequest<{ projectBudgetAllocation: ProjectBudgetAllocation }>(
+        queries.projectBudgetAllocation,
+        { projectId: project.id }
+      )
+      setAllocation(res.projectBudgetAllocation)
+    } catch {
+      // Non-critical
+    }
+  }, [project.id])
+
+  useEffect(() => {
+    fetchAllocation()
+  }, [fetchAllocation])
+
   const budgetLines = [
     { label: 'Influencer Budget', value: project.influencerBudget },
     { label: 'Agency Fee', value: project.agencyFeeType === 'percentage' && project.agencyFee && project.influencerBudget
@@ -62,6 +93,30 @@ export function OverviewTab({ project, activityFeed }: OverviewTabProps) {
   ]
 
   const totalBudget = budgetLines.reduce((sum, line) => sum + (line.value || 0), 0)
+  const currency = project.currency || 'USD'
+  const pieData = budgetLines.filter((l) => l.value && l.value > 0).map((l) => ({ name: l.label, value: l.value! }))
+
+  // Build allocation bar segments (iPhone Storage style)
+  const allocationSegments: { label: string; value: number; color: string }[] = []
+  if (allocation && allocation.campaigns.length > 0) {
+    const included = allocation.campaigns.filter((c) => c.includedInAllocation)
+    included.forEach((c, i) => {
+      allocationSegments.push({
+        label: c.campaignName,
+        value: c.convertedAmount,
+        color: CAMPAIGN_COLORS[i % CAMPAIGN_COLORS.length],
+      })
+    })
+    if (allocation.hasBudget && allocation.unallocated > 0) {
+      allocationSegments.push({
+        label: 'Unallocated',
+        value: allocation.unallocated,
+        color: '#e5e7eb',
+      })
+    }
+  }
+
+  const allocationTotal = allocationSegments.reduce((s, seg) => s + seg.value, 0)
 
   const kpiCards = [
     { label: 'Target Reach', value: formatNumber(project.targetReach), icon: TrendingUp },
@@ -78,31 +133,111 @@ export function OverviewTab({ project, activityFeed }: OverviewTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* Budget Summary */}
+      {/* Budget Summary — Pie Chart + Allocation Bar */}
       {totalBudget > 0 && (
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold">Budget Summary</h3>
-              <span className="text-sm font-semibold">{formatCurrency(totalBudget, project.currency || 'USD')}</span>
+              <div className="flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Budget Summary</h3>
+              </div>
+              <span className="text-sm font-semibold">{formatCurrency(totalBudget, currency)}</span>
             </div>
-            <div className="space-y-3">
-              {budgetLines.map((line) => {
-                if (!line.value) return null
-                const pct = totalBudget > 0 ? (line.value / totalBudget) * 100 : 0
-                return (
-                  <div key={line.label} className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{line.label}</span>
-                      <span className="font-medium">{formatCurrency(line.value, project.currency || 'USD')}</span>
+
+            {/* Pie chart + legend */}
+            <div className="flex items-center gap-6">
+              <div className="w-[140px] h-[140px] shrink-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="value"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={35}
+                      outerRadius={65}
+                      strokeWidth={2}
+                      stroke="hsl(var(--background))"
+                    >
+                      {pieData.map((_, idx) => (
+                        <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => formatCurrency(value as number, currency)}
+                      contentStyle={{ fontSize: '12px', borderRadius: '8px' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-2">
+                {budgetLines.map((line, idx) => {
+                  if (!line.value) return null
+                  return (
+                    <div key={line.label} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className="h-2.5 w-2.5 rounded-sm shrink-0" style={{ backgroundColor: PIE_COLORS[idx] }} />
+                        <span className="text-muted-foreground">{line.label}</span>
+                      </div>
+                      <span className="font-medium">{formatCurrency(line.value, currency)}</span>
                     </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-primary/60 rounded-full" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                )
-              })}
+                  )
+                })}
+              </div>
             </div>
+
+            {/* Campaign Allocation — iPhone Storage-style bar */}
+            {allocationSegments.length > 0 && allocationTotal > 0 && (
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">Campaign Allocation</p>
+                  {allocation?.hasBudget && allocation.utilizationPercent != null && (
+                    <span className={cn(
+                      'text-xs font-medium',
+                      allocation.utilizationPercent > 100 ? 'text-destructive' :
+                      allocation.utilizationPercent >= 80 ? 'text-yellow-600' : 'text-muted-foreground'
+                    )}>
+                      {allocation.utilizationPercent}% used
+                    </span>
+                  )}
+                </div>
+                {/* Segmented bar */}
+                <div className="h-5 w-full rounded-lg overflow-hidden flex bg-muted">
+                  {allocationSegments.map((seg, i) => {
+                    const pct = (seg.value / allocationTotal) * 100
+                    if (pct < 0.5) return null
+                    return (
+                      <div
+                        key={i}
+                        className="h-full transition-all relative group"
+                        style={{
+                          width: `${pct}%`,
+                          backgroundColor: seg.color,
+                          borderRight: i < allocationSegments.length - 1 ? '1px solid hsl(var(--background))' : undefined,
+                        }}
+                      >
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block z-10">
+                          <div className="bg-popover text-popover-foreground text-[10px] font-medium px-2 py-1 rounded-md shadow-md border whitespace-nowrap">
+                            {seg.label}: {formatCurrency(seg.value, allocation?.projectCurrency || currency)}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Legend */}
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {allocationSegments.map((seg, i) => (
+                    <div key={i} className="flex items-center gap-1.5 text-[11px]">
+                      <div className="h-2 w-2 rounded-sm shrink-0" style={{ backgroundColor: seg.color }} />
+                      <span className="text-muted-foreground">{seg.label}</span>
+                      <span className="font-medium">{formatCurrency(seg.value, allocation?.projectCurrency || currency)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

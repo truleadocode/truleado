@@ -829,6 +829,35 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # A campaign's budget slice within a project allocation
+  type CampaignBudgetSlice {
+    campaignId: ID!
+    campaignName: String!
+    status: String!
+    totalBudget: Float!
+    currency: String!
+    convertedAmount: Float!
+    includedInAllocation: Boolean!
+  }
+
+  # Project-level budget allocation across campaigns
+  type ProjectBudgetAllocation {
+    projectId: ID!
+    projectCurrency: String!
+    hasBudget: Boolean!
+    totalPlanned: Float!
+    totalAllocated: Float!
+    unallocated: Float!
+    utilizationPercent: Float
+    campaigns: [CampaignBudgetSlice!]!
+  }
+
+  # Result of setting a campaign budget (with project-level warning)
+  type SetBudgetResult {
+    campaign: Campaign!
+    projectBudgetWarning: String
+  }
+
   # Financial summary (computed server-side)
   type CampaignFinanceSummary {
     campaignId: ID!
@@ -1453,6 +1482,9 @@ export const typeDefs = gql`
     # Get finance audit log for a campaign
     campaignFinanceLogs(campaignId: ID!, limit: Int, offset: Int): [CampaignFinanceLog!]!
 
+    # Get project budget allocation breakdown across campaigns
+    projectBudgetAllocation(projectId: ID!): ProjectBudgetAllocation!
+
     # ---------------------------------------------
     # Billing / Token Purchases
     # ---------------------------------------------
@@ -2072,7 +2104,7 @@ export const typeDefs = gql`
       totalBudget: Money!
       budgetControlType: BudgetControlType
       clientContractValue: Money
-    ): Campaign!
+    ): SetBudgetResult!
 
     # Create a manual campaign expense
     createCampaignExpense(

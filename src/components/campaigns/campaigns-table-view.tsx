@@ -273,7 +273,7 @@ function CampaignTableRow({
                 View Details
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => router.push(`/dashboard/campaigns/${campaign.id}?edit=true`)}>
               <Pencil className="mr-2 h-3.5 w-3.5" />
               Edit
             </DropdownMenuItem>

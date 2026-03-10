@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useCallback, useEffect } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -34,11 +34,20 @@ const PerformanceTab = dynamic(() => import('./components/performance-tab').then
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const campaignId = params.id as string
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState('overview')
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
+
+  // Open edit drawer if ?edit=true is in the URL
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true') {
+      setEditDrawerOpen(true)
+      router.replace(`/dashboard/campaigns/${campaignId}`, { scroll: false })
+    }
+  }, [searchParams, campaignId, router])
 
   // ----- Fetch campaign -----
   const { data, isLoading, error, refetch } = useGraphQLQuery<{ campaign: Campaign }>(
@@ -266,6 +275,7 @@ export default function CampaignDetailPage() {
             {activeTab === 'finance' && (
               <FinanceTab
                 campaignId={campaign.id}
+                projectId={campaign.project.id}
                 totalBudget={campaign.totalBudget}
                 budgetControlType={campaign.budgetControlType}
                 clientContractValue={campaign.clientContractValue}

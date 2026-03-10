@@ -18,6 +18,7 @@ import { ApprovalsTab } from './components/approvals-tab'
 import { NotesTab } from './components/notes-tab'
 import { FilesTab } from './components/files-tab'
 import { CreateCampaignDrawer } from '@/components/campaigns/create-campaign-drawer'
+import { EditProjectSheet } from '@/components/projects/edit-project-sheet'
 import type { Project, ProjectNote, ActivityLog, ProjectFile } from './types'
 
 export default function ProjectDetailPage() {
@@ -34,6 +35,7 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState('overview')
   const [campaignDrawerOpen, setCampaignDrawerOpen] = useState(false)
+  const [editSheetOpen, setEditSheetOpen] = useState(false)
 
   // ----- Data fetching -----
   const fetchProject = useCallback(async () => {
@@ -209,6 +211,7 @@ export default function ProjectDetailPage() {
               onStatusChange={handleStatusChange}
               onArchiveProject={handleArchiveProject}
               onAddCampaign={() => setCampaignDrawerOpen(true)}
+              onEditProject={() => setEditSheetOpen(true)}
             />
 
             {activeTab === 'overview' && (
@@ -220,7 +223,7 @@ export default function ProjectDetailPage() {
             )}
 
             {activeTab === 'budget' && (
-              <BudgetTab project={project} />
+              <BudgetTab project={project} onEditProject={() => setEditSheetOpen(true)} />
             )}
 
             {activeTab === 'influencers' && (
@@ -256,6 +259,15 @@ export default function ProjectDetailPage() {
         preselectedProjectId={projectId}
         onSuccess={() => {
           setCampaignDrawerOpen(false)
+          fetchProject()
+        }}
+      />
+
+      <EditProjectSheet
+        open={editSheetOpen}
+        onOpenChange={setEditSheetOpen}
+        project={project}
+        onSuccess={() => {
           fetchProject()
         }}
       />

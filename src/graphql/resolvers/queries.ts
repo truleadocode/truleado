@@ -1523,6 +1523,98 @@ export const queryResolvers = {
     return data || [];
   },
 
+  /**
+   * Get project budget allocation breakdown across campaigns
+   */
+  projectBudgetAllocation: async (
+    _: unknown,
+    { projectId }: { projectId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireProjectAccess(ctx, projectId);
+
+    // Fetch project with budget fields
+    const { data: project, error: projErr } = await supabaseAdmin
+      .from('projects')
+      .select(`
+        id, influencer_budget, agency_fee, production_budget, boosting_budget, contingency, currency,
+        clients!inner(agency_id, agencies!inner(currency_code))
+      `)
+      .eq('id', projectId)
+      .single();
+
+    if (projErr || !project) throw notFoundError('Project', projectId);
+
+    const clients = project.clients as unknown as { agency_id: string; agencies: { currency_code: string | null } };
+    const projectCurrency = project.currency || clients.agencies.currency_code || 'USD';
+
+    // Compute totalPlanned from itemized fields
+    const budgetFields = [
+      project.influencer_budget,
+      project.agency_fee,
+      project.production_budget,
+      project.boosting_budget,
+      project.contingency,
+    ];
+    const hasBudget = budgetFields.some((f) => f != null);
+    const totalPlanned = budgetFields.reduce((sum: number, f) => sum + (Number(f) || 0), 0);
+
+    // Fetch all campaigns for this project with budgets
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id, name, status, total_budget, currency')
+      .eq('project_id', projectId);
+
+    const allCampaigns = campaigns || [];
+    const INCLUDED_STATUSES = ['active', 'in_review', 'approved', 'completed'];
+
+    // Convert each campaign's budget to project currency
+    const { getFxRate } = await import('@/lib/finance/fx-rates');
+    const { roundToTwo } = await import('@/lib/finance/calculations');
+
+    const campaignSlices = await Promise.all(
+      allCampaigns
+        .filter((c: { total_budget: number | null }) => c.total_budget != null)
+        .map(async (c: { id: string; name: string; status: string; total_budget: number; currency: string | null }) => {
+          const campCurrency = c.currency || projectCurrency;
+          const rate = await getFxRate(campCurrency, projectCurrency);
+          const convertedAmount = roundToTwo(Number(c.total_budget) * rate);
+          const included = INCLUDED_STATUSES.includes(c.status);
+          return {
+            campaignId: c.id,
+            campaignName: c.name,
+            status: c.status,
+            totalBudget: Number(c.total_budget),
+            currency: campCurrency,
+            convertedAmount,
+            includedInAllocation: included,
+          };
+        })
+    );
+
+    const totalAllocated = roundToTwo(
+      campaignSlices
+        .filter((s) => s.includedInAllocation)
+        .reduce((sum, s) => sum + s.convertedAmount, 0)
+    );
+    const unallocated = roundToTwo(totalPlanned - totalAllocated);
+    const utilizationPercent = totalPlanned > 0
+      ? roundToTwo((totalAllocated / totalPlanned) * 100)
+      : null;
+
+    return {
+      projectId,
+      projectCurrency,
+      hasBudget,
+      totalPlanned,
+      totalAllocated,
+      unallocated,
+      utilizationPercent,
+      campaigns: campaignSlices,
+    };
+  },
+
   // -----------------------------------------------
   // Creator Portal Queries
   // -----------------------------------------------
