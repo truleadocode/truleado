@@ -15,7 +15,8 @@ import { getIdToken } from '@/lib/firebase/client'
 import { CampaignHeader } from './components/campaign-header'
 import { CampaignSidebar } from './components/campaign-sidebar'
 import { OverviewTab } from './components/overview-tab'
-import { InfluencersDeliverablesTab } from './components/influencers-deliverables-tab'
+import { InfluencersTab } from './components/influencers-tab'
+import { DeliverablesTab } from './components/deliverables-tab'
 import { ApprovalsTab } from './components/approvals-tab'
 import { NotesTab } from './components/notes-tab'
 import { FilesTab } from './components/files-tab'
@@ -170,7 +171,7 @@ export default function CampaignDetailPage() {
               </div>
             </div>
             <div className="space-y-1">
-              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                 <div key={i} className="h-7 bg-muted rounded animate-pulse" />
               ))}
             </div>
@@ -244,7 +245,11 @@ export default function CampaignDetailPage() {
             )}
 
             {activeTab === 'influencers' && (
-              <InfluencersDeliverablesTab campaign={campaign} onRefresh={() => refetch()} />
+              <InfluencersTab campaign={campaign} onRefresh={() => refetch()} onTabChange={setActiveTab} />
+            )}
+
+            {activeTab === 'deliverables' && (
+              <DeliverablesTab campaign={campaign} onRefresh={() => refetch()} />
             )}
 
             {activeTab === 'approvals' && (

@@ -57,7 +57,8 @@ function copyToClipboard(text: string) {
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'influencers', label: 'Influencers & Deliverables' },
+  { id: 'influencers', label: 'Influencers' },
+  { id: 'deliverables', label: 'Deliverables' },
   { id: 'approvals', label: 'Content Approvals' },
   { id: 'performance', label: 'Performance' },
   { id: 'finance', label: 'Finance' },
@@ -128,6 +129,7 @@ export function CampaignSidebar({ campaign, activeTab, onTabChange, counts }: Ca
           {TABS.map((tab) => {
             const count =
               tab.id === 'influencers' ? counts.influencers :
+              tab.id === 'deliverables' ? counts.deliverables :
               tab.id === 'files' ? counts.attachments :
               tab.id === 'approvals' ? counts.deliverables :
               null

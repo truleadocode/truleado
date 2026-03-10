@@ -93,7 +93,7 @@ export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
         items.push({
           message: `${pendingSubmissions.length} deliverable(s) pending — ${daysLeft <= 0 ? 'OVERDUE' : `${daysLeft} days left`}`,
           action: 'View',
-          tab: 'influencers',
+          tab: 'deliverables',
         })
       }
     }
