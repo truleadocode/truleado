@@ -226,6 +226,9 @@ export default function CampaignDetailPage() {
             deliverables: campaign.deliverables.length,
             influencers: campaign.creators.filter((c) => c.status !== 'REMOVED').length,
             attachments: campaign.attachments.length,
+            pendingApprovals: campaign.deliverables.filter((d) =>
+              ['SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(d.status)
+            ).length,
           }}
         />
 

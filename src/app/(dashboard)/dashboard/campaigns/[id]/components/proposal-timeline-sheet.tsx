@@ -24,7 +24,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
-import { formatSmallestUnit } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency'
 
 interface ProposalVersion {
   id: string
@@ -96,7 +96,7 @@ const getInitials = (name: string) => {
 
 const formatRate = (amount: number | null, currency: string | null) => {
   if (!amount) return null
-  return formatSmallestUnit(amount, currency || 'INR')
+  return formatCurrency(amount, currency || 'USD')
 }
 
 const formatShortDateTime = (dateString: string) => {
@@ -191,7 +191,7 @@ export function ProposalTimelineSheet({
 
   // Get current proposed rate info
   const currentRate = currentProposal?.rateAmount
-  const currentCurrency = currentProposal?.rateCurrency || 'INR'
+  const currentCurrency = currentProposal?.rateCurrency || 'USD'
   const currentProposedBy = currentProposal?.createdByType?.toLowerCase() === 'agency' ? 'Agency' : 'Creator'
 
   // Merge proposal versions and notes into a single timeline, sorted newest first
@@ -230,9 +230,8 @@ export function ProposalTimelineSheet({
     if (!reCounterRate) return
     setIsReCountering(true)
     try {
-      const rateInCents = Math.round(parseFloat(reCounterRate) * 100)
       await onReCounter(campaignCreator.id, {
-        rateAmount: rateInCents,
+        rateAmount: parseFloat(reCounterRate),
         rateCurrency: currentCurrency,
         notes: reCounterNotes.trim() || undefined,
       })
@@ -249,9 +248,8 @@ export function ProposalTimelineSheet({
     if (!reCounterRate) return
     setIsReopening(true)
     try {
-      const rateInCents = Math.round(parseFloat(reCounterRate) * 100)
       await onReopen(campaignCreator.id, {
-        rateAmount: rateInCents,
+        rateAmount: parseFloat(reCounterRate),
         rateCurrency: currentCurrency,
         notes: reCounterNotes.trim() || undefined,
       })

@@ -32,6 +32,7 @@ interface CampaignSidebarProps {
     deliverables: number
     influencers: number
     attachments: number
+    pendingApprovals: number
   }
 }
 
@@ -131,7 +132,7 @@ export function CampaignSidebar({ campaign, activeTab, onTabChange, counts }: Ca
               tab.id === 'influencers' ? counts.influencers :
               tab.id === 'deliverables' ? counts.deliverables :
               tab.id === 'files' ? counts.attachments :
-              tab.id === 'approvals' ? counts.deliverables :
+              tab.id === 'approvals' ? counts.pendingApprovals :
               null
             return (
               <button
