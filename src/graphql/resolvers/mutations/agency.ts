@@ -359,13 +359,13 @@ export async function createClient(
 
   const accountManagerId =
     accountManagerIdInput?.trim() ||
-    (ctx.user!.agencies.some((a) => a.agencyId === agencyId && a.role === AgencyRole.ACCOUNT_MANAGER)
+    (ctx.user!.agencies.some((a) => a.agencyId === agencyId && (a.role === AgencyRole.ACCOUNT_MANAGER || a.role === AgencyRole.AGENCY_ADMIN))
       ? ctx.user!.id
       : null);
 
   if (!accountManagerId) {
     throw validationError(
-      'Account manager is required, or sign in as an Account Manager to become owner',
+      'Account manager is required',
       'accountManagerId'
     );
   }
