@@ -203,7 +203,7 @@ export function OnboardingWizardModal({
       })
       await graphqlRequest(mutations.updateAgencyLocale, {
         agencyId,
-        input: { currencyCode: details.currencyCode },
+        input: { currencyCode: details.currencyCode, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC', languageCode: 'en' },
       })
       toast({ title: 'Agency details saved' })
       setStep(1)
