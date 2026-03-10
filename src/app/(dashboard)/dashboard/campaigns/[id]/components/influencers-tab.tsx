@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/auth-context'
 import { AddInfluencerDialog } from './add-influencer-dialog'
 import { ProposalTimelineSheet } from './proposal-timeline-sheet'
 import type { Campaign, CampaignCreator } from '../types'
@@ -96,6 +97,8 @@ const STATUS_STYLES: Record<string, string> = {
 
 export function InfluencersTab({ campaign, onRefresh, onTabChange }: InfluencersTabProps) {
   const { toast } = useToast()
+  const { currentAgency } = useAuth()
+  const defaultCurrency = campaign.currency || currentAgency?.currencyCode || 'USD'
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [addInfluencerOpen, setAddInfluencerOpen] = useState(false)
@@ -231,7 +234,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span>{feeSummary.count} influencers</span>
             <span>·</span>
-            <span>{formatCurrency(feeSummary.totalFees, campaign.currency || 'USD')} total fees</span>
+            <span>{formatCurrency(feeSummary.totalFees, defaultCurrency)} total fees</span>
           </div>
           <Button size="sm" onClick={() => setAddInfluencerOpen(true)}>
             <UserPlus className="mr-1 h-4 w-4" />
@@ -313,7 +316,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                         <span className="text-muted-foreground">Fee: </span>
                         <span className="font-medium">
                           {cc.rateAmount
-                            ? formatCurrency(cc.rateAmount, cc.rateCurrency || campaign.currency || 'USD')
+                            ? formatCurrency(cc.rateAmount, cc.rateCurrency || defaultCurrency)
                             : '—'}
                         </span>
                       </div>
@@ -352,7 +355,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                         <span className="text-xs text-muted-foreground">
                           {cc.currentProposal?.createdByType?.toLowerCase() === 'creator' ? 'Creator countered' : 'Counter received'}
                           {cc.currentProposal?.rateAmount && (
-                            <> with <span className="font-medium">{formatCurrency(cc.currentProposal.rateAmount, cc.currentProposal.rateCurrency || 'USD')}</span></>
+                            <> with <span className="font-medium">{formatCurrency(cc.currentProposal.rateAmount, cc.currentProposal.rateCurrency || defaultCurrency)}</span></>
                           )}
                         </span>
                         <div className="ml-auto flex gap-2">
@@ -418,7 +421,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                             </div>
                           </TableCell>
                           <TableCell className="text-xs text-right font-medium">
-                            {cc.rateAmount ? formatCurrency(cc.rateAmount, cc.rateCurrency || campaign.currency || 'USD') : '—'}
+                            {cc.rateAmount ? formatCurrency(cc.rateAmount, cc.rateCurrency || defaultCurrency) : '—'}
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -433,7 +436,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                     <TableRow className="font-medium">
                       <TableCell className="text-xs">Total</TableCell>
                       <TableCell className="text-xs text-right">
-                        {formatCurrency(feeSummary.totalFees, campaign.currency || 'USD')}
+                        {formatCurrency(feeSummary.totalFees, defaultCurrency)}
                       </TableCell>
                       <TableCell />
                     </TableRow>
@@ -459,6 +462,7 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
         open={!!proposalSheetCreator}
         onOpenChange={(open) => { if (!open) setProposalSheetCreator(null) }}
         campaignCreator={proposalSheetCreator}
+        defaultCurrency={defaultCurrency}
         onAcceptCounter={handleAcceptCounter}
         onDeclineCounter={handleDeclineCounter}
         onReCounter={handleReCounter}

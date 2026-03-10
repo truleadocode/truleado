@@ -76,6 +76,7 @@ interface ProposalTimelineSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   campaignCreator: CampaignCreator | null
+  defaultCurrency?: string
   onAcceptCounter: (campaignCreatorId: string) => Promise<void>
   onDeclineCounter: (campaignCreatorId: string) => Promise<void>
   onReCounter: (campaignCreatorId: string, input: ReCounterInput) => Promise<void>
@@ -94,9 +95,9 @@ const getInitials = (name: string) => {
     .slice(0, 2)
 }
 
-const formatRate = (amount: number | null, currency: string | null) => {
+const formatRate = (amount: number | null, currency: string | null, fallbackCurrency: string = 'USD') => {
   if (!amount) return null
-  return formatCurrency(amount, currency || 'USD')
+  return formatCurrency(amount, currency || fallbackCurrency)
 }
 
 const formatShortDateTime = (dateString: string) => {
@@ -166,6 +167,7 @@ export function ProposalTimelineSheet({
   open,
   onOpenChange,
   campaignCreator,
+  defaultCurrency: defaultCurrencyProp = 'USD',
   onAcceptCounter,
   onDeclineCounter,
   onReCounter,
@@ -191,7 +193,7 @@ export function ProposalTimelineSheet({
 
   // Get current proposed rate info
   const currentRate = currentProposal?.rateAmount
-  const currentCurrency = currentProposal?.rateCurrency || 'USD'
+  const currentCurrency = currentProposal?.rateCurrency || defaultCurrencyProp
   const currentProposedBy = currentProposal?.createdByType?.toLowerCase() === 'agency' ? 'Agency' : 'Creator'
 
   // Merge proposal versions and notes into a single timeline, sorted newest first
@@ -299,7 +301,7 @@ export function ProposalTimelineSheet({
               Current Proposed Rate
             </div>
             <div className="text-2xl font-bold">
-              {formatRate(currentRate, currentCurrency)}
+              {formatRate(currentRate, currentCurrency, defaultCurrencyProp)}
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
               by {currentProposedBy}
@@ -562,7 +564,7 @@ export function ProposalTimelineSheet({
                         {item.data.rateAmount && (
                           <div className="text-sm">
                             <span className="font-semibold">
-                              {formatRate(item.data.rateAmount, item.data.rateCurrency)}
+                              {formatRate(item.data.rateAmount, item.data.rateCurrency, defaultCurrencyProp)}
                             </span>
                           </div>
                         )}

@@ -252,16 +252,19 @@ export async function inviteCreatorToCampaign(
     throw validationError('Creator must belong to the same agency as the campaign');
   }
 
-  // Get campaign name for the notification
+  // Get campaign info + agency currency for the notification and defaults
   const { data: campaign, error: campaignError } = await supabaseAdmin
     .from('campaigns')
-    .select('name')
+    .select('name, currency, projects!inner(agencies!inner(currency_code))')
     .eq('id', campaignId)
     .single();
 
   if (campaignError || !campaign) {
     throw notFoundError('Campaign', campaignId);
   }
+
+  const agencyCurrency = (campaign as unknown as { projects: { agencies: { currency_code: string | null } } }).projects?.agencies?.currency_code;
+  const defaultCurrency = rateCurrency || campaign.currency || agencyCurrency || 'USD';
   
   // Check if creator is already in the campaign
   const { data: existing } = await supabaseAdmin
@@ -285,7 +288,7 @@ export async function inviteCreatorToCampaign(
       .update({
         status: 'invited',
         rate_amount: rateAmount,
-        rate_currency: rateCurrency || 'USD',
+        rate_currency: defaultCurrency,
         notes: notes?.trim() || null,
       })
       .eq('id', existing.id)
@@ -304,7 +307,7 @@ export async function inviteCreatorToCampaign(
         creator_id: creatorId,
         status: 'invited',
         rate_amount: rateAmount,
-        rate_currency: rateCurrency || 'USD',
+        rate_currency: defaultCurrency,
         notes: notes?.trim() || null,
       })
       .select()
@@ -338,7 +341,7 @@ export async function inviteCreatorToCampaign(
         version_number: 1,
         state: 'sent',
         rate_amount: rateAmount || null,
-        rate_currency: rateCurrency || 'USD',
+        rate_currency: defaultCurrency,
         notes: notes?.trim() || null,
         created_by: ctx.user!.id,
         created_by_type: 'agency',
@@ -376,7 +379,7 @@ export async function inviteCreatorToCampaign(
           campaignName: campaign.name,
           campaignCreatorId: campaignCreator.id,
           rateAmount: rateAmount,
-          rateCurrency: rateCurrency || 'USD',
+          rateCurrency: defaultCurrency,
         });
       } catch (err) {
         console.error('[Novu] Failed to send proposal notification:', err);
