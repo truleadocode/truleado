@@ -8,7 +8,7 @@
 
 import { getIdToken } from '@/lib/firebase/client';
 
-export type StorageBucket = 'campaign-attachments' | 'deliverables';
+export type StorageBucket = 'campaign-attachments' | 'deliverables' | 'agency-assets';
 
 interface UploadResult {
   path: string;

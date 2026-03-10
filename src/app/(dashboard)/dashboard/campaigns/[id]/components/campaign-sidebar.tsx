@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { Campaign } from '../types'
 
 interface CampaignSidebarProps {
@@ -31,20 +32,13 @@ interface CampaignSidebarProps {
     deliverables: number
     influencers: number
     attachments: number
+    pendingApprovals: number
   }
 }
 
 function getInitials(name: string | null | undefined) {
   if (!name) return '?'
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency || 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function formatDate(dateStr: string | null) {
@@ -64,7 +58,8 @@ function copyToClipboard(text: string) {
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
-  { id: 'influencers', label: 'Influencers & Deliverables' },
+  { id: 'influencers', label: 'Influencers' },
+  { id: 'deliverables', label: 'Deliverables' },
   { id: 'approvals', label: 'Content Approvals' },
   { id: 'performance', label: 'Performance' },
   { id: 'finance', label: 'Finance' },
@@ -135,8 +130,9 @@ export function CampaignSidebar({ campaign, activeTab, onTabChange, counts }: Ca
           {TABS.map((tab) => {
             const count =
               tab.id === 'influencers' ? counts.influencers :
+              tab.id === 'deliverables' ? counts.deliverables :
               tab.id === 'files' ? counts.attachments :
-              tab.id === 'approvals' ? counts.deliverables :
+              tab.id === 'approvals' ? counts.pendingApprovals :
               null
             return (
               <button
@@ -226,16 +222,16 @@ export function CampaignSidebar({ campaign, activeTab, onTabChange, counts }: Ca
             <div className="space-y-1.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Budget</span>
-                <span className="font-medium">{formatCurrency(budget, campaign.currency)}</span>
+                <span className="font-medium">{formatCurrency(budget, campaign.currency || 'INR')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Committed</span>
-                <span>{formatCurrency(spent, campaign.currency)}</span>
+                <span>{formatCurrency(spent, campaign.currency || 'INR')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Remaining</span>
                 <span className={cn('font-medium', remaining < 0 ? 'text-destructive' : '')}>
-                  {formatCurrency(remaining, campaign.currency)}
+                  {formatCurrency(remaining, campaign.currency || 'INR')}
                 </span>
               </div>
               <div className="w-full bg-muted rounded-full h-1.5 mt-1">

@@ -8,6 +8,7 @@
 import { triggerNotification } from '@/lib/novu/trigger';
 import { ensureSubscriber } from '@/lib/novu/subscriber';
 import { supabaseAdmin } from '@/lib/supabase/admin';
+import { formatSmallestUnit } from '@/lib/currency';
 
 /**
  * Get the base URL for action links
@@ -27,23 +28,9 @@ function getBaseUrl(): string {
  * Format currency amount for display
  * Amounts are stored in smallest unit (paise/cents), convert to main unit
  */
-function formatCurrency(amount: number | undefined, currency: string): string {
+function formatCurrencyAmount(amount: number | undefined, currency: string): string {
   if (amount === undefined || amount === null) return '';
-
-  // Convert from smallest unit (paise/cents) to main unit
-  const mainUnitAmount = amount / 100;
-
-  try {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 2,
-    }).format(mainUnitAmount);
-  } catch {
-    // Fallback for unknown currency codes
-    return `${currency} ${mainUnitAmount.toLocaleString()}`;
-  }
+  return formatSmallestUnit(amount, currency);
 }
 
 /**
@@ -77,7 +64,7 @@ export async function notifyProposalSent(params: {
   });
 
   // Format rate for display
-  const formattedRate = formatCurrency(rateAmount, rateCurrency);
+  const formattedRate = formatCurrencyAmount(rateAmount, rateCurrency);
   const baseUrl = getBaseUrl();
 
   await triggerNotification({

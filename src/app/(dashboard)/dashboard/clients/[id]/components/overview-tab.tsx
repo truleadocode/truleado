@@ -11,6 +11,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import type { Client, ActivityLog } from '../types'
+import { formatCurrency } from '@/lib/currency'
 
 interface OverviewTabProps {
   client: Client
@@ -35,8 +36,7 @@ function timeAgo(dateString: string) {
 }
 
 function formatMoney(amount: number, currency: string | null) {
-  const cur = currency || 'USD'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: cur, maximumFractionDigits: 0 }).format(amount)
+  return formatCurrency(amount, currency || 'USD')
 }
 
 function getActionIcon(action: string) {

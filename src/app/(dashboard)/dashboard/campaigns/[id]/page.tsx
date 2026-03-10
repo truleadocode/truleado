@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useState, useCallback, useEffect } from 'react'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,7 +15,8 @@ import { getIdToken } from '@/lib/firebase/client'
 import { CampaignHeader } from './components/campaign-header'
 import { CampaignSidebar } from './components/campaign-sidebar'
 import { OverviewTab } from './components/overview-tab'
-import { InfluencersDeliverablesTab } from './components/influencers-deliverables-tab'
+import { InfluencersTab } from './components/influencers-tab'
+import { DeliverablesTab } from './components/deliverables-tab'
 import { ApprovalsTab } from './components/approvals-tab'
 import { NotesTab } from './components/notes-tab'
 import { FilesTab } from './components/files-tab'
@@ -33,11 +34,20 @@ const PerformanceTab = dynamic(() => import('./components/performance-tab').then
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const campaignId = params.id as string
   const { toast } = useToast()
 
   const [activeTab, setActiveTab] = useState('overview')
   const [editDrawerOpen, setEditDrawerOpen] = useState(false)
+
+  // Open edit drawer if ?edit=true is in the URL
+  useEffect(() => {
+    if (searchParams.get('edit') === 'true') {
+      setEditDrawerOpen(true)
+      router.replace(`/dashboard/campaigns/${campaignId}`, { scroll: false })
+    }
+  }, [searchParams, campaignId, router])
 
   // ----- Fetch campaign -----
   const { data, isLoading, error, refetch } = useGraphQLQuery<{ campaign: Campaign }>(
@@ -170,7 +180,7 @@ export default function CampaignDetailPage() {
               </div>
             </div>
             <div className="space-y-1">
-              {[1, 2, 3, 4, 5, 6, 7].map((i) => (
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
                 <div key={i} className="h-7 bg-muted rounded animate-pulse" />
               ))}
             </div>
@@ -225,6 +235,9 @@ export default function CampaignDetailPage() {
             deliverables: campaign.deliverables.length,
             influencers: campaign.creators.filter((c) => c.status !== 'REMOVED').length,
             attachments: campaign.attachments.length,
+            pendingApprovals: campaign.deliverables.filter((d) =>
+              ['SUBMITTED', 'INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(d.status)
+            ).length,
           }}
         />
 
@@ -244,7 +257,11 @@ export default function CampaignDetailPage() {
             )}
 
             {activeTab === 'influencers' && (
-              <InfluencersDeliverablesTab campaign={campaign} onRefresh={() => refetch()} />
+              <InfluencersTab campaign={campaign} onRefresh={() => refetch()} onTabChange={setActiveTab} />
+            )}
+
+            {activeTab === 'deliverables' && (
+              <DeliverablesTab campaign={campaign} onRefresh={() => refetch()} />
             )}
 
             {activeTab === 'approvals' && (
@@ -258,6 +275,7 @@ export default function CampaignDetailPage() {
             {activeTab === 'finance' && (
               <FinanceTab
                 campaignId={campaign.id}
+                projectId={campaign.project.id}
                 totalBudget={campaign.totalBudget}
                 budgetControlType={campaign.budgetControlType}
                 clientContractValue={campaign.clientContractValue}

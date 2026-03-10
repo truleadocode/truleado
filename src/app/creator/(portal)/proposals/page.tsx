@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { formatSmallestUnit } from '@/lib/currency'
 
 interface CampaignCreator {
   id: string
@@ -63,16 +64,9 @@ export default function ProposalsPage() {
     }
   }, [user, fetchData])
 
-  const formatCurrency = (amount: number | null, currency: string | null) => {
+  const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return null
-    const currencyCode = currency || 'INR'
-    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-    const formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-    })
-    return formatter.format(amount / 100)
+    return formatSmallestUnit(amount, currency || 'INR')
   }
 
   const getProposalStateBadge = (state: string | null, createdByType: string | null) => {
@@ -118,7 +112,7 @@ export default function ProposalsPage() {
             </p>
             {campaign.currentProposal?.rateAmount && (
               <p className="text-sm font-medium text-green-600">
-                {formatCurrency(campaign.currentProposal.rateAmount, campaign.currentProposal.rateCurrency)}
+                {formatCreatorCurrency(campaign.currentProposal.rateAmount, campaign.currentProposal.rateCurrency)}
               </p>
             )}
           </div>

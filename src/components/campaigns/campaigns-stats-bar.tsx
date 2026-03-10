@@ -2,18 +2,11 @@
 
 import { Megaphone, Activity, CalendarClock, Users, DollarSign } from 'lucide-react'
 import { StatsCard } from '@/components/ui/stats-card'
+import { formatCurrency } from '@/lib/currency'
 import type { CampaignStats } from '@/hooks/use-campaigns-list'
 
 interface CampaignsStatsBarProps {
   stats: CampaignStats
-}
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 export function CampaignsStatsBar({ stats }: CampaignsStatsBarProps) {

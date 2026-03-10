@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { ProjectListItem } from '@/hooks/use-projects-list'
 
 interface ProjectsBoardViewProps {
@@ -44,14 +45,6 @@ const COLUMNS = [
   { status: 'completed', label: 'Completed', color: 'border-t-gray-400' },
   { status: 'lost', label: 'Lost', color: 'border-t-red-500' },
 ]
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency || 'USD',
-    maximumFractionDigits: 0,
-  }).format(amount)
-}
 
 function formatDate(dateString: string | null) {
   if (!dateString) return null
@@ -104,7 +97,7 @@ function BoardCard({ project, budget }: { project: ProjectListItem; budget: numb
         </div>
 
         {budget > 0 && (
-          <div className="text-xs font-medium">{formatCurrency(budget, project.currency)}</div>
+          <div className="text-xs font-medium">{formatCurrency(budget, project.currency || 'USD')}</div>
         )}
 
         <div className="flex items-center justify-between text-xs text-muted-foreground">

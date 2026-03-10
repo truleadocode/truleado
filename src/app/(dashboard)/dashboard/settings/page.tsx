@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
 import { useToast } from '@/hooks/use-toast'
+import { SampleDataCard } from '@/components/onboarding/sample-data-card'
 
 const settingsSections = [
   {
@@ -36,7 +37,7 @@ const settingsSections = [
   },
   {
     title: 'Security',
-    description: 'Update password, enable 2FA, and view login history',
+    description: 'Update your account password',
     icon: Shield,
     href: '/dashboard/settings/security',
   },
@@ -99,6 +100,7 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         )}
+        {isAgencyAdmin && <SampleDataCard agencyId={currentAgency?.id} />}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {settingsSections.map((section) => (
             <Link key={section.title} href={section.href}>

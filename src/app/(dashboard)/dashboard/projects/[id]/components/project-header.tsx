@@ -40,6 +40,7 @@ interface ProjectHeaderProps {
   onStatusChange: (status: string) => void
   onArchiveProject: () => void
   onAddCampaign?: () => void
+  onEditProject?: () => void
 }
 
 const projectStatuses = [
@@ -67,7 +68,7 @@ function timeAgo(dateString: string) {
   return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function ProjectHeader({ project, onStatusChange, onArchiveProject, onAddCampaign }: ProjectHeaderProps) {
+export function ProjectHeader({ project, onStatusChange, onArchiveProject, onAddCampaign, onEditProject }: ProjectHeaderProps) {
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false)
 
   const breadcrumbs = [
@@ -114,7 +115,7 @@ export function ProjectHeader({ project, onStatusChange, onArchiveProject, onAdd
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={onEditProject}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit Project
               </DropdownMenuItem>

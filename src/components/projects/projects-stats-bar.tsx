@@ -2,18 +2,11 @@
 
 import { Briefcase, Activity, DollarSign, AlertCircle } from 'lucide-react'
 import { StatsCard } from '@/components/ui/stats-card'
+import { formatCurrency } from '@/lib/currency'
 import type { ProjectStats } from '@/hooks/use-projects-list'
 
 interface ProjectsStatsBarProps {
   stats: ProjectStats
-}
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 export function ProjectsStatsBar({ stats }: ProjectsStatsBarProps) {

@@ -17,6 +17,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
+import { formatCurrency } from '@/lib/currency'
 import type { CampaignFormState } from './types'
 import { PLATFORM_OPTIONS, OBJECTIVE_OPTIONS, CONTENT_TYPE_OPTIONS } from './types'
 
@@ -62,14 +63,6 @@ function LabelValue({ label, value }: { label: string; value: React.ReactNode })
       <p className="text-sm">{value}</p>
     </div>
   )
-}
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function formatDate(dateStr: string) {

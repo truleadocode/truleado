@@ -30,7 +30,11 @@ export async function createAgency(
     throw validationError('Agency name must be at least 2 characters', 'name');
   }
   
-  // Create the agency
+  // Create the agency with 30-day trial
+  const now = new Date();
+  const trialEnd = new Date(now);
+  trialEnd.setDate(trialEnd.getDate() + 30);
+
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
     .insert({
@@ -38,6 +42,10 @@ export async function createAgency(
       billing_email: billingEmail,
       status: 'active',
       token_balance: 0,
+      trial_start_date: now.toISOString(),
+      trial_end_date: trialEnd.toISOString(),
+      trial_days: 30,
+      subscription_status: 'trial',
     })
     .select()
     .single();
@@ -199,6 +207,90 @@ export async function updateAgencyLocale(
     actorType: 'user',
     afterState: updated,
     metadata: { updatedFields: ['currency_code', 'timezone', 'language_code'] },
+  });
+
+  return updated;
+}
+
+/**
+ * Update agency profile (name, logo, address, contact info).
+ * Agency Admin only.
+ */
+export async function updateAgencyProfile(
+  _: unknown,
+  { agencyId, input }: {
+    agencyId: string;
+    input: {
+      name?: string;
+      logoUrl?: string;
+      description?: string;
+      addressLine1?: string;
+      addressLine2?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      country?: string;
+      primaryEmail?: string;
+      phone?: string;
+      website?: string;
+    };
+  },
+  ctx: GraphQLContext
+) {
+  const user = requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN]);
+
+  // Map camelCase input to snake_case DB columns
+  const updateFields: Record<string, unknown> = {};
+  const fieldMap: Record<string, string> = {
+    name: 'name',
+    logoUrl: 'logo_url',
+    description: 'description',
+    addressLine1: 'address_line1',
+    addressLine2: 'address_line2',
+    city: 'city',
+    state: 'state',
+    postalCode: 'postal_code',
+    country: 'country',
+    primaryEmail: 'primary_email',
+    phone: 'phone',
+    website: 'website',
+  };
+
+  for (const [camel, snake] of Object.entries(fieldMap)) {
+    if ((input as Record<string, unknown>)[camel] !== undefined) {
+      updateFields[snake] = (input as Record<string, unknown>)[camel];
+    }
+  }
+
+  if (Object.keys(updateFields).length === 0) {
+    throw validationError('No fields to update');
+  }
+
+  if (updateFields.name !== undefined && typeof updateFields.name === 'string' && updateFields.name.trim().length < 2) {
+    throw validationError('Agency name must be at least 2 characters');
+  }
+
+  const { data: updated, error } = await supabaseAdmin
+    .from('agencies')
+    .update(updateFields)
+    .eq('id', agencyId)
+    .select('*')
+    .single();
+
+  if (error || !updated) {
+    console.error('Failed to update agency profile:', error);
+    throw new Error('Failed to update agency profile');
+  }
+
+  await logActivity({
+    agencyId,
+    entityType: 'agency',
+    entityId: agencyId,
+    action: 'updated',
+    actorId: user.id,
+    actorType: 'user',
+    afterState: updated,
+    metadata: { updatedFields: Object.keys(updateFields) },
   });
 
   return updated;

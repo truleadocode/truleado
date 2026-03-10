@@ -467,6 +467,7 @@ export const queries = {
           startDate
           endDate
           totalBudget
+          currency
           creators {
             id
             rateAmount
@@ -529,7 +530,54 @@ export const queries = {
       }
     }
   `,
-  
+
+  agencyProfile: `
+    query GetAgencyProfile($agencyId: ID!) {
+      agency(id: $agencyId) {
+        id
+        name
+        logoUrl
+        description
+        addressLine1
+        addressLine2
+        city
+        state
+        postalCode
+        country
+        primaryEmail
+        phone
+        website
+      }
+    }
+  `,
+
+  pendingInvitations: `
+    query GetPendingInvitations($agencyId: ID!) {
+      pendingInvitations(agencyId: $agencyId) {
+        id
+        email
+        role
+        status
+        expiresAt
+        createdAt
+        invitedBy { name email }
+      }
+    }
+  `,
+
+  invitationByToken: `
+    query GetInvitationByToken($token: String!) {
+      invitationByToken(token: $token) {
+        id
+        email
+        role
+        agencyName
+        status
+        expiresAt
+      }
+    }
+  `,
+
   campaigns: `
     query GetCampaigns($projectId: ID!) {
       campaigns(projectId: $projectId) {
@@ -1328,6 +1376,41 @@ export const queries = {
         id
         tokenBalance
         premiumTokenBalance
+        subscriptionStatus
+        subscriptionTier
+        billingInterval
+        trialEndDate
+        subscriptionEndDate
+      }
+    }
+  `,
+
+  subscriptionPlans: `
+    query GetSubscriptionPlans($currency: String!) {
+      subscriptionPlans(currency: $currency) {
+        id
+        tier
+        billingInterval
+        currency
+        priceAmount
+        isActive
+      }
+    }
+  `,
+
+  subscriptionPayments: `
+    query GetSubscriptionPayments($agencyId: ID!) {
+      subscriptionPayments(agencyId: $agencyId) {
+        id
+        planTier
+        billingInterval
+        amount
+        currency
+        status
+        periodStart
+        periodEnd
+        createdAt
+        completedAt
       }
     }
   `,
@@ -1523,6 +1606,29 @@ export const queries = {
     }
   `,
 
+  projectBudgetAllocation: `
+    query ProjectBudgetAllocation($projectId: ID!) {
+      projectBudgetAllocation(projectId: $projectId) {
+        projectId
+        projectCurrency
+        hasBudget
+        totalPlanned
+        totalAllocated
+        unallocated
+        utilizationPercent
+        campaigns {
+          campaignId
+          campaignName
+          status
+          totalBudget
+          currency
+          convertedAmount
+          includedInAllocation
+        }
+      }
+    }
+  `,
+
   // Discovery Module
   discoverySearch: `
     query DiscoverySearch($agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON!, $sort: JSON, $skip: Int, $limit: Int) {
@@ -1713,6 +1819,23 @@ export const queries = {
         uploadedBy { id name email }
         campaign { id name project { id name } }
         createdAt
+      }
+    }
+  `,
+
+  onboardingStatus: `
+    query GetOnboardingStatus($agencyId: ID!) {
+      onboardingStatus(agencyId: $agencyId) {
+        hasName
+        hasPrimaryEmail
+        hasPhone
+        hasWebsite
+        hasAddress
+        clientCount
+        contactCount
+        isProfileComplete
+        isOnboardingComplete
+        hasDummyData
       }
     }
   `,
@@ -2421,6 +2544,54 @@ export const mutations = {
     }
   `,
 
+  updateAgencyProfile: `
+    mutation UpdateAgencyProfile($agencyId: ID!, $input: UpdateAgencyProfileInput!) {
+      updateAgencyProfile(agencyId: $agencyId, input: $input) {
+        id
+        name
+        logoUrl
+        description
+        addressLine1
+        addressLine2
+        city
+        state
+        postalCode
+        country
+        primaryEmail
+        phone
+        website
+      }
+    }
+  `,
+
+  inviteTeamMembers: `
+    mutation InviteTeamMembers($agencyId: ID!, $invites: [TeamInviteInput!]!) {
+      inviteTeamMembers(agencyId: $agencyId, invites: $invites) {
+        id
+        email
+        role
+        status
+        createdAt
+      }
+    }
+  `,
+
+  revokeInvitation: `
+    mutation RevokeInvitation($id: ID!) {
+      revokeInvitation(id: $id)
+    }
+  `,
+
+  acceptInvitation: `
+    mutation AcceptInvitation($token: String!) {
+      acceptInvitation(token: $token) {
+        id
+        name
+        agencyCode
+      }
+    }
+  `,
+
   // Creator mutations
   addCreator: `
     mutation AddCreator($agencyId: ID!, $displayName: String!, $email: String, $phone: String, $instagramHandle: String, $youtubeHandle: String, $tiktokHandle: String, $facebookHandle: String, $linkedinHandle: String, $notes: String, $rates: [CreatorRateInput!]) {
@@ -2673,11 +2844,14 @@ export const mutations = {
   setCampaignBudget: `
     mutation SetCampaignBudget($campaignId: ID!, $totalBudget: Money!, $budgetControlType: BudgetControlType, $clientContractValue: Money) {
       setCampaignBudget(campaignId: $campaignId, totalBudget: $totalBudget, budgetControlType: $budgetControlType, clientContractValue: $clientContractValue) {
-        id
-        totalBudget
-        currency
-        budgetControlType
-        clientContractValue
+        campaign {
+          id
+          totalBudget
+          currency
+          budgetControlType
+          clientContractValue
+        }
+        projectBudgetWarning
       }
     }
   `,
@@ -3135,6 +3309,18 @@ export const mutations = {
   sendDeliverableReminder: `
     mutation SendDeliverableReminder($deliverableId: ID!) {
       sendDeliverableReminder(deliverableId: $deliverableId)
+    }
+  `,
+
+  seedDummyData: `
+    mutation SeedDummyData($agencyId: ID!) {
+      seedDummyData(agencyId: $agencyId)
+    }
+  `,
+
+  deleteDummyData: `
+    mutation DeleteDummyData($agencyId: ID!) {
+      deleteDummyData(agencyId: $agencyId)
     }
   `,
 };

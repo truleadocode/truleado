@@ -161,6 +161,26 @@ export const typeDefs = gql`
     currencyCode: String!
     timezone: String!
     languageCode: String!
+    logoUrl: String
+    description: String
+    addressLine1: String
+    addressLine2: String
+    city: String
+    state: String
+    postalCode: String
+    country: String
+    primaryEmail: String
+    phone: String
+    website: String
+    trialStartDate: DateTime
+    trialEndDate: DateTime
+    trialDays: Int
+    subscriptionStatus: String
+    subscriptionTier: String
+    billingInterval: String
+    subscriptionStartDate: DateTime
+    subscriptionEndDate: DateTime
+    hasDummyData: Boolean
     clients: [Client!]!
     users: [AgencyUser!]!
     createdAt: DateTime!
@@ -172,6 +192,55 @@ export const typeDefs = gql`
     role: UserRole!
     isActive: Boolean!
     createdAt: DateTime!
+  }
+
+  type AgencyInvitation {
+    id: ID!
+    agencyId: ID!
+    agencyName: String
+    email: String!
+    role: String!
+    invitedBy: User
+    token: String!
+    status: String!
+    expiresAt: DateTime!
+    createdAt: DateTime!
+    acceptedAt: DateTime
+  }
+
+  type SubscriptionPlan {
+    id: ID!
+    tier: String!
+    billingInterval: String!
+    currency: String!
+    priceAmount: Int!
+    isActive: Boolean!
+  }
+
+  type SubscriptionPayment {
+    id: ID!
+    planTier: String!
+    billingInterval: String!
+    amount: Int!
+    currency: String!
+    status: String!
+    periodStart: DateTime
+    periodEnd: DateTime
+    createdAt: DateTime!
+    completedAt: DateTime
+  }
+
+  type OnboardingStatus {
+    hasName: Boolean!
+    hasPrimaryEmail: Boolean!
+    hasPhone: Boolean!
+    hasWebsite: Boolean!
+    hasAddress: Boolean!
+    clientCount: Int!
+    contactCount: Int!
+    isProfileComplete: Boolean!
+    isOnboardingComplete: Boolean!
+    hasDummyData: Boolean!
   }
 
   # 4.3 Client
@@ -760,6 +829,35 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # A campaign's budget slice within a project allocation
+  type CampaignBudgetSlice {
+    campaignId: ID!
+    campaignName: String!
+    status: String!
+    totalBudget: Float!
+    currency: String!
+    convertedAmount: Float!
+    includedInAllocation: Boolean!
+  }
+
+  # Project-level budget allocation across campaigns
+  type ProjectBudgetAllocation {
+    projectId: ID!
+    projectCurrency: String!
+    hasBudget: Boolean!
+    totalPlanned: Float!
+    totalAllocated: Float!
+    unallocated: Float!
+    utilizationPercent: Float
+    campaigns: [CampaignBudgetSlice!]!
+  }
+
+  # Result of setting a campaign budget (with project-level warning)
+  type SetBudgetResult {
+    campaign: Campaign!
+    projectBudgetWarning: String
+  }
+
   # Financial summary (computed server-side)
   type CampaignFinanceSummary {
     campaignId: ID!
@@ -1182,6 +1280,26 @@ export const typeDefs = gql`
     languageCode: String!
   }
 
+  input TeamInviteInput {
+    email: String!
+    role: String!
+  }
+
+  input UpdateAgencyProfileInput {
+    name: String
+    logoUrl: String
+    description: String
+    addressLine1: String
+    addressLine2: String
+    city: String
+    state: String
+    postalCode: String
+    country: String
+    primaryEmail: String
+    phone: String
+    website: String
+  }
+
   input CreatorRateInput {
     platform: String!
     deliverableType: String!
@@ -1299,6 +1417,20 @@ export const typeDefs = gql`
     # Agency email (SMTP) config for notifications (agency members; password never returned)
     agencyEmailConfig(agencyId: ID!): AgencyEmailConfig
 
+    # Pending invitations for an agency (agency admin / account manager)
+    pendingInvitations(agencyId: ID!): [AgencyInvitation!]!
+    # Look up invitation by token (public, for pre-filling signup)
+    invitationByToken(token: String!): AgencyInvitation
+
+    # ---------------------------------------------
+    # Subscription Queries
+    # ---------------------------------------------
+    subscriptionPlans(currency: String!): [SubscriptionPlan!]!
+    subscriptionPayments(agencyId: ID!): [SubscriptionPayment!]!
+
+    # Onboarding
+    onboardingStatus(agencyId: ID!): OnboardingStatus!
+
     # ---------------------------------------------
     # Social Media Analytics Queries
     # ---------------------------------------------
@@ -1349,6 +1481,9 @@ export const typeDefs = gql`
 
     # Get finance audit log for a campaign
     campaignFinanceLogs(campaignId: ID!, limit: Int, offset: Int): [CampaignFinanceLog!]!
+
+    # Get project budget allocation breakdown across campaigns
+    projectBudgetAllocation(projectId: ID!): ProjectBudgetAllocation!
 
     # ---------------------------------------------
     # Billing / Token Purchases
@@ -1571,7 +1706,15 @@ export const typeDefs = gql`
 
     # Update agency locale settings; agency_admin only.
     updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
-    
+    # Update agency profile (name, logo, address, etc.); agency_admin only.
+    updateAgencyProfile(agencyId: ID!, input: UpdateAgencyProfileInput!): Agency!
+    # Invite team members by email (batch); agency_admin / account_manager only.
+    inviteTeamMembers(agencyId: ID!, invites: [TeamInviteInput!]!): [AgencyInvitation!]!
+    # Revoke a pending invitation; agency_admin only.
+    revokeInvitation(id: ID!): Boolean!
+    # Accept an invitation by token (post-signup); authenticated users only.
+    acceptInvitation(token: String!): Agency!
+
     # ---------------------------------------------
     # Project & Campaign Lifecycle Mutations
     # ---------------------------------------------
@@ -1961,7 +2104,7 @@ export const typeDefs = gql`
       totalBudget: Money!
       budgetControlType: BudgetControlType
       clientContractValue: Money
-    ): Campaign!
+    ): SetBudgetResult!
 
     # Create a manual campaign expense
     createCampaignExpense(
@@ -2099,5 +2242,9 @@ export const typeDefs = gql`
       sortField: String
       sortOrder: String
     ): SavedSearch!
+
+    # Onboarding dummy data
+    seedDummyData(agencyId: ID!): Boolean!
+    deleteDummyData(agencyId: ID!): Boolean!
   }
 `;

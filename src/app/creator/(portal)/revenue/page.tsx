@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { DollarSign, TrendingUp, Clock, CheckCircle, Inbox } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { formatSmallestUnit } from '@/lib/currency'
 
 interface CampaignCreator {
   id: string
@@ -56,14 +57,8 @@ export default function RevenuePage() {
     }
   }, [user, fetchData])
 
-  const formatCurrency = (amount: number, currency: string = 'INR') => {
-    const locale = currency === 'INR' ? 'en-IN' : 'en-US'
-    const formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 0,
-    })
-    return formatter.format(amount / 100)
+  const formatCreatorCurrency = (amount: number, currency: string = 'INR') => {
+    return formatSmallestUnit(amount, currency)
   }
 
   // Calculate revenue metrics
@@ -132,7 +127,7 @@ export default function RevenuePage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalEarnings)}</div>
+            <div className="text-2xl font-bold">{formatCreatorCurrency(totalEarnings)}</div>
             <p className="text-xs text-muted-foreground">
               From {acceptedCampaigns.length} accepted campaigns
             </p>
@@ -144,7 +139,7 @@ export default function RevenuePage() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(earnedRevenue)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCreatorCurrency(earnedRevenue)}</div>
             <p className="text-xs text-muted-foreground">
               From {completedCampaigns.length} completed campaigns
             </p>
@@ -156,7 +151,7 @@ export default function RevenuePage() {
             <Clock className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(pendingRevenue)}</div>
+            <div className="text-2xl font-bold text-orange-600">{formatCreatorCurrency(pendingRevenue)}</div>
             <p className="text-xs text-muted-foreground">
               From {acceptedCampaigns.length - completedCampaigns.length} active campaigns
             </p>
@@ -198,7 +193,7 @@ export default function RevenuePage() {
                     </Badge>
                     <span className="font-semibold">
                       {c.currentProposal?.rateAmount
-                        ? formatCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency || 'INR')
+                        ? formatCreatorCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency || 'INR')
                         : '-'}
                     </span>
                   </div>

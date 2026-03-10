@@ -26,6 +26,7 @@ import { Header } from '@/components/layout/header'
 import { ClientFormDialog } from '@/components/clients/client-form-dialog'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { formatCurrency } from '@/lib/currency'
 
 interface Client {
   id: string
@@ -111,15 +112,6 @@ export default function ClientsPage() {
       month: 'short',
       year: 'numeric',
     })
-  }
-
-  const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
   }
 
   const getClientStats = (client: Client) => {

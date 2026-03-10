@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -21,11 +21,21 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
-import { graphqlRequest, mutations } from "@/lib/graphql/client"
-import { Settings } from "lucide-react"
+import { graphqlRequest, queries, mutations } from "@/lib/graphql/client"
+import { formatCurrency } from "@/lib/currency"
+import { Settings, Info } from "lucide-react"
+
+interface ProjectAllocationInfo {
+  hasBudget: boolean
+  totalPlanned: number
+  totalAllocated: number
+  unallocated: number
+  projectCurrency: string
+}
 
 interface BudgetConfigDialogProps {
   campaignId: string
+  projectId?: string
   currentBudget?: number | null
   currentControlType?: string | null
   currentContractValue?: number | null
@@ -35,6 +45,7 @@ interface BudgetConfigDialogProps {
 
 export function BudgetConfigDialog({
   campaignId,
+  projectId,
   currentBudget,
   currentControlType,
   currentContractValue,
@@ -52,7 +63,27 @@ export function BudgetConfigDialog({
   const [contractValue, setContractValue] = useState(
     currentContractValue?.toString() || ""
   )
+  const [projectAllocation, setProjectAllocation] = useState<ProjectAllocationInfo | null>(null)
   const { toast } = useToast()
+
+  const fetchProjectAllocation = useCallback(async () => {
+    if (!projectId) return
+    try {
+      const res = await graphqlRequest<{ projectBudgetAllocation: ProjectAllocationInfo }>(
+        queries.projectBudgetAllocation,
+        { projectId }
+      )
+      setProjectAllocation(res.projectBudgetAllocation)
+    } catch {
+      // Non-critical
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    if (open) {
+      fetchProjectAllocation()
+    }
+  }, [open, fetchProjectAllocation])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -67,7 +98,12 @@ export function BudgetConfigDialog({
 
     setLoading(true)
     try {
-      await graphqlRequest(mutations.setCampaignBudget, {
+      const res = await graphqlRequest<{
+        setCampaignBudget: {
+          campaign: { id: string }
+          projectBudgetWarning: string | null
+        }
+      }>(mutations.setCampaignBudget, {
         campaignId,
         totalBudget: Number(totalBudget),
         budgetControlType: controlType.toUpperCase(),
@@ -78,6 +114,15 @@ export function BudgetConfigDialog({
         title: "Budget updated",
         description: "Campaign budget has been configured successfully.",
       })
+
+      // Show project budget warning if any
+      if (res.setCampaignBudget.projectBudgetWarning) {
+        toast({
+          title: "Project Budget Notice",
+          description: res.setCampaignBudget.projectBudgetWarning,
+          variant: "default",
+        })
+      }
 
       setOpen(false)
       onBudgetUpdated()
@@ -112,6 +157,27 @@ export function BudgetConfigDialog({
             Configure the financial parameters for this campaign.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Project budget context */}
+        {projectAllocation && (
+          <div className="flex items-start gap-2 p-3 rounded-md bg-muted/50 border">
+            <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div className="text-xs text-muted-foreground">
+              {projectAllocation.hasBudget ? (
+                <>
+                  <span>Project budget: {formatCurrency(projectAllocation.totalPlanned, projectAllocation.projectCurrency)}</span>
+                  <span className="mx-1">&middot;</span>
+                  <span className={projectAllocation.unallocated < 0 ? 'text-destructive font-medium' : ''}>
+                    {formatCurrency(projectAllocation.unallocated, projectAllocation.projectCurrency)} unallocated
+                  </span>
+                </>
+              ) : (
+                <span>No project budget set. This campaign&apos;s budget won&apos;t be tracked against a project pool.</span>
+              )}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">

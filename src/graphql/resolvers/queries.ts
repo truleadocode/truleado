@@ -10,6 +10,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
   requireAuth,
   requireAgencyMembership,
+  requireAgencyRole,
   requireCampaignAccess,
   requireClientAccess,
   requireProjectAccess,
@@ -639,6 +640,176 @@ export const queryResolvers = {
 
     if (error) throw new Error('Failed to fetch email config');
     return data;
+  },
+
+  // =============================================================================
+  // TEAM INVITATIONS
+  // =============================================================================
+
+  pendingInvitations: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAgencyRole(ctx, agencyId, [AgencyRole.AGENCY_ADMIN, AgencyRole.ACCOUNT_MANAGER]);
+
+    const { data, error } = await supabaseAdmin
+      .from('agency_invitations')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) throw new Error('Failed to fetch invitations');
+    return data || [];
+  },
+
+  invitationByToken: async (
+    _: unknown,
+    { token }: { token: string }
+  ) => {
+    const { data } = await supabaseAdmin
+      .from('agency_invitations')
+      .select('*')
+      .eq('token', token)
+      .eq('status', 'pending')
+      .single();
+
+    if (!data) return null;
+
+    // Check if expired
+    if (new Date(data.expires_at) < new Date()) {
+      await supabaseAdmin
+        .from('agency_invitations')
+        .update({ status: 'expired' })
+        .eq('id', data.id);
+      return null;
+    }
+
+    return data;
+  },
+
+  // =============================================================================
+  // SUBSCRIPTION QUERIES
+  // =============================================================================
+
+  /**
+   * Get active subscription plans for a currency (public pricing)
+   */
+  subscriptionPlans: async (
+    _: unknown,
+    { currency }: { currency: string }
+  ) => {
+    const { data } = await supabaseAdmin
+      .from('subscription_plans')
+      .select('*')
+      .eq('currency', currency.toUpperCase())
+      .eq('is_active', true)
+      .order('tier')
+      .order('billing_interval');
+
+    return data || [];
+  },
+
+  /**
+   * Get subscription payment history for an agency
+   */
+  subscriptionPayments: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data } = await supabaseAdmin
+      .from('subscription_payments')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    return data || [];
+  },
+
+  // =============================================================================
+  // ONBOARDING
+  // =============================================================================
+
+  onboardingStatus: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data: agency, error: agencyErr } = await supabaseAdmin
+      .from('agencies')
+      .select('name, primary_email, phone, website, address_line1, city, country')
+      .eq('id', agencyId)
+      .single();
+
+    if (agencyErr || !agency) throw notFoundError('Agency', agencyId);
+
+    // has_dummy_data may not exist if migration 00051 hasn't been applied yet
+    let hasDummyData = false;
+    try {
+      const { data: dummyRow } = await supabaseAdmin
+        .from('agencies')
+        .select('has_dummy_data')
+        .eq('id', agencyId)
+        .single();
+      hasDummyData = dummyRow?.has_dummy_data || false;
+    } catch {
+      // Column doesn't exist yet — safe to ignore
+    }
+
+    const hasName = !!agency.name?.trim();
+    const hasPrimaryEmail = !!agency.primary_email?.trim();
+    const hasPhone = !!agency.phone?.trim();
+    const hasWebsite = !!agency.website?.trim();
+    const hasAddress = !!(agency.address_line1?.trim() && agency.city?.trim() && agency.country?.trim());
+
+    // Count clients
+    const { count: clientCount } = await supabaseAdmin
+      .from('clients')
+      .select('id', { count: 'exact', head: true })
+      .eq('agency_id', agencyId)
+      .eq('is_active', true);
+
+    // Count contacts via client IDs
+    const { data: clientIds } = await supabaseAdmin
+      .from('clients')
+      .select('id')
+      .eq('agency_id', agencyId)
+      .eq('is_active', true);
+
+    const clientIdList = (clientIds || []).map((c: { id: string }) => c.id);
+    let contactCount = 0;
+    if (clientIdList.length > 0) {
+      const { count } = await supabaseAdmin
+        .from('contacts')
+        .select('id', { count: 'exact', head: true })
+        .in('client_id', clientIdList);
+      contactCount = count || 0;
+    }
+
+    const isProfileComplete = hasName && hasPrimaryEmail && hasPhone && hasWebsite && hasAddress;
+    const isOnboardingComplete = isProfileComplete && (clientCount || 0) >= 1 && contactCount >= 1;
+
+    return {
+      hasName,
+      hasPrimaryEmail,
+      hasPhone,
+      hasWebsite,
+      hasAddress,
+      clientCount: clientCount || 0,
+      contactCount,
+      isProfileComplete,
+      isOnboardingComplete,
+      hasDummyData,
+    };
   },
 
   // =============================================================================
@@ -1350,6 +1521,98 @@ export const queryResolvers = {
 
     if (error) throw new Error('Failed to fetch finance logs');
     return data || [];
+  },
+
+  /**
+   * Get project budget allocation breakdown across campaigns
+   */
+  projectBudgetAllocation: async (
+    _: unknown,
+    { projectId }: { projectId: string },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    await requireProjectAccess(ctx, projectId);
+
+    // Fetch project with budget fields
+    const { data: project, error: projErr } = await supabaseAdmin
+      .from('projects')
+      .select(`
+        id, influencer_budget, agency_fee, production_budget, boosting_budget, contingency, currency,
+        clients!inner(agency_id, agencies!inner(currency_code))
+      `)
+      .eq('id', projectId)
+      .single();
+
+    if (projErr || !project) throw notFoundError('Project', projectId);
+
+    const clients = project.clients as unknown as { agency_id: string; agencies: { currency_code: string | null } };
+    const projectCurrency = project.currency || clients.agencies.currency_code || 'USD';
+
+    // Compute totalPlanned from itemized fields
+    const budgetFields = [
+      project.influencer_budget,
+      project.agency_fee,
+      project.production_budget,
+      project.boosting_budget,
+      project.contingency,
+    ];
+    const hasBudget = budgetFields.some((f) => f != null);
+    const totalPlanned = budgetFields.reduce((sum: number, f) => sum + (Number(f) || 0), 0);
+
+    // Fetch all campaigns for this project with budgets
+    const { data: campaigns } = await supabaseAdmin
+      .from('campaigns')
+      .select('id, name, status, total_budget, currency')
+      .eq('project_id', projectId);
+
+    const allCampaigns = campaigns || [];
+    const INCLUDED_STATUSES = ['active', 'in_review', 'approved', 'completed'];
+
+    // Convert each campaign's budget to project currency
+    const { getFxRate } = await import('@/lib/finance/fx-rates');
+    const { roundToTwo } = await import('@/lib/finance/calculations');
+
+    const campaignSlices = await Promise.all(
+      allCampaigns
+        .filter((c: { total_budget: number | null }) => c.total_budget != null)
+        .map(async (c: { id: string; name: string; status: string; total_budget: number; currency: string | null }) => {
+          const campCurrency = c.currency || projectCurrency;
+          const rate = await getFxRate(campCurrency, projectCurrency);
+          const convertedAmount = roundToTwo(Number(c.total_budget) * rate);
+          const included = INCLUDED_STATUSES.includes(c.status);
+          return {
+            campaignId: c.id,
+            campaignName: c.name,
+            status: c.status,
+            totalBudget: Number(c.total_budget),
+            currency: campCurrency,
+            convertedAmount,
+            includedInAllocation: included,
+          };
+        })
+    );
+
+    const totalAllocated = roundToTwo(
+      campaignSlices
+        .filter((s) => s.includedInAllocation)
+        .reduce((sum, s) => sum + s.convertedAmount, 0)
+    );
+    const unallocated = roundToTwo(totalPlanned - totalAllocated);
+    const utilizationPercent = totalPlanned > 0
+      ? roundToTwo((totalAllocated / totalPlanned) * 100)
+      : null;
+
+    return {
+      projectId,
+      projectCurrency,
+      hasBudget,
+      totalPlanned,
+      totalAllocated,
+      unallocated,
+      utilizationPercent,
+      campaigns: campaignSlices,
+    };
   },
 
   // -----------------------------------------------

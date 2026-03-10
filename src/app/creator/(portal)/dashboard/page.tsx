@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { formatSmallestUnit } from '@/lib/currency'
 
 interface CampaignCreator {
   id: string
@@ -150,16 +151,9 @@ export default function CreatorDashboardPage() {
     return sum
   }, 0)
 
-  const formatCurrency = (amount: number | null, currency: string | null) => {
+  const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return null
-    const currencyCode = currency || 'INR'
-    const locale = currencyCode === 'INR' ? 'en-IN' : 'en-US'
-    const formatter = new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: currencyCode,
-      minimumFractionDigits: 0,
-    })
-    return formatter.format(amount / 100)
+    return formatSmallestUnit(amount, currency || 'INR')
   }
 
   const getStatusBadge = (status: string) => {
@@ -254,7 +248,7 @@ export default function CreatorDashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCurrency(totalEarnings, 'INR') || '₹0'}
+                  {formatCreatorCurrency(totalEarnings, 'INR') || '₹0'}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   From accepted proposals
@@ -283,7 +277,7 @@ export default function CreatorDashboardPage() {
                             </p>
                             {c.currentProposal?.rateAmount && (
                               <p className="text-sm font-medium text-green-600 mt-1">
-                                {formatCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)}
+                                {formatCreatorCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)}
                               </p>
                             )}
                           </div>

@@ -13,10 +13,14 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
   onAuthStateChanged,
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
   signInWithEmailLink,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   User,
   UserCredential,
   ActionCodeSettings,
@@ -76,6 +80,14 @@ export async function signOut(): Promise<void> {
  */
 export async function resetPassword(email: string): Promise<void> {
   return sendPasswordResetEmail(auth, email);
+}
+
+/**
+ * Send email verification to the given Firebase user.
+ * Called during signup after user + DB record creation.
+ */
+export async function sendVerificationEmail(user: User): Promise<void> {
+  return sendEmailVerification(user);
 }
 
 /**
@@ -140,4 +152,21 @@ export async function signInWithClientLink(
   emailLink: string
 ): Promise<UserCredential> {
   return signInWithEmailLink(auth, email, emailLink);
+}
+
+/**
+ * Change the current user's password.
+ * Requires reauthentication with the current password first.
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user || !user.email) {
+    throw new Error('No authenticated user');
+  }
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
 }

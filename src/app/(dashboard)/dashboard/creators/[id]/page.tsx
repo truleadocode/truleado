@@ -50,6 +50,7 @@ import { InstagramTab } from '@/components/creators/instagram-tab'
 import { YouTubeTab } from '@/components/creators/youtube-tab'
 import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
 import { useAuth } from '@/contexts/auth-context'
+import { useCurrency } from '@/hooks/use-currency'
 
 function proxiedImageSrc(url: string) {
   return `/api/image-proxy?url=${encodeURIComponent(url)}`
@@ -163,6 +164,7 @@ export default function CreatorDetailPage() {
   const params = useParams()
   const { toast } = useToast()
   const { currentAgency } = useAuth()
+  const { format: formatMoney } = useCurrency()
   const creatorId = params.id as string
 
   const [creator, setCreator] = useState<Creator | null>(null)
@@ -223,19 +225,6 @@ export default function CreatorDetailPage() {
     tiktok: 'TikTok',
     x: 'X',
     blog: 'Blog',
-  }
-
-  const formatMoney = (value: number, currency?: string) => {
-    if (!Number.isFinite(value)) return '—'
-    try {
-      return new Intl.NumberFormat(currentAgency?.languageCode || 'en-US', {
-        style: 'currency',
-        currency: currency || 'USD',
-        maximumFractionDigits: 0,
-      }).format(value)
-    } catch {
-      return `${currency || 'USD'} ${value.toFixed(0)}`
-    }
   }
 
   const fetchSocialData = useCallback(async () => {

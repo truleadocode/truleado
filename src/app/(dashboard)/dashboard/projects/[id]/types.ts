@@ -49,8 +49,47 @@ export interface Campaign {
   startDate: string | null
   endDate: string | null
   totalBudget: number | null
+  currency: string | null
   creators: CampaignCreator[]
   deliverables: Deliverable[]
+}
+
+export interface CampaignBudgetSlice {
+  campaignId: string
+  campaignName: string
+  status: string
+  totalBudget: number
+  currency: string
+  convertedAmount: number
+  includedInAllocation: boolean
+}
+
+export interface ProjectBudgetAllocation {
+  projectId: string
+  projectCurrency: string
+  hasBudget: boolean
+  totalPlanned: number
+  totalAllocated: number
+  unallocated: number
+  utilizationPercent: number | null
+  campaigns: CampaignBudgetSlice[]
+}
+
+export interface CampaignFinanceSummary {
+  campaignId: string
+  totalBudget: number | null
+  currency: string | null
+  budgetControlType: string | null
+  clientContractValue: number | null
+  committed: number
+  paid: number
+  otherExpenses: number
+  totalSpend: number
+  remainingBudget: number | null
+  profit: number | null
+  marginPercent: number | null
+  budgetUtilization: number | null
+  warningLevel: string
 }
 
 export interface ProjectApprover {

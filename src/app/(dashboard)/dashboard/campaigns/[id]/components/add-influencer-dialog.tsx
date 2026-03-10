@@ -102,7 +102,7 @@ export function AddInfluencerDialog({
         campaignId,
         creatorId: selectedCreatorId,
         rateAmount: rateAmount ? parseFloat(rateAmount) : null,
-        rateCurrency: currency || 'INR',
+        rateCurrency: currency || currentAgency?.currencyCode || 'USD',
         notes: notes || null,
       })
       toast({ title: 'Influencer added to campaign' })
@@ -205,7 +205,7 @@ export function AddInfluencerDialog({
             </div>
 
             <div className="space-y-2">
-              <Label>Rate ({currency || 'INR'})</Label>
+              <Label>Rate ({currency || currentAgency?.currencyCode || 'USD'})</Label>
               <Input
                 type="number"
                 placeholder="e.g. 50000"

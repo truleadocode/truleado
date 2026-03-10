@@ -19,6 +19,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { CampaignFormState, ProjectOption, AgencyUser } from './types'
 import { PLATFORM_OPTIONS, OBJECTIVE_OPTIONS } from './types'
 
@@ -39,14 +40,6 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
       <h3 className="text-sm font-semibold">{title}</h3>
     </div>
   )
-}
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 export function Step1Details({

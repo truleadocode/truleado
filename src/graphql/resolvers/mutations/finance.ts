@@ -146,7 +146,7 @@ export async function setCampaignBudget(
     .eq('id', agencyId)
     .single();
 
-  const campaignCurrency = existing.currency || agency?.currency_code || 'INR';
+  const campaignCurrency = existing.currency || agency?.currency_code || 'USD';
 
   // Update campaign budget fields
   const { data: updated, error } = await supabaseAdmin
@@ -191,7 +191,57 @@ export async function setCampaignBudget(
     metadata: { totalBudget, budgetControlType, clientContractValue },
   });
 
-  return updated;
+  // Compute project-level budget warning
+  let projectBudgetWarning: string | null = null;
+  try {
+    const { data: project } = await supabaseAdmin
+      .from('projects')
+      .select('id, influencer_budget, agency_fee, production_budget, boosting_budget, contingency, currency')
+      .eq('id', existing.project_id)
+      .single();
+
+    if (project) {
+      const budgetFields = [
+        project.influencer_budget,
+        project.agency_fee,
+        project.production_budget,
+        project.boosting_budget,
+        project.contingency,
+      ];
+      const hasBudget = budgetFields.some((f: unknown) => f != null);
+      const totalPlanned = budgetFields.reduce((sum: number, f: unknown) => sum + (Number(f) || 0), 0);
+
+      if (!hasBudget) {
+        projectBudgetWarning = 'No project budget is set. Consider setting one to track allocation.';
+      } else {
+        // Sum all sibling campaigns' budgets (including the one we just updated)
+        const { data: siblings } = await supabaseAdmin
+          .from('campaigns')
+          .select('id, total_budget, currency, status')
+          .eq('project_id', existing.project_id)
+          .not('status', 'in', '("draft","archived")');
+
+        const projectCurrency = project.currency || agency?.currency_code || 'USD';
+        let totalAllocated = 0;
+        for (const sib of (siblings || [])) {
+          if (sib.total_budget == null) continue;
+          const sibCurrency = sib.currency || projectCurrency;
+          const rate = await getFxRate(sibCurrency, projectCurrency);
+          totalAllocated += Number(sib.total_budget) * rate;
+        }
+        totalAllocated = Math.round(totalAllocated * 100) / 100;
+
+        if (totalAllocated > totalPlanned) {
+          const overBy = Math.round((totalAllocated - totalPlanned) * 100) / 100;
+          projectBudgetWarning = `This allocation exceeds the project budget by ${overBy} ${projectCurrency}. Total allocated: ${totalAllocated} / ${totalPlanned} ${projectCurrency} planned.`;
+        }
+      }
+    }
+  } catch {
+    // Non-critical — don't fail the mutation if warning computation fails
+  }
+
+  return { campaign: updated, projectBudgetWarning };
 }
 
 // =============================================================================
@@ -231,7 +281,12 @@ export async function createCampaignExpense(
   validateAmount(originalAmount, 'originalAmount');
 
   const { campaign, agencyId } = await getCampaignWithBudget(campaignId);
-  const campaignCurrency = campaign.currency || 'INR';
+  const { data: expAgency } = await supabaseAdmin
+    .from('agencies')
+    .select('currency_code')
+    .eq('id', agencyId)
+    .single();
+  const campaignCurrency = campaign.currency || expAgency?.currency_code || 'USD';
   const expenseCurrency = originalCurrency?.toUpperCase() || campaignCurrency;
 
   if (originalCurrency) {
@@ -374,8 +429,13 @@ export async function updateCampaignExpense(
     if (originalAmount != null) validateAmount(newAmount, 'originalAmount');
     if (originalCurrency != null) validateCurrency(newCurrency);
 
-    const { campaign } = await getCampaignWithBudget(existing.campaign_id);
-    const campaignCurrency = campaign.currency || 'INR';
+    const { campaign, agencyId: updAgencyId } = await getCampaignWithBudget(existing.campaign_id);
+    const { data: updAgency } = await supabaseAdmin
+      .from('agencies')
+      .select('currency_code')
+      .eq('id', updAgencyId)
+      .single();
+    const campaignCurrency = campaign.currency || updAgency?.currency_code || 'USD';
 
     const fxRate = await getFxRate(newCurrency, campaignCurrency);
     const convertedAmt = convertAmount(newAmount, fxRate);

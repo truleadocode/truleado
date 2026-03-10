@@ -4,6 +4,7 @@ import './globals.css'
 import { AuthProvider } from '@/contexts/auth-context'
 import { Toaster } from '@/components/ui/toaster'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { ThemeProvider } from 'next-themes'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -24,11 +25,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <AuthProvider>
-          {children}
-          <Toaster />
-          <SpeedInsights />
-        </AuthProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+          <AuthProvider>
+            {children}
+            <Toaster />
+            <SpeedInsights />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
+import { formatCurrency } from '@/lib/currency'
 import type { ProjectListItem } from '@/hooks/use-projects-list'
 
 interface ProjectsCardViewProps {
@@ -24,14 +25,6 @@ const PLATFORM_ICONS: Record<string, string> = {
   facebook: '📘',
   linkedin: '💼',
   twitter: '🐦',
-}
-
-function formatCurrency(amount: number, currency: string | null) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency || 'USD',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function getTimelineProgress(startDate: string | null, endDate: string | null) {
@@ -129,7 +122,7 @@ export function ProjectsCardView({ projects, selectedIds, onToggleSelection, get
 
                 {/* Budget */}
                 {budget > 0 && (
-                  <div className="text-sm font-medium">{formatCurrency(budget, project.currency)}</div>
+                  <div className="text-sm font-medium">{formatCurrency(budget, project.currency || 'USD')}</div>
                 )}
 
                 {/* Platforms */}

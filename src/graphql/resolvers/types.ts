@@ -50,7 +50,7 @@ export const typeResolvers = {
       
       return data?.provider_uid || '';
     },
-    name: (parent: { full_name: string | null }) => parent.full_name,
+    name: (parent: { full_name?: string | null; name?: string | null }) => parent.full_name ?? parent.name ?? null,
     avatarUrl: (parent: { avatar_url: string | null }) => parent.avatar_url,
     isActive: (parent: { is_active: boolean }) => parent.is_active,
     createdAt: (parent: { created_at: string }) => parent.created_at,
@@ -85,6 +85,26 @@ export const typeResolvers = {
     currencyCode: (parent: { currency_code: string | null }) => parent.currency_code ?? 'USD',
     timezone: (parent: { timezone: string | null }) => parent.timezone ?? 'UTC',
     languageCode: (parent: { language_code: string | null }) => parent.language_code ?? 'en',
+    logoUrl: (parent: { logo_url: string | null }) => parent.logo_url,
+    description: (parent: { description: string | null }) => parent.description,
+    addressLine1: (parent: { address_line1: string | null }) => parent.address_line1,
+    addressLine2: (parent: { address_line2: string | null }) => parent.address_line2,
+    city: (parent: { city: string | null }) => parent.city,
+    state: (parent: { state: string | null }) => parent.state,
+    postalCode: (parent: { postal_code: string | null }) => parent.postal_code,
+    country: (parent: { country: string | null }) => parent.country,
+    primaryEmail: (parent: { primary_email: string | null }) => parent.primary_email,
+    phone: (parent: { phone: string | null }) => parent.phone,
+    website: (parent: { website: string | null }) => parent.website,
+    trialStartDate: (parent: { trial_start_date: string | null }) => parent.trial_start_date,
+    trialEndDate: (parent: { trial_end_date: string | null }) => parent.trial_end_date,
+    trialDays: (parent: { trial_days: number | null }) => parent.trial_days,
+    subscriptionStatus: (parent: { subscription_status: string | null }) => parent.subscription_status,
+    subscriptionTier: (parent: { subscription_tier: string | null }) => parent.subscription_tier,
+    billingInterval: (parent: { billing_interval: string | null }) => parent.billing_interval,
+    subscriptionStartDate: (parent: { subscription_start_date: string | null }) => parent.subscription_start_date,
+    subscriptionEndDate: (parent: { subscription_end_date: string | null }) => parent.subscription_end_date,
+    hasDummyData: (parent: { has_dummy_data: boolean | null }) => parent.has_dummy_data || false,
     createdAt: (parent: { created_at: string }) => parent.created_at,
     clients: async (parent: WithId) => {
       const { data } = await supabaseAdmin
@@ -103,6 +123,44 @@ export const typeResolvers = {
         .eq('is_active', true);
       return data || [];
     },
+  },
+
+  AgencyInvitation: {
+    agencyId: (parent: { agency_id: string }) => parent.agency_id,
+    agencyName: async (parent: { agency_id: string }) => {
+      const { data } = await supabaseAdmin
+        .from('agencies')
+        .select('name')
+        .eq('id', parent.agency_id)
+        .single();
+      return data?.name || null;
+    },
+    invitedBy: async (parent: { invited_by: string }) => {
+      const { data } = await supabaseAdmin
+        .from('users')
+        .select('*')
+        .eq('id', parent.invited_by)
+        .single();
+      return data;
+    },
+    expiresAt: (parent: { expires_at: string }) => parent.expires_at,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    acceptedAt: (parent: { accepted_at: string | null }) => parent.accepted_at,
+  },
+
+  SubscriptionPlan: {
+    billingInterval: (parent: { billing_interval: string }) => parent.billing_interval,
+    priceAmount: (parent: { price_amount: number }) => parent.price_amount,
+    isActive: (parent: { is_active: boolean }) => parent.is_active,
+  },
+
+  SubscriptionPayment: {
+    planTier: (parent: { plan_tier: string }) => parent.plan_tier,
+    billingInterval: (parent: { billing_interval: string }) => parent.billing_interval,
+    periodStart: (parent: { period_start: string | null }) => parent.period_start,
+    periodEnd: (parent: { period_end: string | null }) => parent.period_end,
+    createdAt: (parent: { created_at: string }) => parent.created_at,
+    completedAt: (parent: { completed_at: string | null }) => parent.completed_at,
   },
 
   AgencyUser: {

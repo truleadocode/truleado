@@ -41,8 +41,9 @@ interface AddDeliverableDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   campaignId: string
-  creatorId: string
-  creatorName: string
+  creatorId?: string
+  creatorName?: string
+  creators?: { id: string; displayName: string }[]
   onSuccess: () => void
 }
 
@@ -50,8 +51,9 @@ export function AddDeliverableDialog({
   open,
   onOpenChange,
   campaignId,
-  creatorId,
-  creatorName,
+  creatorId: preselectedCreatorId,
+  creatorName: preselectedCreatorName,
+  creators = [],
   onSuccess,
 }: AddDeliverableDialogProps) {
   const { toast } = useToast()
@@ -60,7 +62,11 @@ export function AddDeliverableDialog({
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined)
+  const [selectedCreatorId, setSelectedCreatorId] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const effectiveCreatorId = preselectedCreatorId || (selectedCreatorId && selectedCreatorId !== 'none' ? selectedCreatorId : undefined)
+  const effectiveCreatorName = preselectedCreatorName || creators.find((c) => c.id === selectedCreatorId)?.displayName || undefined
 
   const handleSubmit = async () => {
     if (!deliverableType) {
@@ -68,7 +74,7 @@ export function AddDeliverableDialog({
       return
     }
 
-    const finalTitle = title.trim() || `${deliverableType} - ${creatorName}`
+    const finalTitle = title.trim() || (effectiveCreatorName ? `${deliverableType} - ${effectiveCreatorName}` : deliverableType)
 
     setSubmitting(true)
     try {
@@ -84,11 +90,13 @@ export function AddDeliverableDialog({
         }
       )
 
-      // Assign to creator
-      await graphqlRequest(mutations.assignDeliverableToCreator, {
-        deliverableId: result.createDeliverable.id,
-        creatorId,
-      })
+      // Assign to creator if one is selected
+      if (effectiveCreatorId) {
+        await graphqlRequest(mutations.assignDeliverableToCreator, {
+          deliverableId: result.createDeliverable.id,
+          creatorId: effectiveCreatorId,
+        })
+      }
 
       toast({ title: 'Deliverable created' })
       resetForm()
@@ -109,6 +117,7 @@ export function AddDeliverableDialog({
     setTitle('')
     setDescription('')
     setDueDate(undefined)
+    setSelectedCreatorId('')
   }
 
   const handleClose = (isOpen: boolean) => {
@@ -120,10 +129,30 @@ export function AddDeliverableDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Deliverable for {creatorName}</DialogTitle>
+          <DialogTitle>
+            {preselectedCreatorName ? `Add Deliverable for ${preselectedCreatorName}` : 'Add Deliverable'}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Creator selector — only shown when no creator is preselected */}
+          {!preselectedCreatorId && creators.length > 0 && (
+            <div className="space-y-2">
+              <Label>Creator (optional)</Label>
+              <Select value={selectedCreatorId} onValueChange={setSelectedCreatorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Unassigned" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Unassigned</SelectItem>
+                  {creators.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.displayName}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Content Type *</Label>
             <Select value={deliverableType} onValueChange={setDeliverableType}>
@@ -143,7 +172,7 @@ export function AddDeliverableDialog({
           <div className="space-y-2">
             <Label>Title (optional)</Label>
             <Input
-              placeholder={deliverableType ? `${deliverableType} - ${creatorName}` : 'Auto-generated from type'}
+              placeholder={deliverableType ? (effectiveCreatorName ? `${deliverableType} - ${effectiveCreatorName}` : deliverableType) : 'Auto-generated from type'}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />

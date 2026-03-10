@@ -5,7 +5,8 @@
  */
 
 import { createUser, ensureClientUser, ensureCreatorUser } from './user';
-import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale } from './agency';
+import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale, updateAgencyProfile } from './agency';
+import { inviteTeamMembers, revokeInvitation, acceptInvitation } from './invitation';
 import { createContact, updateContact, deleteContact } from './contact';
 import { addProjectApprover, removeProjectApprover, addProjectUser, removeProjectUser, updateProjectStatus, bulkUpdateProjectStatus, bulkArchiveProjects, archiveProject, updateProject } from './project';
 import {
@@ -109,6 +110,7 @@ import {
   dismissContactReminder,
   deleteContactReminder,
 } from './contact-detail';
+import { seedDummyData, deleteDummyData } from './onboarding';
 
 export const mutationResolvers = {
   // Identity (signup)
@@ -119,6 +121,10 @@ export const mutationResolvers = {
   createAgency,
   joinAgencyByCode,
   updateAgencyLocale,
+  updateAgencyProfile,
+  inviteTeamMembers,
+  revokeInvitation,
+  acceptInvitation,
   createClient,
   updateClient,
   archiveClient,
@@ -252,4 +258,8 @@ export const mutationResolvers = {
   createContactReminder,
   dismissContactReminder,
   deleteContactReminder,
+
+  // Onboarding
+  seedDummyData,
+  deleteDummyData,
 };

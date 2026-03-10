@@ -1,17 +1,18 @@
 "use client"
 
-import { useState } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, AlertCircle, Check, ArrowLeft, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/auth-context'
+import { queries } from '@/lib/graphql/client'
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -30,21 +31,65 @@ const signupSchema = z.object({
 
 type SignupFormData = z.infer<typeof signupSchema>
 
+interface InviteInfo {
+  email: string
+  role: string
+  agencyName: string | null
+}
+
 export default function SignupPage() {
-  const router = useRouter()
+  return (
+    <Suspense fallback={null}>
+      <SignupPageContent />
+    </Suspense>
+  )
+}
+
+function SignupPageContent() {
   const { signUp, loading, error, clearError } = useAuth()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
+
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
+  const [userEmail, setUserEmail] = useState('')
+  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null)
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<SignupFormData>({
     resolver: zodResolver(signupSchema),
   })
+
+  // Fetch invitation details if token is present (no auth needed — public query)
+  useEffect(() => {
+    if (!inviteToken) return
+    fetch('/api/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: queries.invitationByToken,
+        variables: { token: inviteToken },
+      }),
+    })
+      .then((r) => r.json())
+      .then((result) => {
+        const info = result.data?.invitationByToken
+        if (info) {
+          setInviteInfo(info)
+          setValue('email', info.email)
+        }
+      })
+      .catch(() => {
+        // Token invalid or expired, continue with normal signup
+      })
+  }, [inviteToken, setValue])
 
   const password = watch('password', '')
 
@@ -59,13 +104,76 @@ export default function SignupPage() {
     clearError()
     setIsSubmitting(true)
     try {
+      // Store invite token for post-signup acceptance
+      if (inviteToken) {
+        localStorage.setItem('pendingInviteToken', inviteToken)
+      }
       await signUp(data.email, data.password, data.name)
-      router.push('/choose-agency')
+      setUserEmail(data.email)
+      setSignupSuccess(true)
     } catch {
       // Error is handled by auth context
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  if (signupSuccess) {
+    return (
+      <div className="space-y-6">
+        {/* Mobile logo */}
+        <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
+          <div className="h-10 w-10 rounded-lg bg-primary flex items-center justify-center">
+            <svg
+              className="h-6 w-6 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 10V3L4 14h7v7l9-11h-7z"
+              />
+            </svg>
+          </div>
+          <span className="text-2xl font-bold">Truleado</span>
+        </div>
+
+        <Card className="border-0 shadow-none lg:border lg:shadow-sm">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Mail className="h-6 w-6 text-primary" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold">Check your email</h2>
+                <p className="text-muted-foreground text-sm">
+                  We&apos;ve sent a verification link to{' '}
+                  <span className="font-medium text-foreground">{userEmail}</span>
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Click the link in the email to verify your account, then come back here to sign in.
+              </p>
+              <div className="pt-4">
+                <Link
+                  href="/login"
+                  className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Go to Sign In
+                </Link>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Didn&apos;t receive the email? Check your spam folder.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -92,13 +200,27 @@ export default function SignupPage() {
 
       <Card className="border-0 shadow-none lg:border lg:shadow-sm">
         <CardHeader className="space-y-1 pb-4">
-          <CardTitle className="text-2xl font-bold tracking-tight">Create an account</CardTitle>
+          <CardTitle className="text-2xl font-bold tracking-tight">
+            {inviteInfo ? 'Accept Invitation' : 'Create an account'}
+          </CardTitle>
           <CardDescription>
-            Get started with your free account today
+            {inviteInfo
+              ? `You've been invited to join ${inviteInfo.agencyName || 'an agency'}`
+              : 'Get started with your free account today'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            {inviteInfo && (
+              <div className="flex items-center gap-2 p-3 text-sm text-primary bg-primary/10 rounded-lg">
+                <UserPlus className="h-4 w-4 shrink-0" />
+                <span>
+                  You&apos;ll join <strong>{inviteInfo.agencyName}</strong> as{' '}
+                  <strong>{inviteInfo.role.replace(/_/g, ' ')}</strong> after signing up.
+                </span>
+              </div>
+            )}
+
             {error && (
               <div className="flex items-center gap-2 p-3 text-sm text-destructive bg-destructive/10 rounded-lg">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -134,6 +256,7 @@ export default function SignupPage() {
                   placeholder="name@company.com"
                   className="pl-10"
                   error={!!errors.email}
+                  disabled={!!inviteInfo}
                   {...register('email')}
                 />
               </div>
