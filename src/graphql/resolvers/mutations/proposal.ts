@@ -486,10 +486,14 @@ export async function acceptProposal(
     throw new Error('Failed to accept proposal');
   }
 
-  // Update campaign_creator status to accepted
+  // Update campaign_creator status and rate to reflect the final accepted terms
   await supabaseAdmin
     .from('campaign_creators')
-    .update({ status: 'accepted' })
+    .update({
+      status: 'accepted',
+      rate_amount: latestProposal.rate_amount,
+      rate_currency: latestProposal.rate_currency,
+    })
     .eq('id', campaignCreatorId);
 
   // Create creator agreement (financial commitment)
@@ -848,11 +852,60 @@ export async function acceptCounterProposal(
     throw new Error('Failed to accept counter proposal');
   }
 
-  // Update campaign_creator status to accepted
+  // Update campaign_creator status and rate to reflect the accepted counter terms
   await supabaseAdmin
     .from('campaign_creators')
-    .update({ status: 'accepted' })
+    .update({
+      status: 'accepted',
+      rate_amount: latestProposal.rate_amount,
+      rate_currency: latestProposal.rate_currency,
+    })
     .eq('id', campaignCreatorId);
+
+  // Create creator agreement (financial commitment) for the counter rate
+  if (latestProposal.rate_amount != null) {
+    const campaignCurrency = (await supabaseAdmin
+      .from('campaigns')
+      .select('currency')
+      .eq('id', campaigns.id)
+      .single()).data?.currency || 'INR';
+
+    const proposalCurrency = latestProposal.rate_currency || campaignCurrency;
+    const fxRate = await getFxRate(proposalCurrency, campaignCurrency);
+    const convertedAmt = convertAmount(Number(latestProposal.rate_amount), fxRate);
+
+    await supabaseAdmin.from('creator_agreements').insert({
+      campaign_id: campaigns.id,
+      campaign_creator_id: campaignCreatorId,
+      creator_id: creators.id,
+      proposal_version_id: proposal.id,
+      original_amount: Number(latestProposal.rate_amount),
+      original_currency: proposalCurrency,
+      fx_rate: fxRate,
+      converted_amount: convertedAmt,
+      converted_currency: campaignCurrency,
+      status: 'committed',
+      created_by: ctx.user!.id,
+    });
+
+    try {
+      await supabaseAdmin.from('campaign_finance_logs').insert({
+        campaign_id: campaigns.id,
+        action_type: 'proposal_accepted',
+        metadata_json: {
+          campaignCreatorId,
+          creatorId: creators.id,
+          originalAmount: Number(latestProposal.rate_amount),
+          originalCurrency: proposalCurrency,
+          convertedAmount: convertedAmt,
+          fxRate,
+        },
+        performed_by: ctx.user!.id,
+      });
+    } catch (err) {
+      console.error('[Finance] Failed to log counter acceptance:', err);
+    }
+  }
 
   // Log activity
   await logActivity({

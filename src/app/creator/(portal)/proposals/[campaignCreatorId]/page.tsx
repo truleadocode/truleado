@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Separator } from '@/components/ui/separator'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
-import { formatSmallestUnit } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency'
 
 interface ProposalVersion {
   id: string
@@ -121,7 +121,7 @@ export default function CreatorProposalPage() {
 
       // Pre-fill counter form with current rate
       if (proposalData.myCreatorProposal?.rateAmount) {
-        setCounterRate((proposalData.myCreatorProposal.rateAmount / 100).toString())
+        setCounterRate(proposalData.myCreatorProposal.rateAmount.toString())
       }
     } catch (err) {
       console.error('Failed to load proposal:', err)
@@ -177,11 +177,10 @@ export default function CreatorProposalPage() {
 
     setActionLoading(true)
     try {
-      const rateInCents = Math.round(parseFloat(counterRate) * 100)
       await graphqlRequest(mutations.counterProposal, {
         input: {
           campaignCreatorId,
-          rateAmount: rateInCents,
+          rateAmount: parseFloat(counterRate),
           rateCurrency: proposal?.rateCurrency || 'INR',
           notes: counterNotes || undefined,
         },
@@ -220,7 +219,7 @@ export default function CreatorProposalPage() {
 
   const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return 'Not specified'
-    return formatSmallestUnit(amount, currency || 'INR')
+    return formatCurrency(amount, currency || 'INR')
   }
 
   const formatDate = (date: string | null) => {
@@ -615,7 +614,7 @@ export default function CreatorProposalPage() {
 
                   const formatRate = (amount: number | null, currency: string | null) => {
                     if (!amount) return null
-                    return formatSmallestUnit(amount, currency || 'INR')
+                    return formatCurrency(amount, currency || 'INR')
                   }
 
                   const getActionText = (createdByType: string, state: string) => {
