@@ -34,6 +34,36 @@ function formatCurrencyAmount(amount: number | undefined, currency: string): str
 }
 
 /**
+ * Send a 6-digit OTP email to a creator for authentication
+ */
+export async function sendOTPEmail(params: {
+  agencyId: string;
+  creatorEmail: string;
+  creatorName: string;
+  otp: string;
+}): Promise<void> {
+  const { agencyId, creatorEmail, creatorName, otp } = params;
+
+  await ensureSubscriber({
+    subscriberId: creatorEmail,
+    email: creatorEmail,
+    firstName: creatorName,
+    tenantId: agencyId,
+  });
+
+  await triggerNotification({
+    workflowId: 'creator-otp',
+    subscriberId: creatorEmail,
+    email: creatorEmail,
+    agencyId,
+    data: {
+      otp,
+      expiresInMinutes: 10,
+    },
+  });
+}
+
+/**
  * Notify creator that a proposal has been sent to them
  */
 export async function notifyProposalSent(params: {
@@ -77,7 +107,7 @@ export async function notifyProposalSent(params: {
       campaignName,
       rateAmount: formattedRate, // Formatted string like "₹500" or "$500"
       rateCurrency,
-      actionUrl: `${baseUrl}/creator/proposals/${campaignCreatorId}`,
+      actionUrl: `${baseUrl}/proposal/${campaignCreatorId}?email=${encodeURIComponent(creatorEmail)}`,
     },
   });
 }

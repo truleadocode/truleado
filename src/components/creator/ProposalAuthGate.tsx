@@ -1,25 +1,22 @@
 'use client';
 
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithCustomToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase/client';
-import { useAuth } from '@/contexts/auth-context';
 
 type Step = 'email' | 'otp' | 'authenticating';
 
-export default function CreatorLogin() {
-  const router = useRouter();
-  const { user, loading: authLoading } = useAuth();
+interface Props {
+  proposalId: string;
+  /** Pre-filled email from URL query param */
+  initialEmail?: string;
+}
 
-  // Once auth context settles with a user, redirect to dashboard
-  useEffect(() => {
-    if (!authLoading && user) {
-      router.push('/creator/dashboard');
-    }
-  }, [user, authLoading, router]);
+export function ProposalAuthGate({ proposalId, initialEmail = '' }: Props) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>('email');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail.toLowerCase());
   const [digits, setDigits] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -120,8 +117,11 @@ export default function CreatorLogin() {
         return;
       }
 
-      // Server already linked the creator — just sign in. The useEffect watching
-      // useAuth().user handles the redirect once the auth context settles.
+      // Exchange custom token for Firebase session.
+      // The server already linked the creator in the DB, so this is all we need.
+      // We stay in 'authenticating' state — the parent ProposalPage watches useAuth().user
+      // and redirects once the auth context has settled. This avoids the race condition
+      // where the portal layout sees user=null before fetchUserData completes.
       await signInWithCustomToken(auth, data.customToken);
     } catch {
       setError('Authentication failed. Please try again.');
@@ -145,8 +145,8 @@ export default function CreatorLogin() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow p-8">
-          <h1 className="text-2xl font-bold mb-2">Creator Login</h1>
-          <p className="text-gray-600 mb-6">Sign in with your email address.</p>
+          <h1 className="text-2xl font-bold mb-2">View your proposal</h1>
+          <p className="text-gray-600 mb-6">Confirm your email to access this proposal.</p>
           <form onSubmit={handleSendCode} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -176,9 +176,6 @@ export default function CreatorLogin() {
               {loading ? 'Sending…' : 'Send Code'}
             </button>
           </form>
-          <p className="text-xs text-gray-500 text-center mt-6">
-            This is the creator portal. If you're an agency user, please use the main login.
-          </p>
         </div>
       </div>
     );

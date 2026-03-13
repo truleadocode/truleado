@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Building2, Users, Calendar, Save, Crown, DollarSign } from 'lucide-react'
+import { ArrowLeft, Building2, Users, Calendar, Save, Crown, DollarSign, Coins } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -86,6 +86,13 @@ export default function AdminAgencyDetail() {
   // Subscription save state
   const [savingSub, setSavingSub] = useState(false)
   const [subMessage, setSubMessage] = useState('')
+
+  // Credit management
+  const [creditOperation, setCreditOperation] = useState<'add' | 'remove'>('add')
+  const [creditAmount, setCreditAmount] = useState('')
+  const [creditNote, setCreditNote] = useState('')
+  const [savingCredits, setSavingCredits] = useState(false)
+  const [creditMessage, setCreditMessage] = useState('')
 
   useEffect(() => {
     if (!agencyId) return
@@ -191,6 +198,44 @@ export default function AdminAgencyDetail() {
     }
   }
 
+  const handleCreditAdjustment = async () => {
+    const amount = parseInt(creditAmount)
+    if (!amount || amount <= 0) {
+      setCreditMessage('Error: Enter a valid positive amount.')
+      return
+    }
+    setSavingCredits(true)
+    setCreditMessage('')
+    try {
+      const res = await fetch(`/api/admin/agencies/${agencyId}/credits`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operation: creditOperation,
+          amount,
+          note: creditNote || undefined,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (res.ok) {
+        setAgency((prev) => (prev ? { ...prev, credit_balance: data.newBalance } : prev))
+        setCreditAmount('')
+        setCreditNote('')
+        setCreditMessage(
+          `${creditOperation === 'add' ? 'Added' : 'Removed'} ${amount} credits. New balance: ${data.newBalance}`
+        )
+      } else {
+        setCreditMessage(`Error: ${data.error}`)
+      }
+    } catch {
+      setCreditMessage('Error: Failed to update credits')
+    } finally {
+      setSavingCredits(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="container px-6 py-6">
@@ -259,6 +304,82 @@ export default function AdminAgencyDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Credit Management */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start gap-3">
+            <Coins className="h-5 w-5 text-primary mt-0.5" />
+            <div>
+              <CardTitle>Credit Management</CardTitle>
+              <CardDescription>
+                Current balance: <span className="font-semibold text-foreground">{agency.credit_balance} credits</span>
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Operation</label>
+              <Select value={creditOperation} onValueChange={(v) => setCreditOperation(v as 'add' | 'remove')}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="add">Add Credits</SelectItem>
+                  <SelectItem value="remove">Remove Credits</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Amount</label>
+              <Input
+                type="number"
+                min={1}
+                step={1}
+                placeholder="e.g., 100"
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Note (optional)</label>
+              <Input
+                type="text"
+                placeholder="e.g., Trial bonus"
+                value={creditNote}
+                onChange={(e) => setCreditNote(e.target.value)}
+              />
+            </div>
+          </div>
+          {creditAmount && !isNaN(parseInt(creditAmount)) && parseInt(creditAmount) > 0 && (
+            <p className="text-xs text-muted-foreground">
+              New balance after {creditOperation}:{' '}
+              <span className="font-medium text-foreground">
+                {creditOperation === 'add'
+                  ? agency.credit_balance + parseInt(creditAmount)
+                  : agency.credit_balance - parseInt(creditAmount)}{' '}
+                credits
+              </span>
+            </p>
+          )}
+          {creditMessage && (
+            <p className={`text-sm ${creditMessage.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
+              {creditMessage}
+            </p>
+          )}
+          <Button
+            onClick={handleCreditAdjustment}
+            disabled={savingCredits || !creditAmount}
+            size="sm"
+            variant={creditOperation === 'remove' ? 'destructive' : 'default'}
+          >
+            <Coins className="h-4 w-4 mr-2" />
+            {savingCredits ? 'Saving...' : creditOperation === 'add' ? 'Add Credits' : 'Remove Credits'}
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Trial Management */}
       <Card>
