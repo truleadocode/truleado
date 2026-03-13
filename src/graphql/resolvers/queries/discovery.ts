@@ -309,7 +309,7 @@ export async function discoveryEstimateCost(
 
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
-    .select('premium_token_balance')
+    .select('credit_balance')
     .eq('id', args.agencyId)
     .single();
 
@@ -317,7 +317,7 @@ export async function discoveryEstimateCost(
     throw new Error('Failed to fetch agency balance');
   }
 
-  const currentBalance = agency.premium_token_balance;
+  const currentBalance = agency.credit_balance ?? 0;
 
   return {
     unitCost: price.internalCost,

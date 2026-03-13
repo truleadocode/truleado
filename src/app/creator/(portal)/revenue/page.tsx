@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { DollarSign, TrendingUp, Clock, CheckCircle, Inbox } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
-import { formatSmallestUnit } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency'
 
 interface CampaignCreator {
   id: string
@@ -58,7 +58,7 @@ export default function RevenuePage() {
   }, [user, fetchData])
 
   const formatCreatorCurrency = (amount: number, currency: string = 'INR') => {
-    return formatSmallestUnit(amount, currency)
+    return formatCurrency(amount, currency)
   }
 
   // Calculate revenue metrics

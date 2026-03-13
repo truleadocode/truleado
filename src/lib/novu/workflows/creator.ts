@@ -8,7 +8,7 @@
 import { triggerNotification } from '@/lib/novu/trigger';
 import { ensureSubscriber } from '@/lib/novu/subscriber';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { formatSmallestUnit } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 
 /**
  * Get the base URL for action links
@@ -30,7 +30,7 @@ function getBaseUrl(): string {
  */
 function formatCurrencyAmount(amount: number | undefined, currency: string): string {
   if (amount === undefined || amount === null) return '';
-  return formatSmallestUnit(amount, currency);
+  return formatCurrency(amount, currency);
 }
 
 /**

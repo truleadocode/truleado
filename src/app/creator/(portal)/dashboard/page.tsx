@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
-import { formatSmallestUnit } from '@/lib/currency'
+import { formatCurrency } from '@/lib/currency'
 
 interface CampaignCreator {
   id: string
@@ -153,7 +153,7 @@ export default function CreatorDashboardPage() {
 
   const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
     if (!amount) return null
-    return formatSmallestUnit(amount, currency || 'INR')
+    return formatCurrency(amount, currency || 'INR')
   }
 
   const getStatusBadge = (status: string) => {
