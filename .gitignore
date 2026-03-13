@@ -42,3 +42,6 @@ supabase/.temp
 # Vercel
 .vercel
 .env*.local
+
+# Claude Code worktrees
+.claude/worktrees/
