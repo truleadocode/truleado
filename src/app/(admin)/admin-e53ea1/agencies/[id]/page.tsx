@@ -21,8 +21,7 @@ interface AgencyDetail {
   status: string
   billing_email: string | null
   currency_code: string | null
-  token_balance: number
-  premium_token_balance: number
+  credit_balance: number
   trial_start_date: string | null
   trial_end_date: string | null
   trial_days: number | null
@@ -249,14 +248,8 @@ export default function AdminAgencyDetail() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Basic Tokens</p>
-            <p className="font-semibold">{agency.token_balance}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4 pb-3">
-            <p className="text-xs text-muted-foreground">Premium Tokens</p>
-            <p className="font-semibold">{agency.premium_token_balance}</p>
+            <p className="text-xs text-muted-foreground">Credits</p>
+            <p className="font-semibold">{agency.credit_balance}</p>
           </CardContent>
         </Card>
         <Card>

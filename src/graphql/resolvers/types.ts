@@ -79,8 +79,7 @@ export const typeResolvers = {
   Agency: {
     // Field mappings for snake_case to camelCase
     agencyCode: (parent: { agency_code: string | null }) => parent.agency_code,
-    tokenBalance: (parent: { token_balance: number }) => parent.token_balance ?? 0,
-    premiumTokenBalance: (parent: { premium_token_balance: number }) => parent.premium_token_balance ?? 0,
+    creditBalance: (parent: { credit_balance: number }) => parent.credit_balance ?? 0,
     billingEmail: (parent: { billing_email: string | null }) => parent.billing_email,
     currencyCode: (parent: { currency_code: string | null }) => parent.currency_code ?? 'USD',
     timezone: (parent: { timezone: string | null }) => parent.timezone ?? 'UTC',
@@ -1496,8 +1495,7 @@ export const typeResolvers = {
   },
 
   TokenPurchase: {
-    purchaseType: (parent: { purchase_type: string }) => parent.purchase_type,
-    tokenQuantity: (parent: { token_quantity: number }) => parent.token_quantity,
+    creditQuantity: (parent: { credit_quantity: number }) => parent.credit_quantity,
     amountPaise: (parent: { amount_paise: number }) => parent.amount_paise,
     razorpayOrderId: (parent: { razorpay_order_id: string | null }) => parent.razorpay_order_id,
     createdAt: (parent: { created_at: string }) => parent.created_at,

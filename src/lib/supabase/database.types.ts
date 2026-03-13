@@ -82,45 +82,71 @@ export type Database = {
           agency_code: string | null
           billing_email: string | null
           created_at: string
+          credit_balance: number | null
           currency_code: string | null
           id: string
           language_code: string | null
           name: string
-          premium_token_balance: number | null
           status: string | null
           timezone: string | null
-          token_balance: number | null
           updated_at: string
         }
         Insert: {
           agency_code?: string | null
           billing_email?: string | null
           created_at?: string
+          credit_balance?: number | null
           currency_code?: string | null
           id?: string
           language_code?: string | null
           name: string
-          premium_token_balance?: number | null
           status?: string | null
           timezone?: string | null
-          token_balance?: number | null
           updated_at?: string
         }
         Update: {
           agency_code?: string | null
           billing_email?: string | null
           created_at?: string
+          credit_balance?: number | null
           currency_code?: string | null
           id?: string
           language_code?: string | null
           name?: string
-          premium_token_balance?: number | null
           status?: string | null
           timezone?: string | null
-          token_balance?: number | null
           updated_at?: string
         }
         Relationships: []
+      }
+      credit_purchase_config: {
+        Row: {
+          credit_price_usd: number
+          id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          credit_price_usd?: number
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          credit_price_usd?: number
+          id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_purchase_config_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       agency_email_config: {
         Row: {
@@ -2963,6 +2989,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           created_by: string
+          credit_quantity: number
           currency: string
           id: string
           purchase_type: string
@@ -2970,7 +2997,6 @@ export type Database = {
           razorpay_payment_id: string | null
           razorpay_signature: string | null
           status: string
-          token_quantity: number
           updated_at: string
         }
         Insert: {
@@ -2979,6 +3005,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by: string
+          credit_quantity: number
           currency?: string
           id?: string
           purchase_type: string
@@ -2986,7 +3013,6 @@ export type Database = {
           razorpay_payment_id?: string | null
           razorpay_signature?: string | null
           status?: string
-          token_quantity: number
           updated_at?: string
         }
         Update: {
@@ -2995,6 +3021,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           created_by?: string
+          credit_quantity?: number
           currency?: string
           id?: string
           purchase_type?: string
@@ -3002,7 +3029,6 @@ export type Database = {
           razorpay_payment_id?: string | null
           razorpay_signature?: string | null
           status?: string
-          token_quantity?: number
           updated_at?: string
         }
         Relationships: [

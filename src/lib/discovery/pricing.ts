@@ -4,14 +4,14 @@
  * Config-driven pricing that reads from the `token_pricing_config` table.
  * Supports per-agency overrides with global defaults as fallback.
  *
- * Pricing rules:
+ * Pricing rules (all costs in credits, $0.012/credit):
  *   - Search: FREE
- *   - Unlock (no contact): 0.02 premium tokens per influencer
- *   - Unlock (with contact): 0.04 premium tokens per influencer
- *   - Export SHORT: 0.02 per account
- *   - Export FULL: 0.04 per account
- *   - Import (no contact): 0.02 premium tokens per influencer
- *   - Import (with contact): 0.04 premium tokens per influencer
+ *   - Unlock (no contact): 3 credits per influencer
+ *   - Unlock (with contact): 5 credits per influencer
+ *   - Export SHORT: 3 credits per account
+ *   - Export FULL: 5 credits per account
+ *   - Import (no contact): 3 credits per influencer
+ *   - Import (with contact): 5 credits per influencer
  */
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -19,7 +19,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 export interface PricingResult {
   /** What OnSocial charges per unit (their tokens) */
   providerCost: number;
-  /** What we charge per unit (Premium Tokens) */
+  /** What we charge per unit (Credits) */
   internalCost: number;
   /** Total internal cost = internalCost * quantity */
   totalInternalCost: number;

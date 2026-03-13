@@ -83,7 +83,7 @@ export async function fetchDeliverableAnalytics(
   // Check and deduct tokens
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
-    .select('token_balance')
+    .select('credit_balance')
     .eq('id', agencyId)
     .single();
 
@@ -91,22 +91,22 @@ export async function fetchDeliverableAnalytics(
     throw notFoundError('Agency', agencyId);
   }
 
-  if (agency.token_balance < urlCount) {
+  if (agency.credit_balance < urlCount) {
     throw insufficientTokensError(
-      `Need ${urlCount} tokens to fetch analytics for ${urlCount} URL(s)`,
+      `Need ${urlCount} credits to fetch analytics for ${urlCount} URL(s)`,
       urlCount,
-      agency.token_balance
+      agency.credit_balance
     );
   }
 
   // Deduct tokens before API calls
   const { error: deductError } = await supabaseAdmin
     .from('agencies')
-    .update({ token_balance: agency.token_balance - urlCount })
+    .update({ credit_balance: agency.credit_balance - urlCount })
     .eq('id', agencyId);
 
   if (deductError) {
-    throw new Error('Failed to deduct analytics tokens');
+    throw new Error('Failed to deduct analytics credits');
   }
 
   // Create job record
@@ -128,7 +128,7 @@ export async function fetchDeliverableAnalytics(
     // Refund tokens on failure
     await supabaseAdmin
       .from('agencies')
-      .update({ token_balance: agency.token_balance })
+      .update({ credit_balance: agency.credit_balance })
       .eq('id', agencyId);
     throw new Error('Failed to create analytics fetch job');
   }
@@ -159,7 +159,7 @@ export async function fetchDeliverableAnalytics(
       deliverableId,
       urlCount,
       tokensConsumed: urlCount,
-      newBalance: agency.token_balance - urlCount,
+      newBalance: agency.credit_balance - urlCount,
     },
   });
 
@@ -210,7 +210,7 @@ export async function refreshCampaignAnalytics(
   // Check and deduct tokens
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
-    .select('token_balance')
+    .select('credit_balance')
     .eq('id', agencyId)
     .single();
 
@@ -218,22 +218,22 @@ export async function refreshCampaignAnalytics(
     throw notFoundError('Agency', agencyId);
   }
 
-  if (agency.token_balance < urlCount) {
+  if (agency.credit_balance < urlCount) {
     throw insufficientTokensError(
-      `Need ${urlCount} tokens to refresh analytics for ${urlCount} URL(s) across campaign`,
+      `Need ${urlCount} credits to refresh analytics for ${urlCount} URL(s) across campaign`,
       urlCount,
-      agency.token_balance
+      agency.credit_balance
     );
   }
 
   // Deduct tokens
   const { error: deductError } = await supabaseAdmin
     .from('agencies')
-    .update({ token_balance: agency.token_balance - urlCount })
+    .update({ credit_balance: agency.credit_balance - urlCount })
     .eq('id', agencyId);
 
   if (deductError) {
-    throw new Error('Failed to deduct analytics tokens');
+    throw new Error('Failed to deduct analytics credits');
   }
 
   // Create campaign-wide job (deliverable_id = null)
@@ -255,7 +255,7 @@ export async function refreshCampaignAnalytics(
     // Refund tokens
     await supabaseAdmin
       .from('agencies')
-      .update({ token_balance: agency.token_balance })
+      .update({ credit_balance: agency.credit_balance })
       .eq('id', agencyId);
     throw new Error('Failed to create analytics fetch job');
   }
@@ -286,7 +286,7 @@ export async function refreshCampaignAnalytics(
       campaignId,
       urlCount,
       tokensConsumed: urlCount,
-      newBalance: agency.token_balance - urlCount,
+      newBalance: agency.credit_balance - urlCount,
     },
   });
 

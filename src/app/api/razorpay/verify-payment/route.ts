@@ -93,28 +93,24 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', purchaseId);
 
-    // --- Credit tokens to agency ---
-    const balanceColumn =
-      purchase.purchase_type === 'premium' ? 'premium_token_balance' : 'token_balance';
-
+    // --- Credit credits to agency ---
     const { data: agency } = await supabaseAdmin
       .from('agencies')
-      .select(balanceColumn)
+      .select('credit_balance')
       .eq('id', purchase.agency_id)
       .single();
 
-    const currentBalance = agency?.[balanceColumn] ?? 0;
-    const newBalance = currentBalance + purchase.token_quantity;
+    const currentBalance = agency?.credit_balance ?? 0;
+    const newBalance = currentBalance + purchase.credit_quantity;
 
     await supabaseAdmin
       .from('agencies')
-      .update({ [balanceColumn]: newBalance })
+      .update({ credit_balance: newBalance })
       .eq('id', purchase.agency_id);
 
     return NextResponse.json({
       success: true,
-      purchaseType: purchase.purchase_type,
-      tokensAdded: purchase.token_quantity,
+      creditsAdded: purchase.credit_quantity,
       newBalance,
     });
   } catch (err) {

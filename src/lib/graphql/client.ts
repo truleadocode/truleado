@@ -1369,13 +1369,12 @@ export const queries = {
     }
   `,
 
-  // Billing / Token Purchases
+  // Billing / Credits
   agencyTokenBalance: `
     query GetAgencyTokenBalance($id: ID!) {
       agency(id: $id) {
         id
-        tokenBalance
-        premiumTokenBalance
+        creditBalance
         subscriptionStatus
         subscriptionTier
         billingInterval
@@ -1419,8 +1418,7 @@ export const queries = {
     query GetTokenPurchases($agencyId: ID!) {
       tokenPurchases(agencyId: $agencyId) {
         id
-        purchaseType
-        tokenQuantity
+        creditQuantity
         amountPaise
         currency
         razorpayOrderId
