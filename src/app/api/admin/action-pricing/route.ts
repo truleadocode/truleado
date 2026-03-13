@@ -35,7 +35,7 @@ export async function GET() {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const mapped = (data || []).map((row) => ({
+  const mapped = (data || []).map((row: Record<string, unknown>) => ({
     id: row.id,
     provider: row.provider,
     action: row.action,
