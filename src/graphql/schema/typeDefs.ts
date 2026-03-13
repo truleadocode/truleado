@@ -156,8 +156,7 @@ export const typeDefs = gql`
     agencyCode: String
     billingEmail: String
     status: String!
-    tokenBalance: Int!
-    premiumTokenBalance: Int!
+    creditBalance: Int!
     currencyCode: String!
     timezone: String!
     languageCode: String!
@@ -1075,11 +1074,10 @@ export const typeDefs = gql`
     updatedAt: DateTime!
   }
 
-  # Token purchase record (billing)
+  # Credit purchase record (billing)
   type TokenPurchase {
     id: ID!
-    purchaseType: String!
-    tokenQuantity: Int!
+    creditQuantity: Int!
     amountPaise: Int!
     currency: String!
     razorpayOrderId: String

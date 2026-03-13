@@ -5,11 +5,10 @@ import { Coins } from "lucide-react"
 import { graphqlRequest, queries } from "@/lib/graphql/client"
 import { cn } from "@/lib/utils"
 
-interface TokenBalanceData {
+interface CreditBalanceData {
   agency: {
     id: string
-    tokenBalance: number
-    premiumTokenBalance: number
+    creditBalance: number
   }
 }
 
@@ -28,15 +27,15 @@ export function TokenBalanceBanner({ agencyId }: TokenBalanceBannerProps) {
 
     async function fetchBalance() {
       try {
-        const data = await graphqlRequest<TokenBalanceData>(
+        const data = await graphqlRequest<CreditBalanceData>(
           queries.agencyTokenBalance,
           { id: agencyId }
         )
         if (!cancelled) {
-          setBalance(data.agency.premiumTokenBalance)
+          setBalance(data.agency.creditBalance)
         }
       } catch (err) {
-        console.error("Failed to fetch token balance:", err)
+        console.error("Failed to fetch credit balance:", err)
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -82,7 +81,7 @@ export function TokenBalanceBanner({ agencyId }: TokenBalanceBannerProps) {
         )}
       />
       <span>
-        Premium Tokens: {balance.toLocaleString()}
+        Credits: {balance.toLocaleString()}
       </span>
       {isLow && (
         <span className="text-xs font-normal text-amber-600 dark:text-amber-400">

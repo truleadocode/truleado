@@ -78,7 +78,7 @@ export async function fetchPreCampaignAnalytics(
   // Check agency token balance
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
-    .select('token_balance')
+    .select('credit_balance')
     .eq('id', agencyId)
     .single();
   
@@ -86,11 +86,11 @@ export async function fetchPreCampaignAnalytics(
     throw notFoundError('Agency', agencyId);
   }
   
-  if (agency.token_balance < 1) {
+  if (agency.credit_balance < 1) {
     throw insufficientTokensError(
-      'Your agency has insufficient tokens for analytics fetch',
+      'Your agency has insufficient credits for analytics fetch',
       1,
-      agency.token_balance
+      agency.credit_balance
     );
   }
   
@@ -98,11 +98,11 @@ export async function fetchPreCampaignAnalytics(
   // This follows the "cost-aware" principle from the PRD
   const { error: deductError } = await supabaseAdmin
     .from('agencies')
-    .update({ token_balance: agency.token_balance - 1 })
+    .update({ credit_balance: agency.credit_balance - 1 })
     .eq('id', agencyId);
   
   if (deductError) {
-    throw new Error('Failed to deduct analytics token');
+    throw new Error('Failed to deduct analytics credits');
   }
   
   // TODO: Make external API call to analytics provider (e.g., OnSocial)
@@ -170,7 +170,7 @@ export async function fetchPreCampaignAnalytics(
     // Try to refund the token if snapshot creation fails
     await supabaseAdmin
       .from('agencies')
-      .update({ token_balance: agency.token_balance })
+      .update({ credit_balance: agency.credit_balance })
       .eq('id', agencyId);
     
     throw new Error('Failed to create analytics snapshot');
@@ -189,7 +189,7 @@ export async function fetchPreCampaignAnalytics(
       campaignCreatorId,
       platform,
       tokensConsumed: 1,
-      newBalance: agency.token_balance - 1,
+      newBalance: agency.credit_balance - 1,
     },
   });
   
@@ -263,7 +263,7 @@ export async function triggerSocialFetch(
   // Check agency token balance
   const { data: agency, error: agencyError } = await supabaseAdmin
     .from('agencies')
-    .select('token_balance')
+    .select('credit_balance')
     .eq('id', agencyId)
     .single();
 
@@ -271,22 +271,22 @@ export async function triggerSocialFetch(
     throw notFoundError('Agency', agencyId);
   }
 
-  if (agency.token_balance < 1) {
+  if (agency.credit_balance < 1) {
     throw insufficientTokensError(
-      'Your agency has insufficient tokens for social data fetch',
+      'Your agency has insufficient credits for social data fetch',
       1,
-      agency.token_balance
+      agency.credit_balance
     );
   }
 
   // Deduct token BEFORE creating the job
   const { error: deductError } = await supabaseAdmin
     .from('agencies')
-    .update({ token_balance: agency.token_balance - 1 })
+    .update({ credit_balance: agency.credit_balance - 1 })
     .eq('id', agencyId);
 
   if (deductError) {
-    throw new Error('Failed to deduct analytics token');
+    throw new Error('Failed to deduct analytics credits');
   }
 
   // Create job record
@@ -308,7 +308,7 @@ export async function triggerSocialFetch(
     // Refund token on failure
     await supabaseAdmin
       .from('agencies')
-      .update({ token_balance: agency.token_balance })
+      .update({ credit_balance: agency.credit_balance })
       .eq('id', agencyId);
     throw new Error('Failed to create social data job');
   }
@@ -340,7 +340,7 @@ export async function triggerSocialFetch(
       platform,
       jobType,
       tokensConsumed: 1,
-      newBalance: agency.token_balance - 1,
+      newBalance: agency.credit_balance - 1,
     },
   });
 

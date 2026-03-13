@@ -61,10 +61,10 @@ export function invalidStateError(
 }
 
 /**
- * Insufficient tokens - analytics blocked due to no tokens
+ * Insufficient credits - action blocked due to no credits
  */
 export function insufficientTokensError(
-  message = 'Insufficient tokens to perform this analytics fetch',
+  message = 'Insufficient credits to perform this action',
   required = 1,
   available = 0
 ): GraphQLError {

@@ -15,7 +15,7 @@ import { requireAuth, hasAgencyPermission, Permission } from '@/lib/rbac';
 import { forbiddenError, notFoundError } from '../../errors';
 import { logActivity } from '@/lib/audit';
 import { calculateUnlockCost, calculateExportCost, calculateImportCost } from '@/lib/discovery/pricing';
-import { deductPremiumTokens, refundPremiumTokens } from '@/lib/discovery/token-deduction';
+import { deductCredits, refundCredits } from '@/lib/discovery/token-deduction';
 import { unhideInfluencers } from '@/lib/onsocial/unhide';
 import { getInfluencerContacts } from '@/lib/onsocial/contacts';
 import { createExport } from '@/lib/onsocial/exports';
@@ -57,7 +57,7 @@ export async function discoveryUnlock(
 
   // Calculate cost and deduct agency tokens BEFORE calling OnSocial
   const pricing = await calculateUnlockCost(agencyId, influencers.length, false);
-  const deduction = await deductPremiumTokens(agencyId, Math.ceil(pricing.totalInternalCost));
+  const deduction = await deductCredits(agencyId, Math.ceil(pricing.totalInternalCost));
 
   try {
     // Call OnSocial unhide API to reveal hidden profiles (uses Truleado's subscription tokens)
@@ -128,7 +128,7 @@ export async function discoveryUnlock(
       expiresAt: u.expires_at,
     }));
   } catch (err) {
-    await refundPremiumTokens(agencyId, deduction.previousBalance);
+    await refundCredits(agencyId, deduction.previousBalance);
     throw err;
   }
 }
@@ -179,7 +179,7 @@ export async function discoveryExport(
   const pricing = await calculateExportCost(agencyId, totalAccounts, exportType);
 
   // Deduct tokens
-  const deduction = await deductPremiumTokens(agencyId, Math.ceil(pricing.totalInternalCost));
+  const deduction = await deductCredits(agencyId, Math.ceil(pricing.totalInternalCost));
 
   try {
     // Execute real export
@@ -239,7 +239,7 @@ export async function discoveryExport(
       completedAt: exportRecord.completed_at,
     };
   } catch (err) {
-    await refundPremiumTokens(agencyId, deduction.previousBalance);
+    await refundCredits(agencyId, deduction.previousBalance);
     throw err;
   }
 }
@@ -287,7 +287,7 @@ export async function discoveryImportToCreators(
 
   // Calculate and deduct tokens
   const pricing = await calculateImportCost(agencyId, count, withContact || false);
-  const deduction = await deductPremiumTokens(agencyId, Math.ceil(pricing.totalInternalCost));
+  const deduction = await deductCredits(agencyId, Math.ceil(pricing.totalInternalCost));
 
   try {
     // When importing with contact, call OnSocial /exports/contacts/ for email/phone
@@ -409,7 +409,7 @@ export async function discoveryImportToCreators(
     return results;
   } catch (err) {
     // Refund tokens on failure
-    await refundPremiumTokens(agencyId, deduction.previousBalance);
+    await refundCredits(agencyId, deduction.previousBalance);
     throw err;
   }
 }

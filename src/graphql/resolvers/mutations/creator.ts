@@ -154,12 +154,12 @@ export async function addCreator(
   try {
     const { data: agencyData } = await supabaseAdmin
       .from('agencies')
-      .select('token_balance')
+      .select('credit_balance')
       .eq('id', agencyId)
       .single();
 
     if (agencyData) {
-      let remainingTokens = agencyData.token_balance;
+      let remainingTokens = agencyData.credit_balance;
       const baseUrl = APP_URL.startsWith('http') ? APP_URL : `https://${APP_URL}`;
 
       const platformsToFetch: Array<{ platform: string; handle: string | null }> = [
@@ -172,7 +172,7 @@ export async function addCreator(
           // Deduct token
           await supabaseAdmin
             .from('agencies')
-            .update({ token_balance: remainingTokens - 1 })
+            .update({ credit_balance: remainingTokens - 1 })
             .eq('id', agencyId);
           remainingTokens -= 1;
 
@@ -255,7 +255,7 @@ export async function inviteCreatorToCampaign(
   // Get campaign info + agency currency for the notification and defaults
   const { data: campaign, error: campaignError } = await supabaseAdmin
     .from('campaigns')
-    .select('name, currency, projects!inner(agencies!inner(currency_code))')
+    .select('name, currency, projects!inner(clients!inner(agencies!inner(currency_code)))')
     .eq('id', campaignId)
     .single();
 
@@ -263,7 +263,7 @@ export async function inviteCreatorToCampaign(
     throw notFoundError('Campaign', campaignId);
   }
 
-  const agencyCurrency = (campaign as unknown as { projects: { agencies: { currency_code: string | null } } }).projects?.agencies?.currency_code;
+  const agencyCurrency = (campaign as unknown as { projects: { clients: { agencies: { currency_code: string | null } } } }).projects?.clients?.agencies?.currency_code;
   const defaultCurrency = rateCurrency || campaign.currency || agencyCurrency || 'USD';
   
   // Check if creator is already in the campaign

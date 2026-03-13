@@ -4,6 +4,8 @@
  * POST /api/razorpay/create-order
  *
  * Creates a Razorpay order and a pending token_purchases record.
+ * Credit price is read from credit_purchase_config table (admin-editable).
+ * INR amount is calculated using live fx rate from exchangerate-api.
  * Auth: Firebase Bearer token (same as upload route pattern).
  */
 
@@ -11,20 +13,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { verifyIdToken } from '@/lib/firebase/admin';
+import { getFxRate } from '@/lib/finance/fx-rates';
 
 export const runtime = 'nodejs';
 
 const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID!;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET!;
-
-/**
- * Prices in smallest currency unit (paise for INR, cents for USD).
- * INR agencies pay in INR; everyone else pays in USD.
- */
-const PRICES: Record<string, Record<string, number>> = {
-  INR: { basic: 50, premium: 7500 },     // ₹0.50, ₹75.00
-  USD: { basic: 1, premium: 90 },        // $0.01, $0.90
-};
 
 function getRazorpay() {
   return new Razorpay({
@@ -51,21 +45,16 @@ export async function POST(request: NextRequest) {
 
     // --- Parse body ---
     const body = await request.json();
-    const { purchaseType, quantity, agencyId } = body as {
-      purchaseType: string;
+    const { quantity, agencyId } = body as {
       quantity: number;
       agencyId: string;
     };
 
-    if (!purchaseType || !quantity || !agencyId) {
+    if (!quantity || !agencyId) {
       return NextResponse.json(
-        { error: 'Missing required fields: purchaseType, quantity, agencyId' },
+        { error: 'Missing required fields: quantity, agencyId' },
         { status: 400 }
       );
-    }
-
-    if (!['basic', 'premium'].includes(purchaseType)) {
-      return NextResponse.json({ error: 'Invalid purchaseType' }, { status: 400 });
     }
 
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
@@ -80,7 +69,6 @@ export async function POST(request: NextRequest) {
       .single();
 
     const billingCurrency = agencyRow?.currency_code === 'INR' ? 'INR' : 'USD';
-    const priceTable = PRICES[billingCurrency];
 
     // --- Resolve user via auth_identities ---
     const { data: identity } = await supabaseAdmin
@@ -104,21 +92,38 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (!membership || membership.role.toLowerCase() !== 'agency_admin') {
-      return NextResponse.json({ error: 'Only agency admins can purchase tokens' }, { status: 403 });
+      return NextResponse.json({ error: 'Only agency admins can purchase credits' }, { status: 403 });
     }
 
-    // --- Create Razorpay order ---
-    const unitPrice = priceTable[purchaseType];
-    const totalAmount = unitPrice * quantity;
-    const razorpay = getRazorpay();
+    // --- Fetch credit price from DB (admin-editable) ---
+    const { data: creditConfig, error: configError } = await supabaseAdmin
+      .from('credit_purchase_config')
+      .select('credit_price_usd')
+      .limit(1)
+      .single();
 
+    if (configError || !creditConfig) {
+      console.error('Failed to fetch credit_purchase_config:', configError);
+      return NextResponse.json({ error: 'Credit pricing not configured' }, { status: 500 });
+    }
+
+    const creditPriceUsd = creditConfig.credit_price_usd;
+
+    // --- Convert price to billing currency using live fx rate ---
+    const fxRate = await getFxRate('USD', billingCurrency);
+    // Amount in smallest currency unit (paise for INR, cents for USD)
+    const unitPriceInSmallest = Math.round(creditPriceUsd * fxRate * 100);
+    const totalAmount = unitPriceInSmallest * quantity;
+
+    // --- Create Razorpay order ---
+    const razorpay = getRazorpay();
     const order = await razorpay.orders.create({
       amount: totalAmount,
       currency: billingCurrency,
-      receipt: `tp_${Date.now()}`,
+      receipt: `cp_${Date.now()}`,
       notes: {
         agencyId,
-        purchaseType,
+        purchaseType: 'credit',
         quantity: String(quantity),
       },
     });
@@ -128,8 +133,8 @@ export async function POST(request: NextRequest) {
       .from('token_purchases')
       .insert({
         agency_id: agencyId,
-        purchase_type: purchaseType,
-        token_quantity: quantity,
+        purchase_type: 'credit',
+        credit_quantity: quantity,
         amount_paise: totalAmount,
         currency: billingCurrency,
         razorpay_order_id: order.id,
@@ -150,6 +155,8 @@ export async function POST(request: NextRequest) {
       currency: billingCurrency,
       purchaseId: purchase.id,
       keyId: RAZORPAY_KEY_ID,
+      creditPriceUsd,
+      fxRate,
     });
   } catch (err) {
     console.error('razorpay/create-order error:', err);

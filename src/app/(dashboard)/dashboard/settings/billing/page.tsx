@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   CreditCard,
   Coins,
-  Sparkles,
   CheckCircle2,
   XCircle,
   Clock,
@@ -25,15 +24,6 @@ import { useCurrency } from '@/hooks/use-currency'
 import { useToast } from '@/hooks/use-toast'
 import { formatSmallestUnit } from '@/lib/currency'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
-
-/**
- * Prices in smallest currency unit (paise for INR, cents for USD).
- * Must stay in sync with the server-side PRICES in create-order/route.ts.
- */
-const PRICES: Record<string, Record<string, number>> = {
-  INR: { basic: 50, premium: 7500 },
-  USD: { basic: 1, premium: 90 },
-}
 
 declare global {
   interface Window {
@@ -66,8 +56,7 @@ interface RazorpayResponse {
 
 interface TokenPurchase {
   id: string
-  purchaseType: string
-  tokenQuantity: number
+  creditQuantity: number
   amountPaise: number
   currency: string
   razorpayOrderId: string | null
@@ -77,8 +66,7 @@ interface TokenPurchase {
 }
 
 interface AgencyBillingData {
-  tokenBalance: number
-  premiumTokenBalance: number
+  creditBalance: number
   subscriptionStatus: string | null
   subscriptionTier: string | null
   billingInterval: string | null
@@ -147,7 +135,6 @@ export default function BillingSettingsPage() {
   const { currencyCode } = useCurrency()
   const { toast } = useToast()
   const billingCurrency = currencyCode === 'INR' ? 'INR' : 'USD'
-  const priceTable = PRICES[billingCurrency]
 
   const [agencyData, setAgencyData] = useState<AgencyBillingData | null>(null)
   const [plans, setPlans] = useState<SubscriptionPlan[]>([])
@@ -160,10 +147,11 @@ export default function BillingSettingsPage() {
   const [selectedInterval, setSelectedInterval] = useState<'monthly' | 'yearly'>('monthly')
   const [subscribing, setSubscribing] = useState<string | null>(null)
 
-  // Token purchase state
-  const [basicQty, setBasicQty] = useState(100)
-  const [premiumQty, setPremiumQty] = useState(10)
-  const [purchasing, setPurchasing] = useState<string | null>(null)
+  // Credit purchase state
+  const [creditQty, setCreditQty] = useState(100)
+  const [creditPriceUsd, setCreditPriceUsd] = useState(0.012)
+  const [unitPriceSmallest, setUnitPriceSmallest] = useState(1)
+  const [purchasing, setPurchasing] = useState(false)
 
   const isAgencyAdmin = currentAgency?.role?.toLowerCase() === 'agency_admin'
 
@@ -177,7 +165,7 @@ export default function BillingSettingsPage() {
     if (!currentAgency?.id) return
     setLoading(true)
     try {
-      const [balanceData, purchaseData, plansData, subPayData] = await Promise.all([
+      const [balanceData, purchaseData, plansData, subPayData, creditConfigData] = await Promise.all([
         graphqlRequest<{ agency: AgencyBillingData }>(queries.agencyTokenBalance, {
           id: currentAgency.id,
         }),
@@ -190,11 +178,14 @@ export default function BillingSettingsPage() {
         graphqlRequest<{ subscriptionPayments: SubscriptionPayment[] }>(queries.subscriptionPayments, {
           agencyId: currentAgency.id,
         }),
+        fetch(`/api/billing/credit-config?currency=${billingCurrency}`).then((r) => r.json()),
       ])
       setAgencyData(balanceData.agency)
       setPurchases(purchaseData.tokenPurchases)
       setPlans(plansData.subscriptionPlans)
       setSubPayments(subPayData.subscriptionPayments)
+      setCreditPriceUsd(creditConfigData.creditPriceUsd ?? 0.012)
+      setUnitPriceSmallest(creditConfigData.unitPriceSmallest ?? 1)
     } catch (err) {
       console.error('Failed to fetch billing data:', err)
       toast({ title: 'Failed to load billing data', variant: 'destructive' })
@@ -311,17 +302,16 @@ export default function BillingSettingsPage() {
     }
   }
 
-  // --- Token purchase handler ---
-  const handleTokenPurchase = async (purchaseType: 'basic' | 'premium') => {
+  // --- Credit purchase handler ---
+  const handleCreditPurchase = async () => {
     if (!currentAgency?.id || purchasing) return
 
-    const quantity = purchaseType === 'basic' ? basicQty : premiumQty
-    if (quantity < 1) {
+    if (creditQty < 1) {
       toast({ title: 'Enter a valid quantity', variant: 'destructive' })
       return
     }
 
-    setPurchasing(purchaseType)
+    setPurchasing(true)
 
     try {
       const token = await getToken()
@@ -334,8 +324,7 @@ export default function BillingSettingsPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          purchaseType,
-          quantity,
+          quantity: creditQty,
           agencyId: currentAgency.id,
         }),
       })
@@ -356,7 +345,7 @@ export default function BillingSettingsPage() {
         amount,
         currency,
         name: 'Truleado',
-        description: `${quantity} ${purchaseType === 'basic' ? 'Basic Scraping' : 'Premium'} Token${quantity > 1 ? 's' : ''}`,
+        description: `${creditQty} Credit${creditQty > 1 ? 's' : ''}`,
         order_id: orderId,
         handler: async (response: RazorpayResponse) => {
           try {
@@ -383,7 +372,7 @@ export default function BillingSettingsPage() {
             const result = await verifyRes.json()
             toast({
               title: 'Payment successful',
-              description: `${result.tokensAdded} ${purchaseType} token${result.tokensAdded > 1 ? 's' : ''} added`,
+              description: `${result.creditsAdded} credit${result.creditsAdded > 1 ? 's' : ''} added to your balance`,
             })
             fetchData()
           } catch (err) {
@@ -393,7 +382,7 @@ export default function BillingSettingsPage() {
               variant: 'destructive',
             })
           } finally {
-            setPurchasing(null)
+            setPurchasing(false)
           }
         },
         prefill: {
@@ -402,7 +391,7 @@ export default function BillingSettingsPage() {
         },
         theme: { color: '#7c3aed' },
         modal: {
-          ondismiss: () => setPurchasing(null),
+          ondismiss: () => setPurchasing(false),
         },
       })
 
@@ -413,7 +402,7 @@ export default function BillingSettingsPage() {
         description: err instanceof Error ? err.message : 'An error occurred',
         variant: 'destructive',
       })
-      setPurchasing(null)
+      setPurchasing(false)
     }
   }
 
@@ -456,7 +445,7 @@ export default function BillingSettingsPage() {
   return (
     <>
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      <Header title="Billing" subtitle="Manage your subscription and tokens" />
+      <Header title="Billing" subtitle="Manage your subscription and credits" />
 
       <div className="p-6 space-y-6">
         <Link
@@ -714,122 +703,100 @@ export default function BillingSettingsPage() {
           </div>
         )}
 
-        {/* Section 3: Token Balance + Purchase */}
+        {/* Section 3: Credit Balance */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
               <CreditCard className="h-5 w-5" />
-              <CardTitle>Token Balance</CardTitle>
+              <CardTitle>Credit Balance</CardTitle>
             </div>
             <CardDescription>
-              Tokens are consumed when fetching social media analytics for creators.
+              Credits are consumed when fetching analytics, discovering and unlocking influencer profiles.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {loading ? (
-              <div className="flex gap-8">
-                <div className="h-12 w-32 bg-muted rounded animate-pulse" />
-                <div className="h-12 w-32 bg-muted rounded animate-pulse" />
-              </div>
+              <div className="h-12 w-32 bg-muted rounded animate-pulse" />
             ) : (
-              <div className="flex gap-8">
-                <div>
-                  <p className="text-3xl font-bold">{agencyData?.tokenBalance ?? 0}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Basic Scraping Tokens</p>
-                </div>
-                <div className="border-l pl-8">
-                  <p className="text-3xl font-bold">{agencyData?.premiumTokenBalance ?? 0}</p>
-                  <p className="text-sm text-muted-foreground mt-1">Premium Tokens</p>
-                </div>
+              <div>
+                <p className="text-3xl font-bold">{agencyData?.creditBalance ?? 0}</p>
+                <p className="text-sm text-muted-foreground mt-1">Credits</p>
               </div>
             )}
           </CardContent>
         </Card>
 
+        {/* Section 4: Purchase Credits */}
         {isAgencyAdmin && (
           <div>
-            <h2 className="text-lg font-semibold mb-4">Purchase Tokens</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Basic Scraping Tokens */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                      <Coins className="h-5 w-5 text-blue-500" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">Basic Scraping Tokens</CardTitle>
-                      <CardDescription>{formatSmallestUnit(priceTable.basic, billingCurrency)} per token</CardDescription>
-                    </div>
+            <h2 className="text-lg font-semibold mb-4">Purchase Credits</h2>
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Coins className="h-5 w-5 text-primary" />
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Used for fetching Instagram and YouTube profile data, posts, and engagement metrics.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Qty:</span>
-                    <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setBasicQty(Math.max(1, basicQty - 50))} disabled={basicQty <= 1}>
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <input type="number" min={1} max={100000} value={basicQty} onChange={(e) => setBasicQty(Math.max(1, Math.min(100000, parseInt(e.target.value) || 1)))} className="w-20 text-center rounded-md border border-input bg-background px-2 py-1 text-sm" />
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setBasicQty(Math.min(100000, basicQty + 50))}>
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
+                  <div>
+                    <CardTitle className="text-base">Credits</CardTitle>
+                    <CardDescription>
+                      {formatSmallestUnit(unitPriceSmallest, billingCurrency)} per credit
+                      {billingCurrency !== 'USD' && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          (${creditPriceUsd.toFixed(4)} USD)
+                        </span>
+                      )}
+                    </CardDescription>
                   </div>
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <span className="text-sm font-medium">Total: {formatSmallestUnit(basicQty * priceTable.basic, billingCurrency)}</span>
-                    <Button onClick={() => handleTokenPurchase('basic')} disabled={purchasing !== null} size="sm">
-                      {purchasing === 'basic' ? 'Processing...' : 'Buy Tokens'}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Used for fetching Instagram and YouTube analytics, and discovering, unlocking, or exporting influencer profiles.
+                </p>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-muted-foreground">Qty:</span>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setCreditQty(Math.max(1, creditQty - 50))}
+                      disabled={creditQty <= 1}
+                    >
+                      <Minus className="h-3 w-3" />
+                    </Button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={100000}
+                      value={creditQty}
+                      onChange={(e) => setCreditQty(Math.max(1, Math.min(100000, parseInt(e.target.value) || 1)))}
+                      className="w-20 text-center rounded-md border border-input bg-background px-2 py-1 text-sm"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setCreditQty(Math.min(100000, creditQty + 50))}
+                    >
+                      <Plus className="h-3 w-3" />
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Premium Tokens */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                      <Sparkles className="h-5 w-5 text-purple-500" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base">Premium Tokens</CardTitle>
-                      <CardDescription>{formatSmallestUnit(priceTable.premium, billingCurrency)} per token</CardDescription>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Used for enriched influencer profiles with audience demographics and advanced analytics.
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-muted-foreground">Qty:</span>
-                    <div className="flex items-center gap-1">
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPremiumQty(Math.max(1, premiumQty - 5))} disabled={premiumQty <= 1}>
-                        <Minus className="h-3 w-3" />
-                      </Button>
-                      <input type="number" min={1} max={10000} value={premiumQty} onChange={(e) => setPremiumQty(Math.max(1, Math.min(10000, parseInt(e.target.value) || 1)))} className="w-20 text-center rounded-md border border-input bg-background px-2 py-1 text-sm" />
-                      <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setPremiumQty(Math.min(10000, premiumQty + 5))}>
-                        <Plus className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between pt-2 border-t">
-                    <span className="text-sm font-medium">Total: {formatSmallestUnit(premiumQty * priceTable.premium, billingCurrency)}</span>
-                    <Button onClick={() => handleTokenPurchase('premium')} disabled={purchasing !== null} size="sm">
-                      {purchasing === 'premium' ? 'Processing...' : 'Buy Tokens'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <span className="text-sm font-medium">
+                    Total: {formatSmallestUnit(creditQty * unitPriceSmallest, billingCurrency)}
+                  </span>
+                  <Button onClick={handleCreditPurchase} disabled={purchasing} size="sm">
+                    {purchasing ? 'Processing...' : 'Buy Credits'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         )}
 
-        {/* Section 4: Payment History */}
+        {/* Section 5: Payment History */}
         <div>
           <h2 className="text-lg font-semibold mb-4">Payment History</h2>
           {loading ? (
@@ -849,7 +816,7 @@ export default function BillingSettingsPage() {
                 <h3 className="font-medium">No payments yet</h3>
                 <p className="text-sm text-muted-foreground text-center mt-1">
                   {isAgencyAdmin
-                    ? 'Subscribe to a plan or purchase tokens to get started.'
+                    ? 'Subscribe to a plan or purchase credits to get started.'
                     : 'Ask your agency admin to manage billing.'}
                 </p>
               </CardContent>
@@ -883,8 +850,8 @@ export default function BillingSettingsPage() {
                         ...purchases.map((p) => ({
                           id: p.id,
                           date: p.createdAt,
-                          type: 'token' as const,
-                          details: `${p.tokenQuantity.toLocaleString()} ${p.purchaseType === 'premium' ? 'Premium' : 'Basic'} tokens`,
+                          type: 'credit' as const,
+                          details: `${p.creditQuantity.toLocaleString()} Credits`,
                           amount: p.amountPaise,
                           currency: p.currency || 'INR',
                           status: p.status,
@@ -905,7 +872,7 @@ export default function BillingSettingsPage() {
                                 ) : (
                                   <Coins className="h-3 w-3" />
                                 )}
-                                {row.type === 'subscription' ? 'Subscription' : 'Token'}
+                                {row.type === 'subscription' ? 'Subscription' : 'Credits'}
                               </span>
                             </td>
                             <td className="p-3 text-sm">{row.details}</td>
