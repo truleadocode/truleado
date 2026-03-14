@@ -13,6 +13,8 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
+  Send,
+  Loader2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -41,6 +43,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
@@ -103,6 +106,8 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
   const [statusFilter, setStatusFilter] = useState('all')
   const [addInfluencerOpen, setAddInfluencerOpen] = useState(false)
   const [proposalSheetCreator, setProposalSheetCreator] = useState<CampaignCreator | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [sendingProposals, setSendingProposals] = useState(false)
 
   const isArchived = campaign.status === 'ARCHIVED' || campaign.status === 'COMPLETED'
 
@@ -142,6 +147,66 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
     const totalFees = accepted.reduce((sum, c) => sum + (c.rateAmount || 0), 0)
     return { count: accepted.length, totalFees }
   }, [campaign.creators])
+
+  // Draft creators for bulk send
+  const draftCreators = useMemo(() => {
+    return campaign.creators.filter(
+      (c) => c.status !== 'REMOVED' && (!c.proposalState || c.proposalState === 'DRAFT')
+    )
+  }, [campaign.creators])
+
+  // Selection handlers
+  const toggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === draftCreators.length) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(draftCreators.map((c) => c.id)))
+    }
+  }
+
+  // Bulk send proposals
+  const handleBulkSendProposals = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+
+    setSendingProposals(true)
+    try {
+      const result = await graphqlRequest<{
+        bulkSendProposals: { sent: number; skipped: number; errors: string[] }
+      }>(mutations.bulkSendProposals, { campaignCreatorIds: ids })
+
+      const { sent, skipped } = result.bulkSendProposals
+
+      if (sent > 0) {
+        toast({ title: `Proposals sent to ${sent} creator${sent !== 1 ? 's' : ''}` })
+      }
+      if (skipped > 0) {
+        toast({
+          title: `${skipped} creator${skipped !== 1 ? 's' : ''} skipped (no email)`,
+          variant: 'destructive',
+        })
+      }
+
+      setSelectedIds(new Set())
+      onRefresh?.()
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : 'Failed to send proposals',
+        variant: 'destructive',
+      })
+    } finally {
+      setSendingProposals(false)
+    }
+  }
 
   // Proposal handlers
   const handleAcceptCounter = async (campaignCreatorId: string) => {
@@ -243,6 +308,35 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
         </div>
       </div>
 
+      {/* Bulk send bar */}
+      {draftCreators.length > 0 && !isArchived && (
+        <div className="flex items-center justify-between rounded-md border bg-muted/50 px-4 py-2">
+          <div className="flex items-center gap-3">
+            <Checkbox
+              checked={selectedIds.size === draftCreators.length && draftCreators.length > 0}
+              onCheckedChange={toggleSelectAll}
+            />
+            <span className="text-sm text-muted-foreground">
+              {selectedIds.size > 0
+                ? `${selectedIds.size} of ${draftCreators.length} selected`
+                : `${draftCreators.length} unsent proposal${draftCreators.length !== 1 ? 's' : ''}`}
+            </span>
+          </div>
+          <Button
+            size="sm"
+            onClick={handleBulkSendProposals}
+            disabled={selectedIds.size === 0 || sendingProposals}
+          >
+            {sendingProposals ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="mr-1 h-4 w-4" />
+            )}
+            Send Proposals{selectedIds.size > 0 ? ` (${selectedIds.size})` : ''}
+          </Button>
+        </div>
+      )}
+
       {/* Influencer Cards */}
       {filteredCreators.length === 0 ? (
         <Card className="border-dashed">
@@ -265,8 +359,9 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
             const handle = getCreatorHandle(c)
             const tier = getTierLabel(c.followers)
             const delivCount = creatorDeliverableCount.get(c.id) || 0
+            const isDraft = !cc.proposalState || cc.proposalState.toUpperCase() === 'DRAFT'
             const isCountered = cc.proposalState?.toUpperCase() === 'COUNTERED'
-            const proposalStyle = cc.proposalState ? PROPOSAL_STATE_STYLES[cc.proposalState.toUpperCase()] || 'bg-gray-100 text-gray-700' : ''
+            const proposalStyle = cc.proposalState ? PROPOSAL_STATE_STYLES[cc.proposalState.toUpperCase()] || 'bg-gray-100 text-gray-700' : PROPOSAL_STATE_STYLES.DRAFT
             const statusStyle = STATUS_STYLES[cc.status] || 'bg-gray-100 text-gray-700'
 
             return (
@@ -275,6 +370,13 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                   {/* Header row */}
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
+                      {isDraft && !isArchived && (
+                        <Checkbox
+                          checked={selectedIds.has(cc.id)}
+                          onCheckedChange={() => toggleSelection(cc.id)}
+                          className="shrink-0"
+                        />
+                      )}
                       <Avatar className="h-10 w-10 shrink-0">
                         {c.profilePictureUrl && <AvatarImage src={c.profilePictureUrl} />}
                         <AvatarFallback>{getInitials(c.displayName)}</AvatarFallback>
@@ -320,13 +422,11 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                             : '—'}
                         </span>
                       </div>
-                      {cc.proposalState && (
-                        <Badge className={cn('text-[10px]', proposalStyle)}>
-                          {isCountered && <AlertCircle className="mr-1 h-3 w-3" />}
-                          {cc.proposalState}
-                          {isCountered && ' - Action Required'}
-                        </Badge>
-                      )}
+                      <Badge className={cn('text-[10px]', proposalStyle)}>
+                        {isCountered && <AlertCircle className="mr-1 h-3 w-3" />}
+                        {cc.proposalState || 'DRAFT'}
+                        {isCountered && ' - Action Required'}
+                      </Badge>
                     </div>
                     <div className="flex items-center gap-2">
                       {delivCount > 0 && (

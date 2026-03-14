@@ -567,6 +567,7 @@ export const typeDefs = gql`
     versionNumber: Int!
     fileUrl: String  # Storage path
     fileName: String
+    tag: String      # Logical grouping label chosen by uploader
     fileSize: Int
     mimeType: String
     caption: String
@@ -855,6 +856,12 @@ export const typeDefs = gql`
   type SetBudgetResult {
     campaign: Campaign!
     projectBudgetWarning: String
+  }
+
+  type BulkSendProposalsResult {
+    sent: Int!
+    skipped: Int!
+    errors: [String!]!
   }
 
   # Financial summary (computed server-side)
@@ -1903,6 +1910,7 @@ export const typeDefs = gql`
       deliverableId: ID!
       fileUrl: String!  # Storage path
       fileName: String
+      tag: String       # Logical grouping label (defaults to fileName if omitted)
       fileSize: Int
       mimeType: String
       caption: String
@@ -1978,7 +1986,10 @@ export const typeDefs = gql`
       rateCurrency: String
       notes: String
     ): CampaignCreator!
-    
+
+    # Bulk send proposals to draft campaign creators
+    bulkSendProposals(campaignCreatorIds: [ID!]!): BulkSendProposalsResult!
+
     # Accept campaign invitation (creator action)
     acceptCampaignInvite(campaignCreatorId: ID!): CampaignCreator!
     

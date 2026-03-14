@@ -2163,6 +2163,7 @@ export type Database = {
           id: string
           mime_type: string | null
           submitted_by: string | null
+          tag: string
           version_number: number
         }
         Insert: {
@@ -2175,6 +2176,7 @@ export type Database = {
           id?: string
           mime_type?: string | null
           submitted_by?: string | null
+          tag?: string
           version_number: number
         }
         Update: {
@@ -2187,6 +2189,7 @@ export type Database = {
           id?: string
           mime_type?: string | null
           submitted_by?: string | null
+          tag?: string
           version_number?: number
         }
         Relationships: [

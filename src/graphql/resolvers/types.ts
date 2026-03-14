@@ -1055,6 +1055,7 @@ export const typeResolvers = {
     versionNumber: (parent: { version_number: number }) => parent.version_number,
     fileUrl: (parent: { file_url: string | null }) => parent.file_url,
     fileName: (parent: { file_name: string | null }) => parent.file_name,
+    tag: (parent: { tag: string | null }) => parent.tag,
     fileSize: (parent: { file_size: number | null }) => parent.file_size,
     mimeType: (parent: { mime_type: string | null }) => parent.mime_type,
     caption: (parent: { caption: string | null }) => parent.caption,

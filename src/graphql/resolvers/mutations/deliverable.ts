@@ -189,6 +189,7 @@ export async function uploadDeliverableVersion(
     deliverableId,
     fileUrl,
     fileName,
+    tag,
     fileSize,
     mimeType,
     caption,
@@ -196,6 +197,7 @@ export async function uploadDeliverableVersion(
     deliverableId: string;
     fileUrl: string;
     fileName?: string;
+    tag?: string;
     fileSize?: number;
     mimeType?: string;
     caption?: string;
@@ -238,22 +240,25 @@ export async function uploadDeliverableVersion(
     );
   }
   
-  if (!fileName || fileName.trim().length === 0) {
-    throw validationError('File name is required for versioning', 'fileName');
+  // Determine effective tag: prefer explicit tag, fall back to fileName, then 'untitled'
+  const effectiveTag = tag?.trim() || fileName?.trim() || 'untitled';
+
+  if (effectiveTag.length === 0) {
+    throw validationError('A tag or file name is required for versioning', 'tag');
   }
-  
-  // Get next version number scoped to this file name
+
+  // Get next version number scoped to this tag
   const { data: lastVersion } = await supabaseAdmin
     .from('deliverable_versions')
     .select('version_number')
     .eq('deliverable_id', deliverableId)
-    .eq('file_name', fileName)
+    .eq('tag', effectiveTag)
     .order('version_number', { ascending: false })
     .limit(1)
     .maybeSingle();
-  
+
   const nextVersionNumber = (lastVersion?.version_number || 0) + 1;
-  
+
   const { data: version, error } = await supabaseAdmin
     .from('deliverable_versions')
     .insert({
@@ -261,6 +266,7 @@ export async function uploadDeliverableVersion(
       version_number: nextVersionNumber,
       file_url: fileUrl,
       file_name: fileName,
+      tag: effectiveTag,
       file_size: fileSize,
       mime_type: mimeType,
       caption: caption?.trim() || null,

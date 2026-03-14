@@ -62,3 +62,37 @@ export function formatSmallestUnit(
 export function getLocaleForCurrency(currencyCode: string): string {
   return CURRENCY_LOCALE_MAP[currencyCode.toUpperCase()] || 'en-US'
 }
+
+// ---------------------------------------------------------------------------
+// Exchange rate utilities — convert any currency to USD using live rates
+// ---------------------------------------------------------------------------
+
+export type ExchangeRates = Record<string, number> // 1 USD = N units of that currency
+
+let _cachedRates: ExchangeRates | null = null
+let _cacheTs = 0
+const RATE_TTL = 60 * 60 * 1000 // 1 hour
+
+/**
+ * Fetch live USD exchange rates from Frankfurter (free, no API key required).
+ * Results are cached in module scope for 1 hour to avoid redundant requests.
+ */
+export async function fetchUSDExchangeRates(): Promise<ExchangeRates> {
+  if (_cachedRates && Date.now() - _cacheTs < RATE_TTL) return _cachedRates
+  const res = await fetch('https://api.frankfurter.app/latest?from=USD')
+  const data = await res.json()
+  _cachedRates = { USD: 1, ...data.rates } as ExchangeRates
+  _cacheTs = Date.now()
+  return _cachedRates
+}
+
+/**
+ * Convert an amount from any currency to USD.
+ * Falls back to the original amount if the rate is unavailable.
+ */
+export function convertToUSD(amount: number, fromCurrency: string, rates: ExchangeRates): number {
+  const code = fromCurrency.toUpperCase()
+  if (code === 'USD') return amount
+  const rate = rates[code]
+  return rate ? amount / rate : amount
+}

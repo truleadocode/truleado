@@ -14,6 +14,7 @@ const CAMPAIGN_COLORS: Record<string, string> = {
 
 const DELIVERABLE_COLORS: Record<string, string> = {
   PENDING: 'bg-gray-100 text-gray-700',
+  RECEIVED: 'bg-purple-100 text-purple-700',
   SUBMITTED: 'bg-blue-100 text-blue-700',
   INTERNAL_REVIEW: 'bg-yellow-100 text-yellow-700',
   PENDING_PROJECT_APPROVAL: 'bg-yellow-100 text-yellow-700',

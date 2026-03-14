@@ -59,6 +59,7 @@ import {
   declineCampaignInvite,
   removeCreatorFromCampaign,
   updateCampaignCreator,
+  bulkSendProposals,
 } from './creator';
 import { fetchPreCampaignAnalytics, triggerSocialFetch } from './analytics';
 import { fetchDeliverableAnalytics, refreshCampaignAnalytics } from './deliverable-analytics';
@@ -191,7 +192,8 @@ export const mutationResolvers = {
   declineCampaignInvite,
   removeCreatorFromCampaign,
   updateCampaignCreator,
-  
+  bulkSendProposals,
+
   // Analytics
   fetchPreCampaignAnalytics,
   triggerSocialFetch,

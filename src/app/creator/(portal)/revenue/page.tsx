@@ -7,6 +7,7 @@ import { DollarSign, TrendingUp, Clock, CheckCircle, Inbox } from 'lucide-react'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
 import { formatCurrency } from '@/lib/currency'
+import { useExchangeRates } from '@/hooks/use-exchange-rates'
 
 interface CampaignCreator {
   id: string
@@ -33,6 +34,7 @@ interface CampaignCreator {
 
 export default function RevenuePage() {
   const { user } = useAuth()
+  const { toUSD } = useExchangeRates()
   const [campaigns, setCampaigns] = useState<CampaignCreator[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -57,18 +59,14 @@ export default function RevenuePage() {
     }
   }, [user, fetchData])
 
-  const formatCreatorCurrency = (amount: number, currency: string = 'INR') => {
-    return formatCurrency(amount, currency)
-  }
-
-  // Calculate revenue metrics
+  // Calculate revenue metrics — all amounts converted to USD
   const acceptedCampaigns = campaigns.filter(
     (c) => c.proposalState === 'ACCEPTED' || c.currentProposal?.state === 'ACCEPTED'
   )
 
   const totalEarnings = acceptedCampaigns.reduce((sum, c) => {
     if (c.currentProposal?.rateAmount) {
-      return sum + c.currentProposal.rateAmount
+      return sum + toUSD(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)
     }
     return sum
   }, 0)
@@ -79,7 +77,7 @@ export default function RevenuePage() {
 
   const earnedRevenue = completedCampaigns.reduce((sum, c) => {
     if (c.currentProposal?.rateAmount) {
-      return sum + c.currentProposal.rateAmount
+      return sum + toUSD(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)
     }
     return sum
   }, 0)
@@ -127,7 +125,7 @@ export default function RevenuePage() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCreatorCurrency(totalEarnings)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(totalEarnings, 'USD', { maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">
               From {acceptedCampaigns.length} accepted campaigns
             </p>
@@ -139,7 +137,7 @@ export default function RevenuePage() {
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCreatorCurrency(earnedRevenue)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(earnedRevenue, 'USD', { maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">
               From {completedCampaigns.length} completed campaigns
             </p>
@@ -151,7 +149,7 @@ export default function RevenuePage() {
             <Clock className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{formatCreatorCurrency(pendingRevenue)}</div>
+            <div className="text-2xl font-bold text-orange-600">{formatCurrency(pendingRevenue, 'USD', { maximumFractionDigits: 2 })}</div>
             <p className="text-xs text-muted-foreground">
               From {acceptedCampaigns.length - completedCampaigns.length} active campaigns
             </p>
@@ -193,8 +191,8 @@ export default function RevenuePage() {
                     </Badge>
                     <span className="font-semibold">
                       {c.currentProposal?.rateAmount
-                        ? formatCreatorCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency || 'INR')
-                        : '-'}
+                        ? formatCurrency(toUSD(c.currentProposal.rateAmount, c.currentProposal.rateCurrency || 'INR'), 'USD', { maximumFractionDigits: 2 })
+                        : '—'}
                     </span>
                   </div>
                 </div>
