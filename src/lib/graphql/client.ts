@@ -3324,6 +3324,12 @@ export const mutations = {
     }
   `,
 
+  resendNotification: `
+    mutation ResendNotification($type: ResendNotificationType!, $entityId: ID!) {
+      resendNotification(type: $type, entityId: $entityId)
+    }
+  `,
+
   seedDummyData: `
     mutation SeedDummyData($agencyId: ID!) {
       seedDummyData(agencyId: $agencyId)

@@ -36,6 +36,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
@@ -93,6 +94,15 @@ export function DeliverablesTab({ campaign, onRefresh }: DeliverablesTabProps) {
       onRefresh?.()
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Failed to remove deliverable', variant: 'destructive' })
+    }
+  }
+
+  const handleResendNotification = async (deliverableId: string) => {
+    try {
+      await graphqlRequest(mutations.resendNotification, { type: 'APPROVAL_REQUESTED', entityId: deliverableId })
+      toast({ title: 'Notification sent' })
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to send notification', variant: 'destructive' })
     }
   }
 
@@ -281,6 +291,12 @@ export function DeliverablesTab({ campaign, onRefresh }: DeliverablesTabProps) {
                             <Eye className="mr-2 h-3.5 w-3.5" />
                             View Details
                           </DropdownMenuItem>
+                          {['INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(d.status) && (
+                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleResendNotification(d.id) }}>
+                              <Bell className="mr-2 h-3.5 w-3.5" />
+                              Resend Approval Request
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={(e) => { e.stopPropagation(); handleRemoveDeliverable(d.id) }}

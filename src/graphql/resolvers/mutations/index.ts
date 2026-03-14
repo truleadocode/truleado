@@ -111,6 +111,7 @@ import {
   dismissContactReminder,
   deleteContactReminder,
 } from './contact-detail';
+import { resendNotification } from './resend-notification';
 import { seedDummyData, deleteDummyData } from './onboarding';
 
 export const mutationResolvers = {
@@ -208,6 +209,7 @@ export const mutationResolvers = {
   // Notifications
   markNotificationRead,
   markAllNotificationsRead,
+  resendNotification,
   // Agency email config (SMTP for Novu)
   saveAgencyEmailConfig,
 

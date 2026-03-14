@@ -26,6 +26,7 @@ import {
 import { cn } from '@/lib/utils'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
+import { ResendNotificationButton } from '@/components/resend-notification-button'
 import type { Campaign, CampaignDeliverable } from '../types'
 
 interface ApprovalsTabProps {
@@ -142,6 +143,12 @@ function DeliverableApprovalCard({
             <Badge className={cn('text-[10px]', STATUS_COLORS[deliverable.status] || 'bg-gray-100')}>
               {STATUS_LABELS[deliverable.status] || deliverable.status}
             </Badge>
+            {isPending && (
+              <ResendNotificationButton
+                notificationType="APPROVAL_REQUESTED"
+                entityId={deliverable.id}
+              />
+            )}
           </div>
         </div>
 
