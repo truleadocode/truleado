@@ -41,7 +41,7 @@ export async function createAgency(
       name: name.trim(),
       billing_email: billingEmail,
       status: 'active',
-      token_balance: 0,
+      credit_balance: 0,
       trial_start_date: now.toISOString(),
       trial_end_date: trialEnd.toISOString(),
       trial_days: 30,
@@ -51,6 +51,7 @@ export async function createAgency(
     .single();
   
   if (agencyError || !agency) {
+    console.error('[createAgency] Insert failed:', agencyError);
     throw new Error('Failed to create agency');
   }
   
