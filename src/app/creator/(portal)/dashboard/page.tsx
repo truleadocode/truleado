@@ -20,6 +20,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
 import { formatCurrency } from '@/lib/currency'
+import { useExchangeRates } from '@/hooks/use-exchange-rates'
 
 interface CampaignCreator {
   id: string
@@ -92,6 +93,7 @@ interface CreatorProfile {
 
 export default function CreatorDashboardPage() {
   const { user } = useAuth()
+  const { toUSD } = useExchangeRates()
   const [profile, setProfile] = useState<CreatorProfile | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignCreator[]>([])
   const [deliverables, setDeliverables] = useState<Deliverable[]>([])
@@ -143,18 +145,13 @@ export default function CreatorDashboardPage() {
     (d) => d.status === 'approved' && (!d.trackingRecord || d.trackingRecord.urls.length === 0)
   )
 
-  // Calculate total earnings (from accepted proposals)
+  // Calculate total earnings in USD (from accepted proposals, converting non-USD amounts)
   const totalEarnings = campaigns.reduce((sum, c) => {
     if (c.proposalState === 'ACCEPTED' && c.currentProposal?.rateAmount) {
-      return sum + c.currentProposal.rateAmount
+      return sum + toUSD(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)
     }
     return sum
   }, 0)
-
-  const formatCreatorCurrency = (amount: number | null, currency: string | null) => {
-    if (!amount) return null
-    return formatCurrency(amount, currency || 'INR')
-  }
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -248,10 +245,10 @@ export default function CreatorDashboardPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {formatCreatorCurrency(totalEarnings, 'INR') || '₹0'}
+                  {formatCurrency(totalEarnings, 'USD', { maximumFractionDigits: 2 }) || '$0'}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  From accepted proposals
+                  From accepted proposals · in USD
                 </p>
               </CardContent>
             </Card>
@@ -277,7 +274,7 @@ export default function CreatorDashboardPage() {
                             </p>
                             {c.currentProposal?.rateAmount && (
                               <p className="text-sm font-medium text-green-600 mt-1">
-                                {formatCreatorCurrency(c.currentProposal.rateAmount, c.currentProposal.rateCurrency)}
+                                {formatCurrency(toUSD(c.currentProposal.rateAmount, c.currentProposal.rateCurrency), 'USD', { maximumFractionDigits: 2 })}
                               </p>
                             )}
                           </div>

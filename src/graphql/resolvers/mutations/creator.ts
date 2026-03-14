@@ -331,34 +331,136 @@ export async function inviteCreatorToCampaign(
     metadata: { campaignId, creatorId },
   });
 
-  // Create and send proposal automatically if creator has email
-  if (creator.email) {
-    // Create proposal version with state 'sent'
-    const { data: proposalVersion, error: proposalError } = await supabaseAdmin
-      .from('proposal_versions')
-      .insert({
-        campaign_creator_id: campaignCreator.id,
-        version_number: 1,
-        state: 'sent',
-        rate_amount: rateAmount || null,
-        rate_currency: defaultCurrency,
-        notes: notes?.trim() || null,
-        created_by: ctx.user!.id,
-        created_by_type: 'agency',
-      })
-      .select()
-      .single();
+  return campaignCreator;
+}
 
-    if (proposalError) {
-      console.error('[Proposal] Failed to create proposal version:', proposalError);
-    } else {
-      // Update campaign_creators with proposal state
-      await supabaseAdmin
-        .from('campaign_creators')
-        .update({ proposal_state: 'sent' })
-        .eq('id', campaignCreator.id);
+/**
+ * Bulk send proposals to draft campaign creators.
+ * Creates proposal_versions with state 'sent' and triggers email notifications.
+ */
+export async function bulkSendProposals(
+  _: unknown,
+  { campaignCreatorIds }: { campaignCreatorIds: string[] },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
 
-      // Log proposal sent activity
+  if (!campaignCreatorIds || campaignCreatorIds.length === 0) {
+    throw validationError('At least one campaign creator ID is required');
+  }
+  if (campaignCreatorIds.length > 50) {
+    throw validationError('Cannot send more than 50 proposals at once');
+  }
+
+  // Fetch all campaign creators with their campaign and creator info
+  const { data: campaignCreators, error: fetchError } = await supabaseAdmin
+    .from('campaign_creators')
+    .select(`
+      id, campaign_id, creator_id, status, proposal_state,
+      rate_amount, rate_currency, notes
+    `)
+    .in('id', campaignCreatorIds)
+    .eq('status', 'invited');
+
+  if (fetchError || !campaignCreators || campaignCreators.length === 0) {
+    throw validationError('No valid draft campaign creators found');
+  }
+
+  type CampaignCreatorRow = {
+    id: string;
+    campaign_id: string;
+    creator_id: string;
+    status: string;
+    proposal_state: string | null;
+    rate_amount: number | null;
+    rate_currency: string | null;
+    notes: string | null;
+  };
+
+  // Filter to only draft proposals
+  const draftCreators = (campaignCreators as CampaignCreatorRow[]).filter(
+    (cc) => !cc.proposal_state || cc.proposal_state === 'draft'
+  );
+
+  if (draftCreators.length === 0) {
+    throw validationError('No creators with draft proposals found');
+  }
+
+  // Verify all belong to same campaign
+  const campaignId = draftCreators[0].campaign_id;
+  if (!draftCreators.every((cc) => cc.campaign_id === campaignId)) {
+    throw validationError('All campaign creators must belong to the same campaign');
+  }
+
+  // Check permission
+  await requireCampaignAccess(ctx, campaignId, Permission.INVITE_CREATOR);
+
+  // Get campaign info for notification
+  const { data: campaign, error: campaignError } = await supabaseAdmin
+    .from('campaigns')
+    .select('name, currency')
+    .eq('id', campaignId)
+    .single();
+
+  if (campaignError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (!agencyId) {
+    throw validationError('Could not determine agency for campaign');
+  }
+
+  // Fetch creator details for notifications
+  const creatorIds = draftCreators.map((cc) => cc.creator_id);
+  const { data: creators } = await supabaseAdmin
+    .from('creators')
+    .select('id, email, display_name')
+    .in('id', creatorIds);
+
+  type CreatorRow = { id: string; email: string | null; display_name: string };
+  const creatorMap = new Map<string, CreatorRow>(
+    ((creators || []) as CreatorRow[]).map((c) => [c.id, c])
+  );
+
+  let sent = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const cc of draftCreators) {
+    const creator = creatorMap.get(cc.creator_id);
+
+    if (!creator?.email) {
+      skipped++;
+      errors.push(`${creator?.display_name || cc.creator_id}: no email address`);
+      continue;
+    }
+
+    try {
+      // Create proposal version — DB trigger syncs proposal_state to 'sent'
+      const { data: proposalVersion, error: proposalError } = await supabaseAdmin
+        .from('proposal_versions')
+        .insert({
+          campaign_creator_id: cc.id,
+          version_number: 1,
+          state: 'sent',
+          rate_amount: cc.rate_amount || null,
+          rate_currency: cc.rate_currency || campaign.currency || 'USD',
+          notes: cc.notes || null,
+          created_by: ctx.user!.id,
+          created_by_type: 'agency',
+        })
+        .select()
+        .single();
+
+      if (proposalError) {
+        skipped++;
+        errors.push(`${creator.display_name}: failed to create proposal`);
+        console.error('[BulkSend] Proposal creation failed:', proposalError);
+        continue;
+      }
+
+      // Log activity
       await logActivity({
         agencyId,
         entityType: 'proposal_version',
@@ -367,27 +469,33 @@ export async function inviteCreatorToCampaign(
         actorId: ctx.user!.id,
         actorType: 'user',
         afterState: proposalVersion as unknown as Record<string, unknown>,
-        metadata: { campaignId, creatorId, campaignCreatorId: campaignCreator.id },
+        metadata: { campaignId, creatorId: cc.creator_id, campaignCreatorId: cc.id },
       });
 
-      // Send email notification to creator
+      // Send notification (fire-and-forget)
       try {
         await notifyProposalSent({
           agencyId,
           creatorEmail: creator.email,
           creatorName: creator.display_name,
           campaignName: campaign.name,
-          campaignCreatorId: campaignCreator.id,
-          rateAmount: rateAmount,
-          rateCurrency: defaultCurrency,
+          campaignCreatorId: cc.id,
+          rateAmount: cc.rate_amount ?? undefined,
+          rateCurrency: cc.rate_currency || campaign.currency || 'USD',
         });
       } catch (err) {
         console.error('[Novu] Failed to send proposal notification:', err);
       }
+
+      sent++;
+    } catch (err) {
+      skipped++;
+      errors.push(`${creator.display_name}: unexpected error`);
+      console.error('[BulkSend] Error processing creator:', err);
     }
   }
 
-  return campaignCreator;
+  return { sent, skipped, errors };
 }
 
 /**

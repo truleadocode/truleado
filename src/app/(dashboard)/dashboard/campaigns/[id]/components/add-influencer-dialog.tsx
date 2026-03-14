@@ -105,7 +105,7 @@ export function AddInfluencerDialog({
         rateCurrency: currency || currentAgency?.currencyCode || 'USD',
         notes: notes || null,
       })
-      toast({ title: 'Influencer added to campaign' })
+      toast({ title: 'Influencer added to shortlist' })
       setSelectedCreatorId(null)
       setRateAmount('')
       setNotes('')

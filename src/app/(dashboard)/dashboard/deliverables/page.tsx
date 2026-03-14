@@ -290,7 +290,10 @@ export default function DeliverablesPage() {
                       <span className="text-sm">v{deliverable.versions.length || 0}</span>
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={deliverable.status} type="deliverable" />
+                      <StatusBadge
+                        status={deliverable.status === 'PENDING' && deliverable.versions.length > 0 ? 'RECEIVED' : deliverable.status}
+                        type="deliverable"
+                      />
                     </TableCell>
                   </TableRow>
                 ))}

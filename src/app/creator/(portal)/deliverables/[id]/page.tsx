@@ -19,19 +19,11 @@ import {
   ExternalLink,
   X,
   Plus,
-  ChevronDown,
   Pencil,
-  History,
   Trash2,
   Link as LinkIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -44,7 +36,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { FileUpload } from '@/components/ui/file-upload'
 import { Badge } from '@/components/ui/badge'
 import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { useAuth } from '@/contexts/auth-context'
@@ -70,6 +61,7 @@ interface DeliverableVersion {
   versionNumber: number
   fileUrl: string
   fileName: string | null
+  tag: string | null
   fileSize: number | null
   mimeType: string | null
   createdAt: string
@@ -209,12 +201,17 @@ export default function CreatorDeliverableDetailPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [captionText, setCaptionText] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [targetFileName, setTargetFileName] = useState<string | null>(null)
+  const [targetTag, setTargetTag] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Tag dialog state
+  const [tagDialogOpen, setTagDialogOpen] = useState(false)
+  const [tagInput, setTagInput] = useState('')
+  const [tagMode, setTagMode] = useState<'existing' | 'new'>('existing')
 
   // Preview state
   const [previewSignedUrl, setPreviewSignedUrl] = useState<string | null>(null)
-  const [previewFileKey, setPreviewFileKey] = useState<string | null>(null)
+  const [previewTag, setPreviewTag] = useState<string | null>(null)
   const [previewVersionId, setPreviewVersionId] = useState<string | null>(null)
   const [previewMaximized, setPreviewMaximized] = useState(false)
   const [selectedVersionByFile, setSelectedVersionByFile] = useState<Record<string, string>>({})
@@ -263,18 +260,9 @@ export default function CreatorDeliverableDetailPage() {
     fetchDeliverable()
   }, [authLoading, user, router, fetchDeliverable])
 
-  // Drag & drop upload (new file for this deliverable)
-  const handleFileUpload = async (file: File) => {
-    if (!deliverable || uploading || captionDialogOpen) return
-    setPendingFile(file)
-    setTargetFileName(null)
-    setCaptionText('')
-    setCaptionDialogOpen(true)
-  }
-
-  // Per-file "Upload new version" button
-  const handleUploadNewVersionClick = (fileName: string) => {
-    setTargetFileName(fileName)
+  // Per-tag "Upload new version" button (tag already known from table row)
+  const handleUploadNewVersionClick = (tag: string) => {
+    setTargetTag(tag)
     setCaptionText('')
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -289,22 +277,30 @@ export default function CreatorDeliverableDetailPage() {
     setCaptionDialogOpen(true)
   }
 
+  // Confirm tag selection and open file picker
+  const handleTagConfirm = () => {
+    if (!targetTag) return
+    setTagDialogOpen(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
   const handleConfirmUpload = async () => {
-    if (!deliverable || !pendingFile) return
+    if (!deliverable || !pendingFile || !targetTag) return
 
     setUploading(true)
     try {
       // Upload to Supabase Storage
       const result = await uploadFile('deliverables', deliverableId, pendingFile)
 
-      // If targetFileName is set, version under that logical file; else use real name
-      const effectiveFileName = targetFileName || result.fileName
-
-      // Create version record with optional caption
+      // Create version record grouped under the selected tag
       await graphqlRequest(mutations.uploadDeliverableVersion, {
         deliverableId,
         fileUrl: result.path,
-        fileName: effectiveFileName,
+        fileName: result.fileName,
+        tag: targetTag,
         fileSize: result.fileSize,
         mimeType: result.mimeType,
         caption: captionText || null,
@@ -314,7 +310,7 @@ export default function CreatorDeliverableDetailPage() {
       setCaptionDialogOpen(false)
       setPendingFile(null)
       setCaptionText('')
-      setTargetFileName(null)
+      setTargetTag(null)
       await fetchDeliverable()
     } catch (err) {
       toast({
@@ -365,8 +361,8 @@ export default function CreatorDeliverableDetailPage() {
     setCaptionEditOpen(true)
   }
 
-  const handleDeleteVersion = async (version: DeliverableVersion, fileName: string) => {
-    if (!confirm(`Delete v${version.versionNumber} of "${fileName}"? This cannot be undone.`)) return
+  const handleDeleteVersion = async (version: DeliverableVersion, tag: string) => {
+    if (!confirm(`Delete v${version.versionNumber} of "${tag}"? This cannot be undone.`)) return
     setDeletingVersionId(version.id)
     try {
       await graphqlRequest(mutations.deleteDeliverableVersion, {
@@ -375,11 +371,11 @@ export default function CreatorDeliverableDetailPage() {
       toast({ title: 'File version deleted' })
       if (previewVersionId === version.id) {
         setPreviewVersionId(null)
-        setPreviewFileKey(null)
+        setPreviewTag(null)
       }
       setSelectedVersionByFile((prev) => {
         const next = { ...prev }
-        if (prev[fileName] === version.id) delete next[fileName]
+        if (prev[tag] === version.id) delete next[tag]
         return next
       })
       await fetchDeliverable()
@@ -535,52 +531,51 @@ export default function CreatorDeliverableDetailPage() {
   const canResubmit = deliverable && deliverable.status === 'REJECTED' && deliverable.versions.length > 0
   const isApproved = deliverable?.status === 'APPROVED'
 
-  // Group versions by file name
-  const versionsByFile = useMemo(() => {
+  // Existing tags on this deliverable (for the tag dialog)
+  const existingTags = useMemo(() => {
+    const tags = new Set(
+      (deliverable?.versions ?? []).map((v) => v.tag).filter(Boolean)
+    )
+    return Array.from(tags) as string[]
+  }, [deliverable?.versions])
+
+  // Group versions by tag
+  const versionsByTag = useMemo(() => {
     const versions = deliverable?.versions ?? []
     return versions.reduce<Record<string, DeliverableVersion[]>>((acc, version) => {
-      const key = version.fileName || 'Untitled file'
+      const key = version.tag || version.fileName || 'Untitled'
       if (!acc[key]) acc[key] = []
       acc[key].push(version)
       return acc
     }, {})
   }, [deliverable?.versions])
 
-  const fileKeys = useMemo(() => getSortedFileKeys(versionsByFile), [versionsByFile])
+  const tagKeys = useMemo(() => getSortedFileKeys(versionsByTag), [versionsByTag])
 
   const selectedPreviewVersion = useMemo(() => {
     if (!previewVersionId || !deliverable?.versions) return null
     return deliverable.versions.find((v) => v.id === previewVersionId) ?? null
   }, [previewVersionId, deliverable?.versions])
 
-  // Auto-select first file/version for preview
+  // Auto-select first tag/version for preview
   useEffect(() => {
-    if (fileKeys.length === 0) {
-      setPreviewFileKey(null)
+    if (tagKeys.length === 0) {
+      setPreviewTag(null)
       setPreviewVersionId(null)
       return
     }
     const versionStillValid =
       previewVersionId &&
-      Object.values(versionsByFile).some((versions) =>
+      Object.values(versionsByTag).some((versions) =>
         versions.some((v) => v.id === previewVersionId)
       )
     if (versionStillValid) return
-    const firstKey = fileKeys[0]
-    const versions = getSortedVersionsForFile(versionsByFile, firstKey)
-    setPreviewFileKey(firstKey)
+    const firstKey = tagKeys[0]
+    const versions = getSortedVersionsForFile(versionsByTag, firstKey)
+    setPreviewTag(firstKey)
     setPreviewVersionId(versions[0]?.id ?? null)
-  }, [fileKeys, versionsByFile, previewVersionId])
+  }, [tagKeys, versionsByTag, previewVersionId])
 
-  const selectFileForPreview = useCallback(
-    (fileKey: string) => {
-      const versions = getSortedVersionsForFile(versionsByFile, fileKey)
-      const latest = versions[0]
-      setPreviewFileKey(fileKey)
-      setPreviewVersionId(latest?.id ?? null)
-    },
-    [versionsByFile]
-  )
 
   const selectVersionForPreview = useCallback((versionId: string) => {
     setPreviewVersionId(versionId)
@@ -778,185 +773,97 @@ export default function CreatorDeliverableDetailPage() {
             <h2 className="text-lg font-semibold">Versions</h2>
           </div>
 
-          {/* Upload Area */}
+          {/* Upload Button */}
           {canUpload && (
-            <FileUpload
-              onUpload={handleFileUpload}
-              maxSize={100 * 1024 * 1024}
-              className="mb-4"
-            />
+            <div className="mb-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setTagInput('')
+                  setTagMode(existingTags.length > 0 ? 'existing' : 'new')
+                  setTargetTag(null)
+                  setTagDialogOpen(true)
+                }}
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Upload File
+              </Button>
+            </div>
           )}
 
           {deliverable.versions.length === 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="flex flex-col items-center justify-center py-8">
-                <Upload className="h-10 w-10 text-muted-foreground mb-3" />
-                <h3 className="font-medium">No versions uploaded</h3>
-                <p className="text-sm text-muted-foreground text-center mt-1">
-                  Upload your content file to get started
-                </p>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center justify-center py-10 text-muted-foreground border border-dashed rounded-lg">
+              <Upload className="h-8 w-8 mb-2" />
+              <p className="text-sm">No files uploaded yet</p>
+            </div>
           ) : (
-            <div className="space-y-4">
-              {Object.entries(versionsByFile).map(([fileName, versions]) => {
-                const sorted = getSortedVersionsForFile(versionsByFile, fileName)
-                const latest = sorted[0]
-                const selectedVersionId = selectedVersionByFile[fileName] ?? latest?.id
-                const selectedVersion =
-                  sorted.find((v) => v.id === selectedVersionId) ?? latest
-                return (
-                  <Card key={fileName} className="border">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
-                          <FileCheck className="h-5 w-5 text-blue-600" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-sm font-medium">
-                            {fileName}
-                          </CardTitle>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="mt-1 h-8 gap-1 text-xs font-normal"
-                              >
-                                v{selectedVersion?.versionNumber ?? '—'}
-                                {selectedVersion?.id === latest?.id && ' (latest)'}
-                                <ChevronDown className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                              {sorted.map((v) => (
-                                <DropdownMenuItem
-                                  key={v.id}
-                                  onClick={() =>
-                                    setSelectedVersionByFile((prev) => ({
-                                      ...prev,
-                                      [fileName]: v.id,
-                                    }))
-                                  }
-                                >
-                                  v{v.versionNumber}
-                                  {v.id === latest?.id && ' (latest)'}
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {canUpload && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleUploadNewVersionClick(fileName)}
-                          >
-                            <Upload className="h-3 w-3 mr-1" />
-                            New version
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            selectedVersion && handleDownload(selectedVersion.fileUrl)
-                          }
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Tag</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Ver</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden sm:table-cell">Uploaded</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground hidden md:table-cell">Size</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {tagKeys.flatMap((tag) =>
+                    getSortedVersionsForFile(versionsByTag, tag).map((v, idx) => {
+                      const isSelected = previewVersionId === v.id
+                      const isLatest = idx === 0
+                      return (
+                        <tr
+                          key={v.id}
+                          onClick={() => {
+                            setPreviewTag(tag)
+                            selectVersionForPreview(v.id)
+                          }}
+                          className={`cursor-pointer border-b last:border-0 transition-colors hover:bg-muted/40 ${isSelected ? 'bg-primary/5' : ''}`}
                         >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-2">
-                      {selectedVersion ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between rounded-md border border-muted px-3 py-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-muted-foreground">
-                                {formatFileSize(selectedVersion.fileSize)} •{' '}
-                                {formatDateTime(selectedVersion.createdAt)}
-                              </p>
-                              {selectedVersion.caption !== undefined && selectedVersion.caption !== null && selectedVersion.caption !== '' ? (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Caption: <CaptionWithHashtags text={selectedVersion.caption} className="text-inherit" />
-                                </p>
-                              ) : (
-                                <p className="mt-1 text-xs text-muted-foreground italic">
-                                  No caption
-                                </p>
-                              )}
-                              {(selectedVersion.captionAudits?.length ?? 0) > 0 && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  Last edited by{' '}
-                                  {selectedVersion.captionAudits![0].changedBy.name ||
-                                    selectedVersion.captionAudits![0].changedBy.email}{' '}
-                                  on {formatDateTime(selectedVersion.captionAudits![0].changedAt)}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
+                          <td className="px-3 py-2 max-w-[120px] truncate font-medium" title={v.fileName ?? tag}>
+                            {idx === 0 ? tag : ''}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span className="font-mono text-xs">v{v.versionNumber}</span>
+                            {isLatest && <Badge variant="outline" className="ml-1 text-xs px-1 py-0">latest</Badge>}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground hidden sm:table-cell whitespace-nowrap text-xs">
+                            {formatDateTime(v.createdAt)}
+                          </td>
+                          <td className="px-3 py-2 text-muted-foreground hidden md:table-cell text-xs">
+                            {formatFileSize(v.fileSize)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-1 justify-end">
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleOpenEditCaption(selectedVersion)}
-                                title="Edit caption"
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                onClick={() => handleDownload(selectedVersion.fileUrl)}
+                                variant="ghost" size="icon" className="h-7 w-7"
+                                onClick={(e) => { e.stopPropagation(); handleDownload(v.fileUrl) }}
+                                title="Download"
                               >
                                 <Download className="h-3 w-3" />
                               </Button>
                               {canUpload && (
                                 <Button
-                                  variant="ghost"
-                                  size="icon"
+                                  variant="ghost" size="icon"
                                   className="h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                                  onClick={() => handleDeleteVersion(selectedVersion, fileName)}
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteVersion(v, tag) }}
                                   disabled={!!deletingVersionId}
-                                  title="Delete this version"
+                                  title="Delete version"
                                 >
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
                               )}
                             </div>
-                          </div>
-                          {(selectedVersion.captionAudits?.length ?? 0) > 0 && (
-                            <details className="text-xs text-muted-foreground rounded-md border border-muted px-3 py-2">
-                              <summary className="cursor-pointer flex items-center gap-1">
-                                <History className="h-3 w-3" />
-                                Caption history ({selectedVersion.captionAudits!.length})
-                              </summary>
-                              <ul className="mt-2 space-y-1.5 list-none pl-0">
-                                {selectedVersion.captionAudits!.map((audit) => (
-                                  <li key={audit.id} className="border-l-2 border-muted pl-2">
-                                    <span className="text-muted-foreground">
-                                      {audit.newCaption != null && audit.newCaption !== '' ? (
-                                        <CaptionWithHashtags text={audit.newCaption} className="text-inherit" />
-                                      ) : (
-                                        '(cleared)'
-                                      )}{' '}
-                                      — {audit.changedBy.name || audit.changedBy.email},{' '}
-                                      {formatDateTime(audit.changedAt)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </details>
-                          )}
-                        </div>
-                      ) : null}
-                    </CardContent>
-                  </Card>
-                )
-              })}
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -964,7 +871,7 @@ export default function CreatorDeliverableDetailPage() {
         {/* Right column: Preview */}
         <div>
           <h2 className="text-lg font-semibold mb-4">Preview</h2>
-          {fileKeys.length === 0 ? (
+          {tagKeys.length === 0 ? (
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-8">
                 <ImageIcon className="h-10 w-10 text-muted-foreground mb-3" />
@@ -976,46 +883,6 @@ export default function CreatorDeliverableDetailPage() {
             </Card>
           ) : (
             <>
-              {/* File selector */}
-              <div className="mb-3">
-                <p className="text-xs text-muted-foreground mb-2">File</p>
-                <div className="flex flex-wrap gap-2">
-                  {fileKeys.map((fileKey) => (
-                    <Button
-                      key={fileKey}
-                      variant={previewFileKey === fileKey ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => selectFileForPreview(fileKey)}
-                      className="text-left truncate max-w-[180px]"
-                    >
-                      <FileCheck className="h-3 w-3 mr-1 shrink-0" />
-                      {fileKey}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              {/* Version selector */}
-              {previewFileKey && (() => {
-                const versions = getSortedVersionsForFile(versionsByFile, previewFileKey)
-                return versions.length > 0 ? (
-                  <div className="mb-3">
-                    <p className="text-xs text-muted-foreground mb-2">Version</p>
-                    <div className="flex flex-wrap gap-2">
-                      {versions.map((v) => (
-                        <Button
-                          key={v.id}
-                          variant={previewVersionId === v.id ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => selectVersionForPreview(v.id)}
-                        >
-                          v{v.versionNumber}
-                          {v.versionNumber === versions[0]?.versionNumber ? ' (latest)' : ''}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null
-              })()}
               {/* Preview content */}
               {!selectedPreviewVersion ? (
                 <Card className="border-dashed">
@@ -1143,7 +1010,7 @@ export default function CreatorDeliverableDetailPage() {
           <div className="flex items-center justify-between px-2 pb-2 border-b">
             <div>
               <DialogTitle className="text-base">
-                {selectedPreviewVersion?.fileName || 'Preview'}
+                {selectedPreviewVersion?.tag || selectedPreviewVersion?.fileName || 'Preview'}
               </DialogTitle>
               {selectedPreviewVersion?.caption && (
                 <p className="text-sm text-muted-foreground mt-1">
@@ -1328,7 +1195,7 @@ export default function CreatorDeliverableDetailPage() {
           <div className="py-4 space-y-2">
             {captionEditVersion && (
               <p className="text-sm text-muted-foreground">
-                Version: {captionEditVersion.fileName ?? 'File'} (v{captionEditVersion.versionNumber})
+                Version: {captionEditVersion.tag ?? captionEditVersion.fileName ?? 'File'} (v{captionEditVersion.versionNumber})
               </p>
             )}
             <Label htmlFor="edit-caption">Caption</Label>
@@ -1376,9 +1243,10 @@ export default function CreatorDeliverableDetailPage() {
           </DialogHeader>
           <div className="py-4 space-y-2">
             {pendingFile && (
-              <p className="text-sm text-muted-foreground">
-                File: <span className="font-medium">{pendingFile.name}</span>
-              </p>
+              <div className="text-sm text-muted-foreground space-y-1">
+                <p>File: <span className="font-medium">{pendingFile.name}</span></p>
+                {targetTag && <p>Tag: <span className="font-medium">{targetTag}</span></p>}
+              </div>
             )}
             <Label htmlFor="caption">Caption / Copy</Label>
             <Textarea
@@ -1409,7 +1277,80 @@ export default function CreatorDeliverableDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Hidden input for per-file "New version" uploads */}
+      {/* Tag Selection Dialog */}
+      <Dialog open={tagDialogOpen} onOpenChange={setTagDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Choose a Tag</DialogTitle>
+            <DialogDescription>
+              Tags group your uploads. Uploading under an existing tag adds a new version.
+            </DialogDescription>
+          </DialogHeader>
+
+          {existingTags.length > 0 && (
+            <div className="flex gap-2 mb-2">
+              <Button
+                variant={tagMode === 'existing' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTagMode('existing')}
+              >
+                Existing
+              </Button>
+              <Button
+                variant={tagMode === 'new' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTagMode('new')}
+              >
+                New tag
+              </Button>
+            </div>
+          )}
+
+          {tagMode === 'existing' && existingTags.length > 0 ? (
+            <div className="space-y-1">
+              {existingTags.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => setTargetTag(tag)}
+                  className={`w-full text-left px-3 py-2 rounded-md text-sm border transition-colors ${
+                    targetTag === tag
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'hover:bg-muted border-transparent'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="tag-input">Tag name</Label>
+              <Input
+                id="tag-input"
+                placeholder="e.g. reel1, thumbnail, story"
+                value={tagInput}
+                onChange={(e) => {
+                  setTagInput(e.target.value)
+                  setTargetTag(e.target.value.trim() || null)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && targetTag) handleTagConfirm()
+                }}
+                autoFocus
+              />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTagDialogOpen(false)}>Cancel</Button>
+            <Button disabled={!targetTag} onClick={handleTagConfirm}>
+              Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Hidden input for per-tag "New version" uploads */}
       <input
         ref={fileInputRef}
         type="file"

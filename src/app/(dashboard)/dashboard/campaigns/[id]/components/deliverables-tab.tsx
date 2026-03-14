@@ -49,6 +49,7 @@ interface DeliverablesTabProps {
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-gray-100 text-gray-700',
+  RECEIVED: 'bg-purple-100 text-purple-700',
   SUBMITTED: 'bg-yellow-100 text-yellow-700',
   INTERNAL_REVIEW: 'bg-orange-100 text-orange-700',
   PENDING_PROJECT_APPROVAL: 'bg-orange-100 text-orange-700',
@@ -59,6 +60,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pending',
+  RECEIVED: 'Received',
   SUBMITTED: 'Submitted',
   INTERNAL_REVIEW: 'In Review',
   PENDING_PROJECT_APPROVAL: 'Project Review',
@@ -233,9 +235,14 @@ export function DeliverablesTab({ campaign, onRefresh }: DeliverablesTabProps) {
                     </TableCell>
                     <TableCell className="text-xs">{d.deliverableType}</TableCell>
                     <TableCell>
-                      <Badge className={cn('text-[10px]', STATUS_COLORS[d.status] || 'bg-gray-100')}>
-                        {STATUS_LABELS[d.status] || d.status}
-                      </Badge>
+                      {(() => {
+                        const ds = d.status === 'PENDING' && d.versions.length > 0 ? 'RECEIVED' : d.status
+                        return (
+                          <Badge className={cn('text-[10px]', STATUS_COLORS[ds] || 'bg-gray-100')}>
+                            {STATUS_LABELS[ds] || ds}
+                          </Badge>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className={cn('text-xs', isOverdue(d) ? 'text-red-600 font-medium' : 'text-muted-foreground')}>
                       {d.dueDate

@@ -1,7 +1,8 @@
 # Database Schema (DDL Level)
 
+> **Last Updated**: March 2026
 > **Purpose**: This document defines the canonical **DDL-level database schema** for Truleado.
-> It is implementation-ready, aligned with the Master PRD, and supports **email + Firebase social authentication from Day 1**.
+> It is implementation-ready and aligned with the Master PRD.
 
 ## Assumptions
 
@@ -24,21 +25,47 @@ CREATE TABLE agencies (
   name TEXT NOT NULL,
   agency_code TEXT UNIQUE,
   billing_email TEXT,
-  token_balance INTEGER DEFAULT 0,
-  premium_token_balance INTEGER DEFAULT 0,
+  credit_balance INTEGER DEFAULT 0,           -- unified credit balance (renamed from token_balance in 00052)
   currency_code TEXT DEFAULT 'USD',
   timezone TEXT DEFAULT 'UTC',
   language_code TEXT DEFAULT 'en',
   use_custom_smtp BOOLEAN DEFAULT false,
   status TEXT CHECK (status IN ('active','suspended')) DEFAULT 'active',
+  -- Profile fields (migration 00047)
+  logo_url TEXT,
+  description TEXT,
+  address_line1 TEXT,
+  address_line2 TEXT,
+  city TEXT,
+  state TEXT,
+  postal_code TEXT,
+  country TEXT,
+  primary_email TEXT,
+  phone TEXT,
+  website TEXT,
+  -- Trial & subscription (migrations 00048, 00050)
+  trial_start_date TIMESTAMPTZ,
+  trial_end_date TIMESTAMPTZ,
+  trial_days INTEGER DEFAULT 30,
+  subscription_status TEXT CHECK (subscription_status IN ('trial','active','expired','cancelled')) DEFAULT 'trial',
+  subscription_tier TEXT CHECK (subscription_tier IN ('basic','pro','enterprise')),
+  billing_interval TEXT CHECK (billing_interval IN ('monthly','yearly')),
+  subscription_start_date TIMESTAMPTZ,
+  subscription_end_date TIMESTAMPTZ,
+  enterprise_price_monthly INTEGER,
+  enterprise_price_yearly INTEGER,
+  enterprise_currency TEXT CHECK (enterprise_currency IN ('INR','USD')),
+  -- Onboarding (migration 00051)
+  has_dummy_data BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
 > **agency_code**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on insert via trigger; used by `joinAgencyByCode`. See migration `00010_agency_code_for_join.sql`.
-> **premium_token_balance**: Separate token balance for premium features (added in migration 00016).
+> **credit_balance**: Unified credit balance. Renamed from `token_balance` in migration `00052_unify_credits.sql`. The separate `premium_token_balance` column was dropped.
 > **use_custom_smtp**: Toggle to enable custom SMTP. When true, Novu uses agency's `agency_email_config` integration instead of default Mailgun (migration 00028).
+> **subscription_status**: Starts as `trial` on agency creation. Transitions: trial → active (paid), trial → expired (timeout), active → cancelled (explicit), active → expired (lapse).
 
 ---
 
@@ -112,6 +139,26 @@ CREATE TABLE clients (
   name TEXT NOT NULL,
   account_manager_id UUID REFERENCES users(id),
   is_active BOOLEAN DEFAULT true,
+  -- Extended profile fields (migration 00035)
+  industry TEXT,
+  website_url TEXT,
+  country TEXT,
+  logo_url TEXT,
+  description TEXT,
+  client_status TEXT DEFAULT 'active',
+  client_since DATE,
+  currency TEXT,
+  payment_terms TEXT,
+  billing_email TEXT,
+  tax_number TEXT,
+  instagram_handle TEXT,
+  youtube_url TEXT,
+  tiktok_handle TEXT,
+  linkedin_url TEXT,
+  source TEXT,
+  internal_notes TEXT,
+  -- Dummy data tracking (migration 00051)
+  is_dummy BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (agency_id, name)
@@ -137,7 +184,7 @@ CREATE TABLE client_users (
 
 ---
 
-### 2.3 contacts (Phase 3)
+### 2.3 contacts
 
 ```sql
 CREATE TABLE contacts (
@@ -155,13 +202,104 @@ CREATE TABLE contacts (
   notes TEXT,
   is_client_approver BOOLEAN NOT NULL DEFAULT false,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  -- Extended CRM fields (migration 00036)
+  profile_photo_url TEXT,
+  job_title TEXT,
+  is_primary_contact BOOLEAN NOT NULL DEFAULT false,
+  linkedin_url TEXT,
+  preferred_channel TEXT,
+  contact_type TEXT,
+  contact_status TEXT DEFAULT 'active',
+  notification_preference TEXT,
+  birthday TEXT,
+  -- Dummy data tracking (migration 00051)
+  is_dummy BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (client_id, email)
 );
 ```
 
-> **Phase 3**: People at a client (CRM). `is_client_approver`: can approve deliverables at client stage. `user_id`: link to Truleado user when they have an account. Client-level approval uses contacts with `is_client_approver` (and optionally `user_id`). Migrations: `00012_phase3_contacts.sql`, `00020_contacts_phone_fields.sql` (adds phone fields; resets legacy `mobile` values).
+> `is_client_approver`: can approve deliverables at client stage. `user_id`: link to Truleado user when they have an account. Client-level approval uses contacts with `is_client_approver` (and optionally `user_id`). `is_primary_contact`: flags the main point of contact for a client.
+
+### 2.4 client_notes
+
+```sql
+CREATE TABLE client_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id UUID NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_client_notes_client ON client_notes(client_id);
+```
+
+> RLS: agency members can read; Admin/AM/Operator can create; Admin/AM can update/delete.
+
+### 2.5 contact_notes
+
+```sql
+CREATE TABLE contact_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_contact_notes_contact ON contact_notes(contact_id);
+```
+
+### 2.6 contact_interactions
+
+Append-only log of touchpoints with a contact (calls, emails, meetings).
+
+```sql
+CREATE TABLE contact_interactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  interaction_type TEXT NOT NULL,     -- 'call', 'email', 'meeting', 'note', 'other'
+  interaction_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  note TEXT,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_contact_interactions_contact ON contact_interactions(contact_id);
+CREATE INDEX idx_contact_interactions_date ON contact_interactions(contact_id, interaction_date DESC);
+```
+
+### 2.7 contact_reminders
+
+Follow-up reminders per contact. Can be dismissed.
+
+```sql
+CREATE TABLE contact_reminders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  reminder_type TEXT NOT NULL DEFAULT 'manual',
+  reminder_date DATE NOT NULL,
+  note TEXT,
+  is_dismissed BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_contact_reminders_contact ON contact_reminders(contact_id);
+CREATE INDEX idx_contact_reminders_active ON contact_reminders(reminder_date) WHERE NOT is_dismissed;
+```
 
 ---
 
@@ -200,9 +338,69 @@ CREATE TABLE projects (
   end_date DATE,
   is_archived BOOLEAN DEFAULT false,
   created_by UUID REFERENCES users(id),
+  -- Core extended fields (migration 00042)
+  project_type TEXT,
+  status TEXT DEFAULT 'active',
+  project_manager_id UUID REFERENCES users(id),
+  client_poc_id UUID REFERENCES contacts(id),
+  -- Budget fields
+  currency TEXT,
+  influencer_budget NUMERIC,
+  agency_fee NUMERIC,
+  agency_fee_type TEXT DEFAULT 'fixed',  -- 'fixed' or 'percent'
+  production_budget NUMERIC,
+  boosting_budget NUMERIC,
+  contingency NUMERIC,
+  -- Scope fields
+  platforms JSONB DEFAULT '[]',
+  campaign_objectives JSONB DEFAULT '[]',
+  influencer_tiers JSONB DEFAULT '[]',
+  planned_campaigns INTEGER,
+  -- KPI Targets
+  target_reach BIGINT,
+  target_impressions BIGINT,
+  target_engagement_rate NUMERIC,
+  target_conversions BIGINT,
+  -- Approvals & Process
+  influencer_approval_contact_id UUID REFERENCES contacts(id),
+  content_approval_contact_id UUID REFERENCES contacts(id),
+  approval_turnaround TEXT,
+  reporting_cadence TEXT,
+  -- Documents & Commercial
+  brief_file_url TEXT,
+  contract_file_url TEXT,
+  exclusivity_clause BOOLEAN DEFAULT false,
+  exclusivity_terms TEXT,
+  content_usage_rights TEXT,
+  renewal_date DATE,
+  external_folder_link TEXT,
+  -- Internal fields
+  priority TEXT,
+  source TEXT,
+  tags JSONB DEFAULT '[]',
+  internal_notes TEXT,
+  -- Dummy data tracking (migration 00051)
+  is_dummy BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+```
+
+### 3.2.1 project_notes
+
+```sql
+CREATE TABLE project_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_project_notes_project ON project_notes(project_id);
 ```
 
 ---
@@ -221,10 +419,72 @@ CREATE TABLE campaigns (
   start_date DATE,
   end_date DATE,
   created_by UUID REFERENCES users(id),
+  -- Finance fields (migration 00031)
+  total_budget NUMERIC(15,2),
+  currency TEXT DEFAULT 'INR',
+  budget_control_type TEXT CHECK (budget_control_type IN ('soft','hard')) DEFAULT 'soft',
+  client_contract_value NUMERIC(15,2),
+  -- Extended campaign fields (migration 00044)
+  objective TEXT,
+  platforms JSONB DEFAULT '[]',
+  hashtags JSONB DEFAULT '[]',
+  mentions JSONB DEFAULT '[]',
+  posting_instructions TEXT,
+  exclusivity_clause BOOLEAN,
+  exclusivity_terms TEXT,
+  content_usage_rights TEXT,
+  gifting_enabled BOOLEAN,
+  gifting_details TEXT,
+  target_reach BIGINT,
+  target_impressions BIGINT,
+  target_engagement_rate NUMERIC,
+  target_views BIGINT,
+  target_conversions BIGINT,
+  target_sales BIGINT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  utm_content TEXT,
+  -- Dummy data tracking (migration 00051)
+  is_dummy BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
+
+### 3.3.1 campaign_notes
+
+```sql
+CREATE TABLE campaign_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  note_type TEXT NOT NULL DEFAULT 'general',
+  is_pinned BOOLEAN NOT NULL DEFAULT false,
+  created_by UUID NOT NULL REFERENCES users(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_campaign_notes_campaign ON campaign_notes(campaign_id);
+```
+
+### 3.3.2 campaign_promo_codes
+
+```sql
+CREATE TABLE campaign_promo_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  campaign_id UUID NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  creator_id UUID REFERENCES creators(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_campaign_promo_codes_campaign ON campaign_promo_codes(campaign_id);
+```
+
+> Promo codes are optionally linked to a specific creator. Used for attribution and reporting.
 
 ---
 
@@ -445,12 +705,30 @@ CREATE TABLE creators (
   notes TEXT,
   is_active BOOLEAN DEFAULT true,
   user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  -- Profile picture (migration 00034)
+  profile_picture_url TEXT,
+  -- Discovery provenance (migrations 00032, 00041)
+  discovery_source TEXT,
+  onsocial_user_id TEXT,
+  discovery_imported_at TIMESTAMPTZ,
+  platform TEXT,
+  followers INTEGER,
+  engagement_rate NUMERIC(8,4),
+  avg_likes INTEGER,
+  contact_links JSONB,
+  discovery_query JSONB,
+  -- Dummy data tracking (migration 00051)
+  is_dummy BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+CREATE UNIQUE INDEX idx_creators_agency_onsocial ON creators(agency_id, onsocial_user_id)
+  WHERE onsocial_user_id IS NOT NULL;
 ```
 
-> **user_id**: Links creator account to authenticated user after first magic-link sign-in (Phase 1 Creator Portal). Initially NULL, set via `ensureCreatorUser` mutation.
+> **user_id**: Links creator account to authenticated user after first OTP sign-in (Creator Portal). Initially NULL, set via `ensureCreatorUser` mutation.
+> **onsocial_user_id**: Unique ID from OnSocial API. The partial unique index on `(agency_id, onsocial_user_id)` prevents duplicate imports of the same influencer profile per agency.
 
 ---
 
@@ -962,26 +1240,67 @@ CREATE TABLE creator_social_posts (
 
 ---
 
-## 10. Token Purchases & Billing (Migration 00016)
+## 10. Credits & Billing
 
-### 10.1 agencies.premium_token_balance
+### 10.1 credit_purchase_config (Migration 00052)
 
-Added column to track premium token balance separately from regular token balance.
+Global configuration for credit pricing. Single-row table; admin-managed.
 
 ```sql
-ALTER TABLE agencies ADD COLUMN IF NOT EXISTS premium_token_balance INTEGER DEFAULT 0;
+CREATE TABLE credit_purchase_config (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  credit_price_usd NUMERIC(10,6) NOT NULL DEFAULT 0.012,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by UUID REFERENCES users(id) ON DELETE SET NULL
+);
 ```
 
-### 10.2 token_purchases
+> Default: $0.012 per credit. Razorpay order amounts are computed at request time: `quantity × credit_price_usd × fx_rate(USD → agency_currency)`.
 
-Records for Razorpay token purchases (basic and premium tokens).
+### 10.2 token_pricing_config (Migration 00032, updated 00052)
+
+Per-operation credit costs for all external API integrations.
+
+```sql
+CREATE TABLE token_pricing_config (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  provider TEXT NOT NULL,
+  action TEXT NOT NULL,
+  token_type TEXT NOT NULL DEFAULT 'credit',
+  provider_cost NUMERIC(10,6) NOT NULL,   -- actual external API cost in USD
+  internal_cost NUMERIC(10,6) NOT NULL,   -- credits charged to agency
+  agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,  -- NULL = global default
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(provider, action, token_type, agency_id)
+);
+```
+
+**Seeded global defaults:**
+
+| Provider | Action | Credits |
+|----------|--------|---------|
+| onsocial | unlock | 3 |
+| onsocial | unlock_with_contact | 5 |
+| onsocial | export_short | 3 |
+| onsocial | export_full | 5 |
+| onsocial | import | 3 |
+| onsocial | import_with_contact | 5 |
+| onsocial | audience_report | 125 |
+| apify | profile_fetch | 1 |
+| scrapecreators | post_analytics | 1 |
+
+### 10.3 token_purchases (updated in Migration 00052)
+
+Records for Razorpay credit purchases. Column renamed from `token_quantity` to `credit_quantity`; `purchase_type` simplified to `'credit'`.
 
 ```sql
 CREATE TABLE token_purchases (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
-  purchase_type TEXT NOT NULL CHECK (purchase_type IN ('basic', 'premium')),
-  token_quantity INTEGER NOT NULL CHECK (token_quantity > 0),
+  purchase_type TEXT NOT NULL CHECK (purchase_type IN ('credit')),
+  credit_quantity INTEGER NOT NULL CHECK (credit_quantity > 0),
   amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
   currency TEXT NOT NULL DEFAULT 'INR',
   razorpay_order_id TEXT UNIQUE,
@@ -1097,19 +1416,211 @@ CREATE TABLE campaign_finance_logs (
 
 ---
 
-## 12. Hard Rules (Enforced by Design)
+## 12. Creator Discovery Module (Migrations 00032–00033, 00041)
 
-- Authentication handled via Firebase
+### 12.1 discovery_unlocks
+
+Tracks unlocked OnSocial influencer profiles per agency. Unlock is valid for 30 days.
+
+```sql
+CREATE TABLE discovery_unlocks (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok')),
+  onsocial_user_id TEXT NOT NULL,
+  search_result_id TEXT NOT NULL,
+  username TEXT,
+  fullname TEXT,
+  profile_data JSONB,
+  tokens_spent NUMERIC(10,4) NOT NULL DEFAULT 0,
+  unlocked_by UUID NOT NULL REFERENCES users(id),
+  unlocked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '30 days'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_discovery_unlocks_agency ON discovery_unlocks(agency_id);
+CREATE INDEX idx_discovery_unlocks_lookup ON discovery_unlocks(onsocial_user_id, agency_id);
+CREATE INDEX idx_discovery_unlocks_expires ON discovery_unlocks(expires_at);
+```
+
+> RLS: agency members can read and insert their own unlocks.
+
+### 12.2 discovery_exports
+
+Tracks bulk export jobs. Credits deducted before job creation; refunded on failure.
+
+```sql
+CREATE TABLE discovery_exports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok')),
+  export_type TEXT NOT NULL CHECK (export_type IN ('SHORT','FULL')),
+  filter_snapshot JSONB NOT NULL,
+  total_accounts INT NOT NULL DEFAULT 0,
+  tokens_spent NUMERIC(10,4) NOT NULL DEFAULT 0,
+  onsocial_export_id TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending','processing','completed','failed')) DEFAULT 'pending',
+  download_url TEXT,
+  error_message TEXT,
+  exported_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_discovery_exports_agency ON discovery_exports(agency_id);
+CREATE INDEX idx_discovery_exports_status ON discovery_exports(status);
+CREATE INDEX idx_discovery_exports_created ON discovery_exports(created_at DESC);
+```
+
+### 12.3 saved_searches
+
+Per-agency saved filter configurations for the discovery module.
+
+```sql
+CREATE TABLE saved_searches (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok')),
+  filters JSONB NOT NULL,
+  sort_field TEXT,
+  sort_order TEXT,
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_saved_searches_agency ON saved_searches(agency_id);
+```
+
+> RLS: agency members have full CRUD on their own saved searches.
+
+---
+
+## 13. Agency Administration (Migrations 00047–00053)
+
+### 13.1 agency_invitations
+
+Team invite system with token-based acceptance.
+
+```sql
+CREATE TABLE agency_invitations (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id),
+  email TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('agency_admin','account_manager','operator','internal_approver')),
+  invited_by UUID NOT NULL REFERENCES users(id),
+  token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  status TEXT NOT NULL CHECK (status IN ('pending','accepted','revoked','expired')) DEFAULT 'pending',
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '7 days'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  accepted_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_agency_invitations_token ON agency_invitations(token);
+CREATE INDEX idx_agency_invitations_agency_status ON agency_invitations(agency_id, status);
+-- Prevents duplicate pending invitations for the same email + agency
+CREATE UNIQUE INDEX idx_agency_invitations_unique_pending
+  ON agency_invitations(agency_id, email) WHERE status = 'pending';
+```
+
+### 13.2 subscription_plans
+
+Admin-managed subscription plan catalog.
+
+```sql
+CREATE TABLE subscription_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  tier TEXT NOT NULL CHECK (tier IN ('basic','pro')),
+  billing_interval TEXT NOT NULL CHECK (billing_interval IN ('monthly','yearly')),
+  currency TEXT NOT NULL CHECK (currency IN ('INR','USD')),
+  price_amount INTEGER NOT NULL,   -- smallest unit: paise for INR, cents for USD
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(tier, billing_interval, currency)
+);
+```
+
+**Seeded default prices:**
+
+| Tier | Interval | INR | USD |
+|------|----------|-----|-----|
+| basic | monthly | ₹999 | $12 |
+| basic | yearly | ₹9,999 | $120 |
+| pro | monthly | ₹2,499 | $30 |
+| pro | yearly | ₹24,999 | $300 |
+
+### 13.3 subscription_payments
+
+Razorpay payment records for subscription purchases per agency.
+
+```sql
+CREATE TABLE subscription_payments (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  plan_tier TEXT NOT NULL,
+  billing_interval TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  razorpay_order_id TEXT UNIQUE,
+  razorpay_payment_id TEXT,
+  razorpay_signature TEXT,
+  status TEXT NOT NULL CHECK (status IN ('pending','completed','failed')) DEFAULT 'pending',
+  period_start TIMESTAMPTZ,
+  period_end TIMESTAMPTZ,
+  created_by UUID NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_subscription_payments_agency ON subscription_payments(agency_id);
+CREATE INDEX idx_subscription_payments_status ON subscription_payments(status);
+```
+
+### 13.4 email_otps
+
+OTP codes for creator portal login. Replaces Firebase magic links.
+
+```sql
+CREATE TABLE email_otps (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  otp_hash TEXT NOT NULL,          -- bcrypt hash of 6-digit code
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX email_otps_email_idx ON email_otps(email);
+CREATE INDEX email_otps_expires_at_idx ON email_otps(expires_at);
+
+ALTER TABLE email_otps ENABLE ROW LEVEL SECURITY;
+-- No RLS policies: table is accessed exclusively via service role key in API routes
+```
+
+> Max 5 attempts per OTP. TTL: 10 minutes. On successful verification, a custom Firebase token is issued.
+
+---
+
+## 14. Hard Rules (Enforced by Design)
+
+- Authentication handled via Firebase (agency users) and Email OTP (creator portal)
 - Identity handled via `users` + `auth_identities`
 - One Account Manager per client
 - Campaign-scoped permissions
 - Analytics snapshots are immutable
 - Archived campaigns are read-only
-- Social data jobs are token-gated (consumes agency tokens)
-- Token purchases are processed via Razorpay
+- Discovery operations are credit-gated (consumes agency `credit_balance`)
+- Credit purchases are processed via Razorpay
 - Finance audit logs (`campaign_finance_logs`) are append-only and never modified
 - Budget enforcement (hard limit) is server-side only — never client-side
 - FX rates are stored at time of commitment and never recalculated
+- Invitation tokens are one-time use; revoked invitations cannot be re-activated
+- OTP codes are stored as bcrypt hashes; plain-text OTPs are never persisted
+- `email_otps` table is service-role-only access (no RLS policies)
 
 ---
 

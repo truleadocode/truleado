@@ -1,5 +1,6 @@
 # Truleado – GraphQL API Contract (Canonical)
 
+> **Last Updated**: March 2026
 > **Purpose**: This document defines the **complete, authoritative GraphQL API contract** for Truleado.
 > It translates the **Master PRD, Permission Matrix, State Machines, and Technical LLD** into an enforceable backend interface.
 
@@ -99,6 +100,40 @@ enum ProposalState {
   ACCEPTED
   REJECTED
 }
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+enum DiscoveryExportType {
+  SHORT
+  FULL
+}
+
+enum DiscoveryExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum ContactInteractionType {
+  CALL
+  EMAIL
+  MEETING
+  NOTE
+  OTHER
+}
 ```
 
 ---
@@ -140,19 +175,36 @@ type Agency {
   name: String!
   agencyCode: String
   billingEmail: String
-  tokenBalance: Int!
-  premiumTokenBalance: Int!
-  currencyCode: String!    # ISO 4217 (e.g. USD)
-  timezone: String!        # IANA timezone (e.g. America/New_York)
-  languageCode: String!    # BCP-47 (e.g. en, en-US)
+  creditBalance: Int!        # Unified credit balance (renamed from tokenBalance)
+  currencyCode: String!      # ISO 4217 (e.g. USD)
+  timezone: String!          # IANA timezone (e.g. America/New_York)
+  languageCode: String!      # BCP-47 (e.g. en, en-US)
+  # Profile fields (migration 00047)
+  logoUrl: String
+  description: String
+  addressLine1: String
+  addressLine2: String
+  city: String
+  state: String
+  postalCode: String
+  country: String
+  primaryEmail: String
+  phone: String
+  website: String
+  # Subscription / trial (migrations 00048, 00050)
+  subscriptionStatus: SubscriptionStatus!
+  subscriptionTier: String
+  trialEndDate: DateTime
+  subscriptionEndDate: DateTime
+  hasDummyData: Boolean!
   clients: [Client!]!
   users: [AgencyMembership!]!
   createdAt: DateTime!
 }
 ```
 
-> **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.  
-> **premiumTokenBalance**: Separate token balance for premium features (social analytics, enriched profiles). Added in migration 00016.
+> **agencyCode**: Unique code for joining an agency (e.g. `ABCD-1234`). Generated on agency creation. Used by `joinAgencyByCode`.
+> **creditBalance**: Unified credit balance (previously `tokenBalance`). The separate `premiumTokenBalance` was removed in migration 00052.
 > **currencyCode/timezone/languageCode**: Agency locale defaults used for formatting money and dates/times across the UI.
 
 ---
@@ -182,11 +234,40 @@ type Client {
   name: String!
   accountManager: User
   isActive: Boolean!
+  # Extended profile fields (migration 00035)
+  industry: String
+  websiteUrl: String
+  country: String
+  logoUrl: String
+  description: String
+  clientStatus: String
+  clientSince: String
+  currency: String
+  paymentTerms: String
+  billingEmail: String
+  taxNumber: String
+  instagramHandle: String
+  youtubeUrl: String
+  tiktokHandle: String
+  linkedinUrl: String
+  source: String
+  internalNotes: String
   projects: [Project!]!
   contacts: [Contact!]!
   clientApprovers: [Contact!]!   # contacts where is_client_approver is true
-  approverUsers: [User!]!       # union: users from contacts (is_client_approver + user_id) + legacy client_users approvers
+  approverUsers: [User!]!        # union: users from contacts (is_client_approver + user_id) + legacy client_users approvers
+  clientNotes: [ClientNote!]!
   createdAt: DateTime!
+}
+
+type ClientNote {
+  id: ID!
+  clientId: ID!
+  message: String!
+  isPinned: Boolean!
+  createdBy: User!
+  createdAt: DateTime!
+  updatedAt: DateTime!
 }
 ```
 
@@ -194,7 +275,7 @@ type Client {
 
 ---
 
-### 4.3.1 Contact (Phase 3)
+### 4.3.1 Contact
 
 ```graphql
 type Contact {
@@ -212,12 +293,57 @@ type Contact {
   notes: String
   isClientApprover: Boolean!
   userId: ID
+  # Extended CRM fields (migration 00036)
+  profilePhotoUrl: String
+  jobTitle: String
+  isPrimaryContact: Boolean!
+  linkedinUrl: String
+  preferredChannel: String
+  contactType: String
+  contactStatus: String
+  notificationPreference: String
+  birthday: String
+  # Related records
+  contactNotes: [ContactNote!]!
+  contactInteractions: [ContactInteraction!]!
+  contactReminders: [ContactReminder!]!
   createdAt: DateTime!
   updatedAt: DateTime!
 }
+
+type ContactNote {
+  id: ID!
+  contactId: ID!
+  message: String!
+  isPinned: Boolean!
+  createdBy: User!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ContactInteraction {
+  id: ID!
+  contactId: ID!
+  interactionType: String!   # 'call' | 'email' | 'meeting' | 'note' | 'other'
+  interactionDate: DateTime!
+  note: String
+  createdBy: User!
+  createdAt: DateTime!
+}
+
+type ContactReminder {
+  id: ID!
+  contactId: ID!
+  reminderType: String!
+  reminderDate: String!      # DATE (YYYY-MM-DD)
+  note: String
+  isDismissed: Boolean!
+  createdBy: User!
+  createdAt: DateTime!
+}
 ```
 
-> **Phase 3**: CRM contacts per client. `isClientApprover` marks contacts who can approve at client level. `userId` links to a Truleado user when they have an account.
+> `isClientApprover` marks contacts who can approve at client level. `userId` links to a Truleado user when they have an account. `isPrimaryContact` flags the main point of contact for a client.
 
 ---
 
@@ -232,11 +358,57 @@ type Project {
   startDate: DateTime
   endDate: DateTime
   isArchived: Boolean!
+  # Extended fields (migration 00042)
+  projectType: String
+  status: String
+  projectManager: User
+  clientPoc: Contact
+  currency: String
+  influencerBudget: Money
+  agencyFee: Money
+  agencyFeeType: String          # 'fixed' | 'percent'
+  productionBudget: Money
+  boostingBudget: Money
+  contingency: Money
+  platforms: JSON
+  campaignObjectives: JSON
+  influencerTiers: JSON
+  plannedCampaigns: Int
+  targetReach: Int
+  targetImpressions: Int
+  targetEngagementRate: Float
+  targetConversions: Int
+  influencerApprovalContact: Contact
+  contentApprovalContact: Contact
+  approvalTurnaround: String
+  reportingCadence: String
+  briefFileUrl: String
+  contractFileUrl: String
+  exclusivityClause: Boolean
+  exclusivityTerms: String
+  contentUsageRights: String
+  renewalDate: String
+  externalFolderLink: String
+  priority: String
+  source: String
+  tags: JSON
+  internalNotes: String
   campaigns: [Campaign!]!
   approverUsers: [User!]!
   projectApprovers: [ProjectApprover!]!
   projectUsers: [ProjectUser!]!
+  projectNotes: [ProjectNote!]!
   createdAt: DateTime!
+}
+
+type ProjectNote {
+  id: ID!
+  projectId: ID!
+  message: String!
+  isPinned: Boolean!
+  createdBy: User!
+  createdAt: DateTime!
+  updatedAt: DateTime!
 }
 
 type ProjectApprover {
@@ -271,12 +443,59 @@ type Campaign {
   status: CampaignStatus!
   startDate: DateTime
   endDate: DateTime
+  # Finance fields (migration 00031)
+  totalBudget: Money
+  currency: String
+  budgetControlType: BudgetControlType
+  clientContractValue: Money
+  # Extended fields (migration 00044)
+  objective: String
+  platforms: JSON
+  hashtags: JSON
+  mentions: JSON
+  postingInstructions: String
+  exclusivityClause: Boolean
+  exclusivityTerms: String
+  contentUsageRights: String
+  giftingEnabled: Boolean
+  giftingDetails: String
+  targetReach: Int
+  targetImpressions: Int
+  targetEngagementRate: Float
+  targetViews: Int
+  targetConversions: Int
+  targetSales: Int
+  utmSource: String
+  utmMedium: String
+  utmCampaign: String
+  utmContent: String
   deliverables: [Deliverable!]!
   creators: [CampaignCreator!]!
   users: [CampaignUser!]!
-  attachments: [CampaignAttachment!]!  # Campaign files
+  attachments: [CampaignAttachment!]!
+  campaignNotes: [CampaignNote!]!
+  promoCodes: [CampaignPromoCode!]!
   activityLogs: [ActivityLog!]!
   createdBy: User
+  createdAt: DateTime!
+}
+
+type CampaignNote {
+  id: ID!
+  campaignId: ID!
+  message: String!
+  noteType: String!
+  isPinned: Boolean!
+  createdBy: User!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type CampaignPromoCode {
+  id: ID!
+  campaignId: ID!
+  code: String!
+  creator: Creator
   createdAt: DateTime!
 }
 
@@ -471,8 +690,18 @@ type Creator {
   linkedinHandle: String
   notes: String
   isActive: Boolean!
-  # Creator Portal Phase 1: user_id links to auth system
-  userId: ID              # Nullable; set after first magic-link sign-in
+  userId: ID              # Nullable; set after first OTP sign-in
+  # Discovery fields (migrations 00032, 00034, 00041)
+  profilePictureUrl: String
+  discoverySource: String
+  onsocialUserId: String
+  discoveryImportedAt: DateTime
+  platform: String
+  followers: Int
+  engagementRate: Float
+  avgLikes: Int
+  contactLinks: JSON
+  discoveryQuery: JSON
   rates: [CreatorRate!]!
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -693,17 +922,150 @@ type Invoice {
   createdAt: DateTime!
 }
 
-# Token Purchase (Billing)
-type TokenPurchase {
+# Credit Purchase (Billing) — renamed from TokenPurchase in migration 00052
+type CreditPurchase {
   id: ID!
   purchaseType: String!
-  tokenQuantity: Int!
+  creditQuantity: Int!
   amountPaise: Int!
   currency: String!
   razorpayOrderId: String
   status: String!
   createdAt: DateTime!
   completedAt: DateTime
+}
+
+# Global credit pricing config
+type CreditConfig {
+  id: ID!
+  creditPriceUsd: Float!
+  updatedAt: DateTime!
+}
+
+# Per-operation credit costs
+type TokenPricingConfig {
+  id: ID!
+  provider: String!
+  action: String!
+  internalCost: Float!    # credits deducted per operation
+  providerCost: Float!    # actual USD cost to Truleado
+  isActive: Boolean!
+}
+```
+
+---
+
+### 4.12 Agency Administration Types
+
+```graphql
+type AgencyInvitation {
+  id: ID!
+  agencyId: ID!
+  email: String!
+  role: UserRole!
+  invitedBy: User!
+  status: InvitationStatus!
+  expiresAt: DateTime!
+  acceptedAt: DateTime
+  createdAt: DateTime!
+}
+
+type SubscriptionPlan {
+  id: ID!
+  tier: String!
+  billingInterval: String!
+  currency: String!
+  priceAmount: Int!        # smallest unit (paise/cents)
+  isActive: Boolean!
+  createdAt: DateTime!
+}
+
+type SubscriptionPayment {
+  id: ID!
+  agencyId: ID!
+  planTier: String!
+  billingInterval: String!
+  amount: Int!
+  currency: String!
+  razorpayOrderId: String
+  razorpayPaymentId: String
+  status: String!
+  periodStart: DateTime
+  periodEnd: DateTime
+  createdAt: DateTime!
+  completedAt: DateTime
+}
+
+type OnboardingStatus {
+  hasAgencyProfile: Boolean!
+  hasClients: Boolean!
+  hasProjects: Boolean!
+  hasCampaigns: Boolean!
+  hasDeliverables: Boolean!
+  hasCreators: Boolean!
+  completedSteps: Int!
+  totalSteps: Int!
+  isComplete: Boolean!
+}
+```
+
+---
+
+### 4.13 Discovery Types
+
+```graphql
+type DiscoveryUnlock {
+  id: ID!
+  agencyId: ID!
+  platform: String!
+  onsocialUserId: String!
+  username: String
+  fullname: String
+  profileData: JSON
+  unlockedBy: User!
+  unlockedAt: DateTime!
+  expiresAt: DateTime!
+}
+
+type DiscoveryExport {
+  id: ID!
+  agencyId: ID!
+  platform: String!
+  exportType: DiscoveryExportType!
+  totalAccounts: Int!
+  status: DiscoveryExportStatus!
+  downloadUrl: String
+  errorMessage: String
+  exportedBy: User!
+  createdAt: DateTime!
+  completedAt: DateTime
+}
+
+type SavedSearch {
+  id: ID!
+  agencyId: ID!
+  name: String!
+  platform: String!
+  filters: JSON!
+  sortField: String
+  sortOrder: String
+  createdBy: User!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type DiscoveryImportResult {
+  imported: Int!
+  skipped: Int!
+  failed: Int!
+  creatorIds: [ID!]!
+}
+
+type DiscoveryExportCostEstimate {
+  totalAccounts: Int!
+  creditsRequired: Int!
+  currentBalance: Int!
+  canAfford: Boolean!
 }
 ```
 
@@ -821,8 +1183,36 @@ type Query {
   socialDataJob(jobId: ID!): SocialDataJob
   socialDataJobs(creatorId: ID!): [SocialDataJob!]!
   
-  # Token Purchases
-  tokenPurchases(agencyId: ID!): [TokenPurchase!]!
+  # Credits
+  creditPurchases(agencyId: ID!): [CreditPurchase!]!
+  creditConfig: CreditConfig
+  tokenPricingConfig: [TokenPricingConfig!]!
+
+  # Agency Administration
+  agencyInvitations(agencyId: ID!): [AgencyInvitation!]!
+  subscriptionPlans(currency: String): [SubscriptionPlan!]!
+  subscriptionPayments(agencyId: ID!): [SubscriptionPayment!]!
+  onboardingStatus(agencyId: ID!): OnboardingStatus!
+
+  # Notes
+  clientNotes(clientId: ID!): [ClientNote!]!
+  projectNotes(projectId: ID!): [ProjectNote!]!
+  campaignNotes(campaignId: ID!): [CampaignNote!]!
+  contactNotes(contactId: ID!): [ContactNote!]!
+
+  # Contact CRM
+  contactInteractions(contactId: ID!): [ContactInteraction!]!
+  contactReminders(contactId: ID!): [ContactReminder!]!
+
+  # Discovery
+  savedSearches(agencyId: ID!, platform: String): [SavedSearch!]!
+  discoveryExports(agencyId: ID!): [DiscoveryExport!]!
+  discoveryExportCostEstimate(
+    agencyId: ID!
+    platform: String!
+    exportType: DiscoveryExportType!
+    totalAccounts: Int!
+  ): DiscoveryExportCostEstimate!
 
   # =========================================
   # Creator Portal Queries (Phase 1)
@@ -883,17 +1273,48 @@ type Mutation {
 
 - **createUser**: Valid Firebase Bearer token required; `ctx.user` may be null (first-time signup). **Idempotent**: If an `auth_identities` row already exists for this Firebase UID, returns the existing user. **Side effect**: Inserts into `users` and `auth_identities` (provider `firebase_email`).
 - **ensureClientUser**: **Client portal** magic-link flow. Requires a valid Firebase token from **email-link sign-in** (not email/password). **Idempotent**: If an `auth_identities` row exists for this Firebase UID with provider `firebase_email_link`, returns the existing user. Otherwise: finds a `contacts` row with matching email and `is_client_approver = true`, creates `users` and `auth_identities` (provider `firebase_email_link`), updates the contact's `user_id`, returns the user. Used after the user completes sign-in via the magic link on `/client/verify`.
-- **ensureCreatorUser**: **Creator portal** magic-link flow (Phase 1). Requires a valid Firebase token from **email-link sign-in**. **Idempotent**: If creator already has `user_id` linked, returns that user. Otherwise: finds `creators` row matching email and `is_active = true`, creates `users` and `auth_identities` (provider `firebase_creator_link`), links creator's `user_id`, returns the user. Throws if no creator account found for email. Used after creator completes sign-in via magic link on `/creator/verify`.
+- **ensureCreatorUser**: **Creator portal** OTP flow. Requires a valid custom Firebase token issued by `/api/auth/verify-otp` after successful OTP verification. **Idempotent**: If creator already has `user_id` linked, returns that user. Otherwise: finds `creators` row matching email and `is_active = true`, creates `users` and `auth_identities` (provider `firebase_creator_otp`), links creator's `user_id`, returns the user. Throws if no creator account found for email. Used after creator completes OTP verification on `/creator/verify`.
 
 ### 6.2 Agency & Client
 
 ```graphql
+input UpdateAgencyProfileInput {
+  logoUrl: String
+  description: String
+  addressLine1: String
+  addressLine2: String
+  city: String
+  state: String
+  postalCode: String
+  country: String
+  primaryEmail: String
+  phone: String
+  website: String
+}
+
+input InviteTeamMemberInput {
+  email: String!
+  role: UserRole!
+}
+
 type Mutation {
   createAgency(name: String!, billingEmail: String): Agency!
-  
+
   joinAgencyByCode(agencyCode: String!): Agency!
 
   updateAgencyLocale(agencyId: ID!, input: AgencyLocaleInput!): Agency!
+
+  # Agency profile management (migration 00047)
+  updateAgencyProfile(agencyId: ID!, input: UpdateAgencyProfileInput!): Agency!
+
+  # Team invitations (migration 00049)
+  inviteTeamMembers(agencyId: ID!, invitations: [InviteTeamMemberInput!]!): [AgencyInvitation!]!
+  revokeInvitation(invitationId: ID!): AgencyInvitation!
+  acceptInvitation(token: String!): Agency!
+
+  # Onboarding (migration 00051)
+  seedDummyData(agencyId: ID!): Boolean!
+  deleteDummyData(agencyId: ID!): Boolean!
   
   createClient(
     agencyId: ID!
@@ -1544,7 +1965,140 @@ The finance types require explicit field resolvers in `src/graphql/resolvers/typ
 
 ---
 
-## 13. Error Handling Conventions
+## 13. Mutations – Notes (CRM)
+
+Notes are supported on Clients, Contacts, Projects, and Campaigns. All follow the same pattern.
+
+```graphql
+type Mutation {
+  # Client Notes
+  createClientNote(clientId: ID!, message: String!, isPinned: Boolean): ClientNote!
+  updateClientNote(noteId: ID!, message: String, isPinned: Boolean): ClientNote!
+  deleteClientNote(noteId: ID!): Boolean!
+
+  # Contact Notes
+  createContactNote(contactId: ID!, message: String!, isPinned: Boolean): ContactNote!
+  updateContactNote(noteId: ID!, message: String, isPinned: Boolean): ContactNote!
+  deleteContactNote(noteId: ID!): Boolean!
+
+  # Project Notes
+  createProjectNote(projectId: ID!, message: String!, isPinned: Boolean): ProjectNote!
+  updateProjectNote(noteId: ID!, message: String, isPinned: Boolean): ProjectNote!
+  deleteProjectNote(noteId: ID!): Boolean!
+
+  # Campaign Notes
+  createCampaignNote(campaignId: ID!, message: String!, noteType: String, isPinned: Boolean): CampaignNote!
+  updateCampaignNote(noteId: ID!, message: String, noteType: String, isPinned: Boolean): CampaignNote!
+  deleteCampaignNote(noteId: ID!): Boolean!
+}
+```
+
+**RBAC**: Admin/AM/Operator can create; Admin/AM can update/delete; all agency members can read.
+
+---
+
+## 13.1 Mutations – Contact Activity Tracking
+
+```graphql
+type Mutation {
+  # Interactions (append-only timeline)
+  createContactInteraction(
+    contactId: ID!
+    interactionType: String!   # 'call' | 'email' | 'meeting' | 'note' | 'other'
+    interactionDate: DateTime
+    note: String
+  ): ContactInteraction!
+  deleteContactInteraction(interactionId: ID!): Boolean!
+
+  # Reminders (dismissible follow-ups)
+  createContactReminder(
+    contactId: ID!
+    reminderType: String
+    reminderDate: String!      # DATE (YYYY-MM-DD)
+    note: String
+  ): ContactReminder!
+  dismissContactReminder(reminderId: ID!): ContactReminder!
+  deleteContactReminder(reminderId: ID!): Boolean!
+}
+```
+
+---
+
+## 13.2 Mutations – Discovery Module
+
+```graphql
+input DiscoverySearchFilters {
+  keyword: String
+  platform: String!
+  minFollowers: Int
+  maxFollowers: Int
+  minEngagementRate: Float
+  maxEngagementRate: Float
+  niche: String
+  location: String
+  language: String
+  isVerified: Boolean
+}
+
+type Mutation {
+  # Unlock a single influencer profile (deducts credits)
+  discoveryUnlock(
+    agencyId: ID!
+    platform: String!
+    onsocialUserId: String!
+    searchResultId: String!
+    withContact: Boolean
+  ): DiscoveryUnlock!
+
+  # Bulk export (deducts credits based on count × cost)
+  discoveryExport(
+    agencyId: ID!
+    platform: String!
+    exportType: DiscoveryExportType!
+    filters: DiscoverySearchFilters!
+    totalAccounts: Int!
+    dryRun: Boolean              # If true: return cost estimate, do not deduct
+  ): DiscoveryExport!
+
+  # Import discovered profiles into creator roster
+  discoveryImportToCreators(
+    agencyId: ID!
+    platform: String!
+    profiles: [JSON!]!
+    withContact: Boolean
+  ): DiscoveryImportResult!
+
+  # Saved searches
+  saveDiscoverySearch(
+    agencyId: ID!
+    name: String!
+    platform: String!
+    filters: DiscoverySearchFilters!
+    sortField: String
+    sortOrder: String
+  ): SavedSearch!
+
+  updateDiscoverySearch(
+    searchId: ID!
+    name: String
+    filters: DiscoverySearchFilters
+    sortField: String
+    sortOrder: String
+  ): SavedSearch!
+
+  deleteDiscoverySearch(searchId: ID!): Boolean!
+}
+```
+
+**Credit deduction rules:**
+- Credits deducted **before** external API call
+- On API failure, credits are **refunded** to `agencies.credit_balance`
+- `dryRun: true` on export returns cost estimate without deducting
+- Unlocking within 30-day window does not re-deduct credits
+
+---
+
+## 14. Error Handling Conventions
 
 Resolvers throw structured errors:
 
@@ -1552,7 +2106,7 @@ Resolvers throw structured errors:
 |------------|-------------|
 | `FORBIDDEN` | Permission denied |
 | `INVALID_STATE` | Illegal state transition |
-| `INSUFFICIENT_TOKENS` | Analytics blocked due to low tokens |
+| `INSUFFICIENT_CREDITS` | Discovery/analytics blocked due to low credit balance |
 | `NOT_FOUND` | Entity missing |
 | `VALIDATION_ERROR` | Invalid input |
 | `UNAUTHENTICATED` | No valid session |
@@ -1574,6 +2128,7 @@ Resolvers throw structured errors:
 - No client-side trust
 - No direct DB exposure
 - No auto-refresh analytics
+- Discovery credits deducted server-side before external calls; refunded on failure
 
 ---
 

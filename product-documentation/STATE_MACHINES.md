@@ -1,5 +1,6 @@
 # Truleado – State Machines
 
+> **Last Updated**: March 2026
 > **Purpose**: This document defines all state machines used in Truleado.
 > State transitions are validated **server-side only**.
 
@@ -307,7 +308,218 @@ Expenses represent actual cash outflows against a campaign budget.
 
 ---
 
-## 7. Implementation Guidelines
+## 7. Agency Subscription State Machine
+
+Tracks the subscription lifecycle of an agency from trial through active subscription or expiry.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `trial` | Default state. 30-day free trial from agency creation |
+| `active` | Paid subscription is current |
+| `expired` | Trial ended or subscription lapsed without renewal |
+| `cancelled` | Agency explicitly cancelled subscription |
+
+### Valid Transitions
+
+```
+┌────────┐
+│ trial  │
+└───┬────┘
+    │
+    ├──────────────────────────┐
+    │ upgrade()                │ trial_end_date passed
+    ▼                          ▼
+┌────────┐              ┌─────────┐
+│ active │              │ expired │
+└───┬────┘              └─────────┘
+    │
+    ├──────────────────────────┐
+    │ cancel()                 │ subscription_end_date passed
+    ▼                          ▼
+┌───────────┐           ┌─────────┐
+│ cancelled │           │ expired │
+└───────────┘           └─────────┘
+    │
+    │ re-subscribe()
+    ▼
+┌────────┐
+│ active │
+└────────┘
+```
+
+### Transition Matrix
+
+| From | To | Trigger | Who |
+|------|-----|---------|-----|
+| trial | active | Payment verified via Razorpay | Agency Admin |
+| trial | expired | `trial_end_date` passes (system) | System / Admin |
+| active | expired | `subscription_end_date` passes | System / Admin |
+| active | cancelled | Explicit cancellation | Agency Admin / Truleado Admin |
+| cancelled | active | New subscription payment | Agency Admin |
+| expired | active | New subscription payment | Agency Admin |
+
+### Rules
+
+- All new agencies start in `trial` state with `trial_end_date = created_at + 30 days`
+- Truleado admin can extend trial periods via admin dashboard
+- `subscription_status` is stored on `agencies` table
+- Status does not auto-update on the DB; the application checks dates at runtime and the admin dashboard manages status changes
+
+---
+
+## 8. Team Invitation State Machine
+
+Tracks the lifecycle of a team invite sent to a prospective agency member.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `pending` | Invitation sent, awaiting acceptance |
+| `accepted` | Invitee signed up and joined the agency |
+| `revoked` | Admin cancelled the invitation before it was accepted |
+| `expired` | 7-day window passed without acceptance |
+
+### Valid Transitions
+
+```
+┌─────────┐
+│ pending │
+└────┬────┘
+     │
+     ├──────────────┬──────────────┐
+     │              │              │
+     ▼              ▼              ▼
+┌──────────┐  ┌─────────┐  ┌─────────┐
+│ accepted │  │ revoked │  │ expired │
+└──────────┘  └─────────┘  └─────────┘
+(terminal)    (terminal)   (terminal)
+```
+
+### Transition Matrix
+
+| From | To | Trigger | Who |
+|------|-----|---------|-----|
+| pending | accepted | Invitee signs up with invite token | Invitee (auto) |
+| pending | revoked | Admin revokes invitation | Agency Admin |
+| pending | expired | 7 days pass without acceptance | System |
+
+### Rules
+
+- Only one `pending` invitation per (agency_id, email) — enforced by unique partial index
+- Invitation token is a secure random hex string (32 bytes)
+- Accept link format: `/signup?invite_token=<token>`
+- On signup, if invite token matches a pending invitation, the user is auto-added to the agency with the specified role
+- Revoked invitations cannot be re-activated; a new invitation must be sent
+- Expired invitations are not automatically cleaned up; they remain as historical records
+
+---
+
+## 9. Email OTP State Machine (Creator Portal Auth)
+
+Tracks the lifecycle of a one-time password used for creator portal authentication.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `created` | OTP generated and sent; awaiting verification |
+| `verified` | OTP correctly entered within TTL; session issued |
+| `expired` | OTP TTL elapsed before verification |
+| `locked` | Maximum failed attempts (5) reached |
+
+### Valid Transitions
+
+```
+┌─────────┐
+│ created │
+└────┬────┘
+     │
+     ├──────────────────────────┬──────────────┐
+     │ correct OTP within TTL   │ TTL elapsed  │ 5 failed attempts
+     ▼                          ▼              ▼
+┌──────────┐             ┌─────────┐    ┌────────┐
+│ verified │             │ expired │    │ locked │
+└──────────┘             └─────────┘    └────────┘
+(terminal)               (terminal)    (terminal)
+```
+
+### Transition Matrix
+
+| From | To | Trigger | Condition |
+|------|-----|---------|-----------|
+| created | verified | Correct OTP submitted | `attempt_count < 5` AND `expires_at > now()` |
+| created | expired | Any verification attempt | `expires_at ≤ now()` |
+| created | locked | Failed OTP attempt | `attempt_count` reaches 5 |
+
+### Rules
+
+- OTP is a 6-digit numeric code
+- OTP stored as bcrypt hash; never in plain text
+- TTL: 10 minutes from creation
+- Max attempts: 5 (tracked via `attempt_count` column)
+- Each failed attempt increments `attempt_count`
+- `email_otps` table is accessed exclusively via service role key (no RLS policies)
+- On successful verification, a custom Firebase token is issued for the creator session
+- Multiple OTPs can exist per email simultaneously; the most recent valid one is used
+
+---
+
+## 10. Discovery Export State Machine
+
+Tracks the lifecycle of a bulk export job from creator discovery.
+
+### States
+
+| State | Description |
+|-------|-------------|
+| `pending` | Export job created; credits deducted; awaiting processing |
+| `processing` | OnSocial API call in progress |
+| `completed` | Export finished; download URL available |
+| `failed` | Export failed; credits refunded |
+
+### Valid Transitions
+
+```
+┌─────────┐
+│ pending │
+└────┬────┘
+     │ processing starts
+     ▼
+┌────────────┐
+│ processing │
+└─────┬──────┘
+      │
+      ├──────────────────────────┐
+      │ export complete          │ API error / timeout
+      ▼                          ▼
+┌───────────┐            ┌────────┐
+│ completed │            │ failed │
+└───────────┘            └────────┘
+(terminal)               (terminal)
+```
+
+### Transition Matrix
+
+| From | To | Trigger | Effect |
+|------|-----|---------|--------|
+| pending | processing | Export job picked up | — |
+| processing | completed | OnSocial export finishes | `download_url` set |
+| processing | failed | API error | Credits refunded; `error_message` set |
+
+### Rules
+
+- Credits are deducted synchronously **before** the export job is created
+- If the export fails, credits are refunded to `agencies.credit_balance`
+- `discovery_exports` records are append-only (no soft-delete)
+- `filter_snapshot` stores the search filters used at export time for audit purposes
+- Export download URLs are provided by OnSocial and may have their own expiry
+
+---
+
+## 11. Implementation Guidelines
 
 ### Server-Side Validation
 
@@ -322,7 +534,7 @@ function validateTransition(currentStatus: string, newStatus: string): void {
     'completed': ['archived'],
     'archived': [], // terminal state
   };
-  
+
   if (!allowedTransitions[currentStatus]?.includes(newStatus)) {
     throw new InvalidStateError(
       `Cannot transition from ${currentStatus} to ${newStatus}`

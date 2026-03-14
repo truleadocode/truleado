@@ -13,6 +13,7 @@ const CAMPAIGN_STATUS_LABELS: Record<string, string> = {
 
 const DELIVERABLE_STATUS_LABELS: Record<string, string> = {
   PENDING: 'Pending',
+  RECEIVED: 'Received',
   SUBMITTED: 'Submitted',
   INTERNAL_REVIEW: 'Pending Campaign Approval',
   PENDING_PROJECT_APPROVAL: 'Pending Project Approval',

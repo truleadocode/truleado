@@ -423,14 +423,6 @@ export default function ContactsPage() {
                   ? 'Add contacts from a client page or use the Add Contact button above.'
                   : `No contacts match "${searchQuery}"`}
               </p>
-              {contacts.length === 0 && (
-                <Button className="mt-4" asChild>
-                  <Link href="/dashboard/clients">
-                    <Building2 className="mr-2 h-4 w-4" />
-                    Go to Clients
-                  </Link>
-                </Button>
-              )}
               {contacts.length > 0 && (
                 <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
                   Clear search

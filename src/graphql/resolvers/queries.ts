@@ -1446,7 +1446,7 @@ export const queryResolvers = {
         *,
         creators(id, display_name, email),
         campaign_creators(id, creator_id, status, rate_amount, rate_currency),
-        users!creator_agreements_created_by_fkey(id, name, email)
+        users!creator_agreements_created_by_fkey(id, full_name, email)
       `)
       .eq('campaign_id', campaignId)
       .order('created_at', { ascending: false });
@@ -1474,7 +1474,7 @@ export const queryResolvers = {
       .from('campaign_expenses')
       .select(`
         *,
-        users!campaign_expenses_created_by_fkey(id, name, email)
+        users!campaign_expenses_created_by_fkey(id, full_name, email)
       `)
       .eq('campaign_id', campaignId);
 
@@ -1513,7 +1513,7 @@ export const queryResolvers = {
       .from('campaign_finance_logs')
       .select(`
         *,
-        users!campaign_finance_logs_performed_by_fkey(id, name, email)
+        users!campaign_finance_logs_performed_by_fkey(id, full_name, email)
       `)
       .eq('campaign_id', campaignId)
       .order('created_at', { ascending: false })

@@ -804,6 +804,7 @@ export const queries = {
           versionNumber
           fileUrl
           fileName
+          tag
           caption
           fileSize
           mimeType
@@ -1070,6 +1071,7 @@ export const queries = {
             versionNumber
             fileUrl
             fileName
+            tag
             caption
             createdAt
           }
@@ -1336,6 +1338,7 @@ export const queries = {
           versionNumber
           fileUrl
           fileName
+          tag
           createdAt
         }
         trackingRecord {
@@ -2414,12 +2417,13 @@ export const mutations = {
   `,
   
   uploadDeliverableVersion: `
-    mutation UploadDeliverableVersion($deliverableId: ID!, $fileUrl: String!, $fileName: String, $fileSize: Int, $mimeType: String, $caption: String) {
-      uploadDeliverableVersion(deliverableId: $deliverableId, fileUrl: $fileUrl, fileName: $fileName, fileSize: $fileSize, mimeType: $mimeType, caption: $caption) {
+    mutation UploadDeliverableVersion($deliverableId: ID!, $fileUrl: String!, $fileName: String, $tag: String, $fileSize: Int, $mimeType: String, $caption: String) {
+      uploadDeliverableVersion(deliverableId: $deliverableId, fileUrl: $fileUrl, fileName: $fileName, tag: $tag, fileSize: $fileSize, mimeType: $mimeType, caption: $caption) {
         id
         versionNumber
         fileUrl
         fileName
+        tag
         createdAt
       }
     }
@@ -2657,6 +2661,16 @@ export const mutations = {
           id
           displayName
         }
+      }
+    }
+  `,
+
+  bulkSendProposals: `
+    mutation BulkSendProposals($campaignCreatorIds: [ID!]!) {
+      bulkSendProposals(campaignCreatorIds: $campaignCreatorIds) {
+        sent
+        skipped
+        errors
       }
     }
   `,
