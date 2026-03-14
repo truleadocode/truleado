@@ -1,5 +1,6 @@
 # Truleado – Technical Low Level Design (LLD)
 
+> **Last Updated**: March 2026
 > **Purpose**: This document is the **authoritative technical blueprint** for building Truleado.
 > Any senior engineer or AI coding agent should be able to read this and **build the system without ambiguity**.
 
@@ -71,6 +72,7 @@ External Services
   - Google OAuth
   - LinkedIn OAuth (for agencies)
   - **Email link (passwordless)** for **client portal** (magic-link sign-in at `/client/login`)
+  - **Email OTP** for **creator portal** (6-digit OTP via Novu; custom Firebase token issued on verification)
 - **Session Handling**: Firebase JWT
 
 ### Database
@@ -80,11 +82,11 @@ External Services
 
 ### Storage
 - **Files**: Supabase Storage
-- **Use cases**:
-  - Deliverable uploads (content files)
-  - Campaign attachments (briefs, reference docs)
-  - Invoices
-  - Reports
+- **Buckets**:
+  - `deliverables` — content file uploads (private; accessed via signed URLs)
+  - `campaign-attachments` — campaign briefs, reference docs (private)
+  - `campaign-receipts` — expense receipt files (private)
+  - `agency-assets` — agency logos and branding assets (**public** bucket; migration 00047)
 
 ### External Media Embedding (Instagram CDN)
 
@@ -209,34 +211,42 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 ---
 
-### 4.6 Creator Portal & Magic-Link Auth (Phase 1)
+### 4.6 Creator Portal & Email OTP Auth
 
-**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, submit tracking URLs. Creators authenticate via **magic link** (Firebase Email Link) using the email from the `creators` roster.
+**Purpose**: Creator-facing portal at `/creator` — view campaigns, respond to proposals, upload deliverables, submit tracking URLs. Creators authenticate via **6-digit email OTP** (replaces Firebase magic links in migration 00053; more reliable for mobile email clients).
 
 **Flow**:
 
-1. **Request link** (`/creator/login`): User enters email. Frontend calls `POST /api/creator-auth/request-magic-link` (validates email belongs to an active creator in the agency). Server generates Firebase email-link (Admin SDK) and sends via **Novu**. Email is stored in `localStorage` for the verify step.
-2. **Verify** (`/creator/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureCreatorUser` (GraphQL). Backend:
-   - Checks if creator already has `user_id` linked; if so, links Firebase UID to that user (idempotent).
-   - Otherwise: creates `users` + `auth_identities` (provider `firebase_creator_link`) and updates `creators.user_id`.
-   - Throws if no active creator found for email.
-   - Redirect to `/creator/dashboard`.
-3. **Creator dashboard** (`/creator/dashboard`): Overview of campaigns, pending proposals, deliverables awaiting upload.
-
-**Auth context**: `GetMe` fetches `me { ... }`. `GraphQLContext.creator` is set after loading the creator row (if `user_id` matches and creator is active). **Key difference** from client auth: creators are in the **roster table**, not linked via contacts.
-
-**Data model updates** (Phase 1):
-- `creators.user_id` (UUID, nullable foreign key to `users.id`) — set on first sign-in.
-- `proposal_versions` table (append-only): tracks proposal negotiation history.
-- `campaign_creators.proposal_state`, `campaign_creators.current_proposal_version`, `campaign_creators.proposal_accepted_at` — denormalized from latest `proposal_versions` row.
-- `deliverables.creator_id` (nullable) — assigned after proposal accepted.
-- `deliverables.proposal_version_id` (nullable) — tracks which proposal was used.
+1. **Request OTP** (`/creator/login`): Creator enters email. Frontend calls `POST /api/auth/send-otp`. Server:
+   - Validates email belongs to an active creator in any agency
+   - Generates a 6-digit random OTP
+   - Hashes it with bcrypt (never stores plain text)
+   - Inserts into `email_otps` (email, otp_hash, expires_at = now() + 10 minutes)
+   - Sends OTP email via Novu (`creator-otp` workflow)
+   - Returns `200 { ok: true }` always (no email enumeration)
+2. **Verify OTP** (`/creator/verify`): Creator enters the 6-digit code. Frontend calls `POST /api/auth/verify-otp`. Server:
+   - Looks up latest non-expired `email_otps` row for that email
+   - Checks `attempt_count < 5`; increments on failure (throws 429 on lockout)
+   - Compares OTP against stored bcrypt hash
+   - On success: issues custom Firebase token (Admin SDK), deletes the OTP row
+   - Frontend calls `signInWithCustomToken(customToken)`, then calls `ensureCreatorUser` (GraphQL)
+   - Redirect to `/creator/dashboard`
 
 **API routes**:
+- `POST /api/auth/send-otp`: Body `{ email }`. Validates creator exists. Inserts OTP hash. Sends OTP via Novu.
+- `POST /api/auth/verify-otp`: Body `{ email, otp }`. Verifies hash + TTL + attempts. Returns `{ customToken }` on success.
 
-- `POST /api/creator-auth/request-magic-link`: Body `{ email, origin }`. Validates email is in active `creators` roster (case-insensitive). Generates Firebase email-link and sends via Novu. Returns `200 { ok: true }` always (no email enumeration). Supports same delivery modes as client portal (`NEXT_PUBLIC_CREATOR_MAGIC_LINK_MODE`, `NOVU_CREATOR_MAGIC_LINK_WORKFLOW_ID`).
+**Security**:
+- OTPs bcrypt-hashed; never stored or logged in plain text
+- Max 5 attempts per OTP before lockout (attempt_count)
+- TTL: 10 minutes from creation
+- `email_otps` accessed via service role key only (no RLS policies)
+- Custom Firebase token is used to sign in via Firebase client SDK
 
-**Firebase**: Same setup as client portal (Email link already enabled).
+**Data model**:
+- `email_otps`: email, otp_hash, expires_at, attempt_count
+- `creators.user_id` (UUID, nullable FK to `users.id`) — set on first OTP sign-in via `ensureCreatorUser`
+- Provider: `firebase_creator_otp` in `auth_identities`
 
 ---
 
@@ -322,8 +332,8 @@ src/app/creator/
 │   ├── social-accounts/page.tsx       # Creator social profile management
 │   ├── revenue/page.tsx               # Earnings tracking
 │   └── settings/page.tsx              # Account settings
-├── login/page.tsx                     # Request magic link
-├── verify/page.tsx                    # Verify email link + ensureCreatorUser
+├── login/page.tsx                     # Request OTP
+├── verify/page.tsx                    # Enter OTP + ensureCreatorUser
 └── layout.tsx                         # Root layout
 ```
 
@@ -420,17 +430,17 @@ Every transition emits an audit event.
 
 ### 8.1 Analytics Types
 
-- **Pre-campaign analytics** (token-based)
-- **Post-campaign analytics** (deliverable-level, token-gated fetch; campaign dashboards built on top)
+- **Pre-campaign analytics** (credit-based)
+- **Post-campaign analytics** (deliverable-level, credit-gated fetch; campaign dashboards built on top)
 
 ### 8.2 Analytics Fetch Flow
 
 ```
 User triggers analytics fetch
   ↓
-Check role + token balance
+Check role + credit balance
   ↓
-Consume token (if applicable)
+Consume credits (if applicable)
   ↓
 Call external API
   ↓
@@ -441,7 +451,7 @@ Store immutable snapshot
 
 - Snapshots are immutable
 - No automatic refresh
-- Retry consumes new token
+- Retry consumes new credits
 
 ### 8.4 Deliverable Analytics Module (Campaign Performance)
 
@@ -968,25 +978,323 @@ Both use fire-and-forget pattern (`logFinanceAction()`) — never throws.
 
 ---
 
-## 17. Security Considerations
+## 17. Admin Portal (Internal Truleado Tool)
 
-- RLS enforced at DB level
-- JWT verified on every request
-- No client-side trust
-- No destructive deletes
+### 17.1 Access
+
+- Hidden route: `/admin-e53ea1` with `(admin)` layout group in Next.js App Router
+- Separate from Firebase auth — authenticated via `ADMIN_SECRET` environment variable
+- `POST /api/admin/auth`: verifies `{ password }` against `process.env.ADMIN_SECRET`; sets `admin_session` cookie (httpOnly, short-lived)
+- All `/api/admin/*` routes verify the cookie before processing
+
+### 17.2 Admin API Routes
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/admin/auth` | POST | Authenticate admin session |
+| `/api/admin/agencies` | GET | List all agencies with status |
+| `/api/admin/agencies/[id]` | GET | Agency detail: trial, subscription, credit balance |
+| `/api/admin/agencies/[id]` | PATCH | Update trial dates, subscription_status, subscription_tier |
+| `/api/admin/agencies/[id]/credits` | POST | Add/deduct credits for an agency |
+| `/api/admin/subscription-plans` | GET, POST | List and create subscription plan entries |
+| `/api/admin/subscription-plans` | PATCH | Update plan price |
+| `/api/admin/action-pricing` | GET, POST | List and update per-operation credit costs |
+| `/api/admin/credit-config` | GET, PATCH | View/update global USD price per credit |
+
+### 17.3 Database Access
+
+Admin routes use Supabase **service role key** — bypasses RLS for cross-agency reads.
 
 ---
 
-## 18. Non-Goals (Technical)
+## 18. Creator Discovery Module
+
+### 18.1 Overview
+
+Discovery is powered by the **OnSocial API** (`src/lib/onsocial/`). Agencies search influencers, unlock full profiles, export data, or import directly into their creator roster.
+
+### 18.2 File Structure
+
+```
+src/lib/onsocial/
+├── client.ts       # OnSocial API client (API key auth)
+├── search.ts       # Search/filter helper
+├── contacts.ts     # Unlock contact data
+├── exports.ts      # Bulk export flow
+├── unhide.ts       # Unlock profile flow
+├── types.ts        # OnSocial response types
+└── dict.ts         # Platform/field dictionaries
+
+src/lib/discovery/
+├── index.ts        # Main discovery orchestration
+├── pricing.ts      # Credit cost lookup from token_pricing_config
+└── token-deduction.ts  # Credit deduct + refund logic
+```
+
+### 18.3 Credit Deduction Pattern
+
+```
+1. Resolve operation cost: SELECT internal_cost FROM token_pricing_config WHERE provider = 'onsocial' AND action = '<action>'
+2. Check agency credit_balance >= cost (throw INSUFFICIENT_CREDITS if not)
+3. Deduct credits: UPDATE agencies SET credit_balance = credit_balance - cost
+4. Execute external API call (OnSocial)
+5. On failure: refund credits (UPDATE agencies SET credit_balance = credit_balance + cost)
+6. On success: insert record into discovery_unlocks / discovery_exports / creators
+7. Log activity (fire-and-forget)
+```
+
+### 18.4 Unlock Window
+
+- Each unlock tracked in `discovery_unlocks` with `expires_at = now() + 30 days`
+- Re-unlock within window: returns existing record; no credit deduction
+- Unlock data stored in `profile_data JSONB` field
+
+### 18.5 Import Flow
+
+```
+discoveryImportToCreators mutation
+  → For each profile:
+     1. Check if onsocial_user_id already exists for this agency (unique index)
+     2. If exists: skip (included in skipped count)
+     3. If not: insert into creators with platform data from discovery
+  → Returns { imported, skipped, failed, creatorIds }
+```
+
+---
+
+## 19. Credit System
+
+### 19.1 Architecture
+
+All credit operations go through a single unified balance on `agencies.credit_balance` (renamed from `token_balance` in migration 00052).
+
+**Key tables:**
+- `agencies.credit_balance` — current balance (integer, never negative)
+- `credit_purchase_config` — global USD price per credit (single row)
+- `token_pricing_config` — per-operation credit costs (keyed by provider + action)
+- `token_purchases` — Razorpay purchase records
+
+### 19.2 Credit Purchase Flow
+
+```
+Agency initiates credit purchase (Billing page)
+  → createCreditOrder (POST /api/razorpay/create-order)
+     → Look up credit_price_usd from credit_purchase_config
+     → Compute amount = quantity × credit_price_usd × fx_rate(USD → agency_currency)
+     → Create Razorpay order
+     → Insert token_purchases row (status = 'pending')
+  → Razorpay payment modal
+  → verifyPayment (POST /api/razorpay/verify-payment)
+     → Verify Razorpay signature
+     → UPDATE token_purchases SET status = 'completed'
+     → UPDATE agencies SET credit_balance = credit_balance + quantity
+```
+
+### 19.3 Default Credit Costs
+
+| Provider | Action | Credits |
+|----------|--------|---------|
+| onsocial | unlock | 3 |
+| onsocial | unlock_with_contact | 5 |
+| onsocial | export_short | 3 |
+| onsocial | export_full | 5 |
+| onsocial | import | 3 |
+| onsocial | import_with_contact | 5 |
+| onsocial | audience_report | 125 |
+| apify | profile_fetch | 1 |
+| scrapecreators | post_analytics | 1 |
+
+---
+
+## 20. Team Invitations
+
+### 20.1 Architecture
+
+Invitations are email-based, token-driven. Managed in `agency_invitations` table.
+
+### 20.2 Send Invitation Flow
+
+```
+inviteTeamMembers mutation (Admin only)
+  → For each { email, role }:
+     1. Check no pending invitation exists for this email + agency (unique partial index)
+     2. Insert agency_invitations row (token = random hex32, expires_at = +7 days)
+     3. Send email via Novu with invite link: /signup?invite_token=<token>
+  → Return [AgencyInvitation]
+```
+
+### 20.3 Accept Flow (Signup)
+
+```
+User visits /signup?invite_token=<token>
+  → Page loads: calls GET /api/invitations?token=<token> (unauthenticated)
+     → Returns { agencyName, role, email } (no auth required for token lookup)
+  → User signs up (Firebase email/password)
+  → createUser mutation (creates users + auth_identities)
+  → acceptInvitation(token) mutation
+     → Verify token exists, is pending, not expired
+     → INSERT agency_users (agency_id, user_id, role from invitation)
+     → UPDATE agency_invitations SET status = 'accepted', accepted_at = now()
+  → Redirect to /dashboard
+```
+
+### 20.4 Revoke Flow
+
+```
+revokeInvitation(invitationId) mutation (Admin only)
+  → Verify invitation is 'pending'
+  → UPDATE agency_invitations SET status = 'revoked'
+```
+
+---
+
+## 21. Subscription & Billing
+
+### 21.1 Subscription Plans
+
+Plans are seeded and managed by the Truleado admin team via `/admin-e53ea1/pricing`. Agencies cannot create plans.
+
+**Table**: `subscription_plans` (tier, billing_interval, currency, price_amount)
+
+### 21.2 Subscription Payment Flow
+
+```
+Agency selects plan (Billing settings page)
+  → POST /api/razorpay/create-subscription-order
+     → Fetch plan price from subscription_plans
+     → Create Razorpay order
+     → Insert subscription_payments row (status = 'pending')
+  → Razorpay payment modal
+  → POST /api/razorpay/verify-subscription-payment
+     → Verify Razorpay signature
+     → UPDATE subscription_payments SET status = 'completed'
+     → UPDATE agencies SET subscription_status = 'active', subscription_tier = plan.tier,
+         subscription_start_date = now(), subscription_end_date = now() + billing_period
+```
+
+### 21.3 Currency Selection
+
+- INR when `agency.country = 'IN'` (detected from `agencies.country`)
+- USD for all other countries
+- Currency determined at order creation time; stored on `subscription_payments`
+
+---
+
+## 22. Onboarding System
+
+### 22.1 Onboarding Wizard
+
+- `OnboardingProvider` context wraps the dashboard layout
+- 7-step wizard modal shown on first visit
+- `onboardingStatus(agencyId)` query auto-detects completion:
+  - `hasAgencyProfile`: agency has name + primaryEmail
+  - `hasClients`: clients count > 0
+  - `hasProjects`: projects count > 0
+  - `hasCampaigns`: campaigns count > 0
+  - `hasDeliverables`: deliverables count > 0
+  - `hasCreators`: creators count > 0
+
+### 22.2 Dummy Data (Sample Data)
+
+Agencies can seed realistic demo data via Settings → Sample Data card:
+
+```
+seedDummyData(agencyId) mutation
+  → Check agencies.has_dummy_data = false (no-op if already seeded)
+  → Insert demo clients, projects, campaigns, deliverables, creators
+    all with is_dummy = true flag
+  → SET agencies.has_dummy_data = true
+```
+
+```
+deleteDummyData(agencyId) mutation
+  → DELETE FROM clients WHERE agency_id = ? AND is_dummy = true (cascades to projects/campaigns)
+  → DELETE FROM creators WHERE agency_id = ? AND is_dummy = true
+  → SET agencies.has_dummy_data = false
+```
+
+Partial indexes on `is_dummy = true` make cleanup queries fast.
+
+---
+
+## 23. CRM Enhancements
+
+### 23.1 Notes Pattern
+
+All major entities (Client, Contact, Project, Campaign) support a pinned notes system:
+
+- Table per entity: `client_notes`, `contact_notes`, `project_notes`, `campaign_notes`
+- All share the same structure: `(id, entity_id, agency_id, message, is_pinned, created_by, updated_at, created_at)`
+- RBAC: Admin/AM/Operator can create; Admin/AM can update/delete; all agency members can read
+- `campaign_notes` adds a `note_type` field for categorisation
+
+### 23.2 Contact Activity Tracking
+
+**Interactions** (`contact_interactions`):
+- Append-only log of touchpoints (call, email, meeting, note, other)
+- Indexed by `(contact_id, interaction_date DESC)` for chronological list
+- Admin/AM/Operator can create; Admin/AM can delete
+
+**Reminders** (`contact_reminders`):
+- Scheduled follow-ups per contact
+- `is_dismissed` flag for soft completion
+- Partial index on `(reminder_date) WHERE NOT is_dismissed` for efficient active reminder queries
+- Admin/AM/Operator can create; Admin/AM can delete
+
+### 23.3 Frontend Component Architecture
+
+Detail pages have been decomposed into tab components for maintainability:
+
+```
+src/app/(dashboard)/dashboard/campaigns/[id]/
+├── page.tsx                    # Parent: data loading, tab routing
+├── types.ts                    # TypeScript types for this page
+├── components/
+│   ├── campaign-header.tsx
+│   ├── campaign-sidebar.tsx
+│   ├── overview-tab.tsx
+│   ├── influencers-tab.tsx     # Creator management (split from deliverables)
+│   ├── deliverables-tab.tsx
+│   ├── approvals-tab.tsx
+│   ├── finance-tab.tsx
+│   ├── performance-tab.tsx
+│   ├── files-tab.tsx
+│   └── notes-tab.tsx
+```
+
+Same pattern for `clients/[id]/`, `contacts/[id]/`, `projects/[id]/`.
+
+**New layout primitives** (`src/components/layout/`):
+- `detail-page-header.tsx` — consistent header with breadcrumb + actions
+- `list-page-shell.tsx` — list page wrapper with header, filters, content
+- `page-breadcrumb.tsx` — breadcrumb navigation
+
+---
+
+## 24. Security Considerations
+
+- RLS enforced at DB level for all agency-scoped data
+- JWT verified on every GraphQL request
+- No client-side trust (all authorization server-side)
+- No destructive deletes (soft deletes where possible)
+- Admin portal uses separate password auth (no Firebase); httpOnly session cookie
+- OTP codes bcrypt-hashed; never stored in plain text
+- Discovery credits deducted server-side before external API calls; refunded on failure
+- `email_otps` table accessed via service role key only
+
+---
+
+## 25. Non-Goals (Technical)
 
 - Real-time analytics
 - Ad creation APIs
 - Public creator profiles
 - Auto-refresh dashboards
+- Automatic credit top-up or billing retries
 
 ---
 
-## 19. Deployment & Environments
+## 26. Deployment & Environments
 
 - Environments:
   - Dev
@@ -999,7 +1307,7 @@ Both use fire-and-forget pattern (`logFinanceAction()`) — never throws.
 
 ---
 
-## 20. Final Technical Rule
+## 27. Final Technical Rule
 
 > **If behavior is not explicitly defined here, it must not be implemented.**
 
