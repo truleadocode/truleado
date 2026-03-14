@@ -17,6 +17,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Header } from '@/components/layout/header'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { ResendNotificationButton } from '@/components/resend-notification-button'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries } from '@/lib/graphql/client'
 import { getDeliverableStatusLabel } from '@/lib/campaign-status'
@@ -290,10 +291,18 @@ export default function DeliverablesPage() {
                       <span className="text-sm">v{deliverable.versions.length || 0}</span>
                     </TableCell>
                     <TableCell>
-                      <StatusBadge
-                        status={deliverable.status === 'PENDING' && deliverable.versions.length > 0 ? 'RECEIVED' : deliverable.status}
-                        type="deliverable"
-                      />
+                      <div className="flex items-center gap-1">
+                        <StatusBadge
+                          status={deliverable.status === 'PENDING' && deliverable.versions.length > 0 ? 'RECEIVED' : deliverable.status}
+                          type="deliverable"
+                        />
+                        {['INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(deliverable.status) && (
+                          <ResendNotificationButton
+                            notificationType="APPROVAL_REQUESTED"
+                            entityId={deliverable.id}
+                          />
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

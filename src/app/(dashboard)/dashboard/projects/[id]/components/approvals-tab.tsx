@@ -6,6 +6,7 @@ import { FileCheck } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { ResendNotificationButton } from '@/components/resend-notification-button'
 import {
   Table,
   TableBody,
@@ -142,7 +143,15 @@ export function ApprovalsTab({ project }: ApprovalsTabProps) {
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{d.campaignName}</TableCell>
                 <TableCell>
-                  <StatusBadge status={d.status} type="deliverable" />
+                  <div className="flex items-center gap-1">
+                    <StatusBadge status={d.status} type="deliverable" />
+                    {['INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(d.status) && (
+                      <ResendNotificationButton
+                        notificationType="APPROVAL_REQUESTED"
+                        entityId={d.id}
+                      />
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">{formatDate(d.dueDate)}</TableCell>
               </TableRow>

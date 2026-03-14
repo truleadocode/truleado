@@ -45,6 +45,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/auth-context'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { uploadFile, getSignedDownloadUrl } from '@/lib/supabase/storage'
+import { ResendNotificationButton } from '@/components/resend-notification-button'
 import { DeliverableTimelineSheet } from './components/deliverable-timeline-sheet'
 
 interface CaptionAudit {
@@ -929,6 +930,21 @@ export default function DeliverableDetailPage() {
               <Activity className="mr-2 h-4 w-4" />
               Activity
             </Button>
+            {deliverable && ['INTERNAL_REVIEW', 'PENDING_PROJECT_APPROVAL', 'CLIENT_REVIEW'].includes(deliverable.status) && (
+              <ResendNotificationButton
+                notificationType="APPROVAL_REQUESTED"
+                entityId={deliverable.id}
+                variant="button"
+              />
+            )}
+            {deliverable && deliverable.status === 'PENDING' && deliverable.creator && (
+              <ResendNotificationButton
+                notificationType="DELIVERABLE_ASSIGNED"
+                entityId={deliverable.id}
+                variant="button"
+                tooltipText="Resend assignment notification"
+              />
+            )}
             {canRequestRevision && (
               <Button variant="outline" onClick={() => setRevisionDialogOpen(true)}>
                 <XCircle className="mr-2 h-4 w-4" />

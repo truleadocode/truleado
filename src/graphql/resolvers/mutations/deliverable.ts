@@ -29,7 +29,7 @@ import {
  * Get the base URL for action links
  * Uses NEXT_PUBLIC_APP_URL with fallbacks
  */
-function getBaseUrl(): string {
+export function getBaseUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL?.trim()
     || process.env.NEXT_PUBLIC_URL?.trim()
     || process.env.VERCEL_URL?.trim()
@@ -49,7 +49,7 @@ const DELIVERABLE_TRANSITIONS: Record<string, string[]> = {
   approved: [], // Terminal state (immutable)
 };
 
-async function getCampaignApproverUserIds(campaignId: string): Promise<string[]> {
+export async function getCampaignApproverUserIds(campaignId: string): Promise<string[]> {
   const { data } = await supabaseAdmin
     .from('campaign_users')
     .select('user_id')
@@ -58,7 +58,7 @@ async function getCampaignApproverUserIds(campaignId: string): Promise<string[]>
   return (data || []).map((r: { user_id: string }) => r.user_id);
 }
 
-async function notifyApprovalRequested(params: {
+export async function notifyApprovalRequested(params: {
   agencyId: string;
   deliverableId: string;
   deliverableTitle: string;

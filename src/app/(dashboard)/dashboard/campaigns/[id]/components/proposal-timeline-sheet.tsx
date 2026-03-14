@@ -24,6 +24,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from '@/components/ui/sheet'
+import { ResendNotificationButton } from '@/components/resend-notification-button'
 import { formatCurrency } from '@/lib/currency'
 
 interface ProposalVersion {
@@ -312,6 +313,15 @@ export function ProposalTimelineSheet({
         {/* Actions */}
         {!isArchived && (
           <div className="py-4 space-y-3">
+            {proposalState?.toLowerCase() === 'sent' && (
+              <ResendNotificationButton
+                notificationType="PROPOSAL_SENT"
+                entityId={campaignCreator.id}
+                variant="button"
+                tooltipText="Resend proposal to creator"
+                className="w-full"
+              />
+            )}
             {isCountered && !showReCounterForm && (
               <>
                 <div className="flex gap-2">

@@ -1958,6 +1958,9 @@ export const typeDefs = gql`
 
     # Send a reminder notification to the creator assigned to a deliverable
     sendDeliverableReminder(deliverableId: ID!): Boolean!
+
+    # Re-trigger a notification with fresh data from the database
+    resendNotification(type: ResendNotificationType!, entityId: ID!): Boolean!
     
     # ---------------------------------------------
     # Creator Mutations
@@ -2255,5 +2258,16 @@ export const typeDefs = gql`
     # Onboarding dummy data
     seedDummyData(agencyId: ID!): Boolean!
     deleteDummyData(agencyId: ID!): Boolean!
+  }
+
+  # =============================================================================
+  # NOTIFICATION ENUMS
+  # =============================================================================
+
+  enum ResendNotificationType {
+    PROPOSAL_SENT
+    APPROVAL_REQUESTED
+    DELIVERABLE_ASSIGNED
+    DELIVERABLE_REMINDER
   }
 `;
