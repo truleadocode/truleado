@@ -15,6 +15,7 @@ import {
   Share2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/ui/logo'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -76,21 +77,7 @@ export function CreatorSidebar() {
             collapsed ? "justify-center" : "justify-between"
           )}>
             <Link href="/creator/dashboard" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                <svg
-                  className="h-5 w-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
+              <Logo className="h-9 w-9" />
               {!collapsed && (
                 <div className="flex flex-col">
                   <span className="text-lg font-bold text-sidebar-foreground">Truleado</span>

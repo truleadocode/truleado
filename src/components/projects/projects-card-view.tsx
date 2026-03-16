@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import type { ProjectListItem } from '@/hooks/use-projects-list'
 
 interface ProjectsCardViewProps {
@@ -18,14 +19,6 @@ interface ProjectsCardViewProps {
   getProjectBudget: (p: ProjectListItem) => number
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📷',
-  youtube: '▶️',
-  tiktok: '🎵',
-  facebook: '📘',
-  linkedin: '💼',
-  twitter: '🐦',
-}
 
 function getTimelineProgress(startDate: string | null, endDate: string | null) {
   if (!startDate || !endDate) return null
@@ -129,7 +122,7 @@ export function ProjectsCardView({ projects, selectedIds, onToggleSelection, get
                 {(project.platforms || []).length > 0 && (
                   <div className="flex gap-1">
                     {(project.platforms || []).map((pl) => (
-                      <span key={pl} className="text-xs" title={pl}>{PLATFORM_ICONS[pl] || pl}</span>
+                      <PlatformIcon key={pl} platform={pl} className="h-3.5 w-3.5" />
                     ))}
                   </div>
                 )}

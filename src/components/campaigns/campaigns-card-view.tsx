@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import type { CampaignGroupField } from '@/hooks/use-campaigns-list'
 
 interface CampaignCardItem {
@@ -59,14 +60,6 @@ function getInitials(name: string | null | undefined) {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: 'IG',
-  youtube: 'YT',
-  tiktok: 'TT',
-  facebook: 'FB',
-  linkedin: 'LI',
-  twitter: 'X',
-}
 
 function CampaignCard({
   campaign,
@@ -138,8 +131,8 @@ function CampaignCard({
         {campaign._platforms.length > 0 && (
           <div className="flex items-center gap-1.5">
             {campaign._platforms.map((p) => (
-              <Badge key={p} variant="secondary" className="text-[10px] px-1.5 py-0">
-                {PLATFORM_ICONS[p] || p}
+              <Badge key={p} variant="secondary" className="text-[10px] px-1.5 py-0 flex items-center gap-1">
+                <PlatformIcon platform={p} className="h-3 w-3" />
               </Badge>
             ))}
           </div>

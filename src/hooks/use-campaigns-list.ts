@@ -81,7 +81,7 @@ export interface CampaignFilters {
 
 export type CampaignSortField = 'goLiveDate' | 'name' | 'budget' | 'influencers' | 'createdAt' | 'approvalDeadline'
 export type CampaignGroupField = 'client' | 'project' | 'status' | 'platform' | 'goLiveMonth'
-export type CampaignViewMode = 'table' | 'card' | 'calendar'
+export type CampaignViewMode = 'table' | 'card' | 'board'
 
 export interface CampaignStats {
   total: number

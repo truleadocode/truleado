@@ -188,25 +188,59 @@ export function ApprovalsTab({ campaign, onRefresh }: ApprovalsTabProps) {
   const [sortBy, setSortBy] = useState<'deadline' | 'submitted' | 'influencer'>('deadline')
   const [approvedExpanded, setApprovedExpanded] = useState(false)
 
+  const getApprovalLevel = (status: string) => {
+    if (status === 'INTERNAL_REVIEW' || status === 'SUBMITTED') return 'INTERNAL'
+    if (status === 'PENDING_PROJECT_APPROVAL') return 'PROJECT'
+    return 'CLIENT'
+  }
+
+  const getLatestVersionId = (deliverable: CampaignDeliverable) => {
+    const versions = deliverable.versions
+    return versions.length > 0 ? versions[versions.length - 1].id : null
+  }
+
   const handleApprove = useCallback(async (deliverableId: string) => {
+    const deliverable = campaign.deliverables.find((d) => d.id === deliverableId)
+    if (!deliverable) return
+    const versionId = getLatestVersionId(deliverable)
+    if (!versionId) {
+      toast({ title: 'No version found', description: 'This deliverable has no versions to approve.', variant: 'destructive' })
+      return
+    }
     try {
-      await graphqlRequest(mutations.approveDeliverable, { deliverableId })
+      await graphqlRequest(mutations.approveDeliverable, {
+        deliverableId,
+        versionId,
+        approvalLevel: getApprovalLevel(deliverable.status),
+      })
       toast({ title: 'Deliverable approved' })
       onRefresh?.()
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Failed to approve', variant: 'destructive' })
     }
-  }, [toast, onRefresh])
+  }, [toast, onRefresh, campaign.deliverables])
 
   const handleReject = useCallback(async (deliverableId: string) => {
+    const deliverable = campaign.deliverables.find((d) => d.id === deliverableId)
+    if (!deliverable) return
+    const versionId = getLatestVersionId(deliverable)
+    if (!versionId) {
+      toast({ title: 'No version found', description: 'This deliverable has no versions to reject.', variant: 'destructive' })
+      return
+    }
     try {
-      await graphqlRequest(mutations.rejectDeliverable, { deliverableId })
+      await graphqlRequest(mutations.rejectDeliverable, {
+        deliverableId,
+        versionId,
+        approvalLevel: getApprovalLevel(deliverable.status),
+        comment: 'Rejected',
+      })
       toast({ title: 'Deliverable rejected' })
       onRefresh?.()
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Failed to reject', variant: 'destructive' })
     }
-  }, [toast, onRefresh])
+  }, [toast, onRefresh, campaign.deliverables])
 
   const handleRequestRevision = useCallback(async (deliverableId: string) => {
     try {

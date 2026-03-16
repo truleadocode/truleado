@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import type { Campaign } from '../types'
 
 interface CampaignHeaderProps {
@@ -39,14 +40,6 @@ interface CampaignHeaderProps {
   onDuplicate?: () => void
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📷',
-  youtube: '▶️',
-  tiktok: '🎵',
-  facebook: '📘',
-  twitter: '𝕏',
-  linkedin: '💼',
-}
 
 export function CampaignHeader({
   campaign,
@@ -103,9 +96,7 @@ export function CampaignHeader({
             {platforms.length > 0 && (
               <div className="flex items-center gap-1">
                 {platforms.map((p) => (
-                  <span key={p} className="text-sm" title={p}>
-                    {PLATFORM_ICONS[p] || p}
-                  </span>
+                  <PlatformIcon key={p} platform={p} className="h-4 w-4" />
                 ))}
               </div>
             )}

@@ -233,7 +233,7 @@ export default function DeliverableDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, currentAgency } = useAuth()
   const deliverableId = params.id as string
   
   const [deliverable, setDeliverable] = useState<Deliverable | null>(null)
@@ -376,6 +376,34 @@ export default function DeliverableDetailPage() {
         description: err instanceof Error ? err.message : 'Failed to submit',
         variant: 'destructive'
       })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDirectApprove = async () => {
+    if (!deliverable || !latestVersionId) return
+
+    setSubmitting(true)
+    try {
+      // First submit for review to transition PENDING → INTERNAL_REVIEW
+      await graphqlRequest(mutations.submitDeliverableForReview, { deliverableId })
+      // Then immediately approve
+      await graphqlRequest(mutations.approveDeliverable, {
+        deliverableId,
+        versionId: latestVersionId,
+        approvalLevel: 'INTERNAL',
+      })
+      toast({ title: 'Deliverable approved' })
+      await fetchDeliverable()
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Failed to approve',
+        variant: 'destructive',
+      })
+      // Refresh to show current state in case submit succeeded but approve failed
+      await fetchDeliverable()
     } finally {
       setSubmitting(false)
     }
@@ -685,6 +713,17 @@ export default function DeliverableDetailPage() {
   const canRequestRevision = deliverable && deliverable.status === 'PENDING' && deliverable.versions.length > 0
   const isApproved = deliverable?.status === 'APPROVED'
 
+  // Agency admin who is the sole internal approver can directly approve from PENDING
+  const isSoleApprover = useMemo(() => {
+    if (!deliverable || !user || !currentAgency) return false
+    if (currentAgency.role !== 'agency_admin') return false
+    if (deliverable.status !== 'PENDING' || deliverable.versions.length === 0) return false
+    const approvers = (deliverable.campaign?.users ?? [])
+      .filter((cu) => cu.role === 'approver')
+      .map((cu) => cu.user)
+    return approvers.length === 1 && approvers[0]?.id === user.id
+  }, [deliverable, user, currentAgency])
+
   // Existing tags on this deliverable (for the tag dialog)
   const existingTags = useMemo(() => {
     const tags = new Set(
@@ -951,7 +990,17 @@ export default function DeliverableDetailPage() {
                 Request Revision
               </Button>
             )}
-            {(canSubmit || canResubmit) && (
+            {isSoleApprover && (
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={handleDirectApprove}
+                disabled={submitting}
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+            )}
+            {(canSubmit || canResubmit) && !isSoleApprover && (
               <Button onClick={handleSubmitForReview} disabled={submitting}>
                 <Send className="mr-2 h-4 w-4" />
                 {canResubmit ? 'Resubmit for Review' : 'Submit for Review'}
