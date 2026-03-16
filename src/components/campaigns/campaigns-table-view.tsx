@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import type { CampaignGroupField } from '@/hooks/use-campaigns-list'
 
 interface CampaignRow {
@@ -98,14 +99,6 @@ function getInitials(name: string | null | undefined) {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: 'IG',
-  youtube: 'YT',
-  tiktok: 'TT',
-  facebook: 'FB',
-  linkedin: 'LI',
-  twitter: 'X',
-}
 
 function getDeadlineColor(dueDate: string | null, status: string): string {
   if (!dueDate || status === 'APPROVED') return ''
@@ -175,9 +168,7 @@ function CampaignTableRow({
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">{campaign.name}</span>
             {campaign._platforms.map((p) => (
-              <span key={p} className="text-[10px] text-muted-foreground font-medium">
-                {PLATFORM_ICONS[p] || p}
-              </span>
+              <PlatformIcon key={p} platform={p} className="h-3.5 w-3.5" />
             ))}
           </div>
           <div className="text-xs text-muted-foreground truncate">

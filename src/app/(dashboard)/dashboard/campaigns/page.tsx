@@ -15,23 +15,20 @@ import { CampaignsFilterBar } from '@/components/campaigns/campaigns-filter-bar'
 import { CampaignFilterChips } from '@/components/campaigns/campaign-filter-chips'
 import { CampaignsTableView } from '@/components/campaigns/campaigns-table-view'
 import { CampaignsCardView } from '@/components/campaigns/campaigns-card-view'
-import { CampaignsCalendarView } from '@/components/campaigns/campaigns-calendar-view'
+import { CampaignsBoardView } from '@/components/campaigns/campaigns-board-view'
 import { CampaignsPagination } from '@/components/campaigns/campaigns-pagination'
 import { exportCampaignsToCSV } from '@/components/campaigns/campaigns-csv-export'
 import { CreateCampaignDrawer } from '@/components/campaigns/create-campaign-drawer'
 import { graphqlRequest, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 
-// Map ViewToggle values to campaign view modes
-const VIEW_MAP = {
-  table: 'table' as const,
-  card: 'card' as const,
-  board: 'calendar' as const,
-}
-const REVERSE_VIEW_MAP = {
-  table: 'table' as const,
-  card: 'card' as const,
-  calendar: 'board' as const,
+// State-machine transition map: source status → target status → mutation name
+const TRANSITION_MAP: Record<string, Record<string, string>> = {
+  DRAFT: { ACTIVE: 'activateCampaign', ARCHIVED: 'archiveCampaign' },
+  ACTIVE: { IN_REVIEW: 'submitCampaignForReview', ARCHIVED: 'archiveCampaign' },
+  IN_REVIEW: { APPROVED: 'approveCampaign', ARCHIVED: 'archiveCampaign' },
+  APPROVED: { COMPLETED: 'completeCampaign', ARCHIVED: 'archiveCampaign' },
+  COMPLETED: { ARCHIVED: 'archiveCampaign' },
 }
 
 export default function CampaignsPage() {
@@ -57,6 +54,25 @@ export default function CampaignsPage() {
       list.refetch()
     } catch (err) {
       toast({ title: err instanceof Error ? err.message : 'Failed to archive', variant: 'destructive' })
+    }
+  }
+
+  const handleStatusTransition = async (campaignId: string, fromStatus: string, toStatus: string) => {
+    const mutationName = TRANSITION_MAP[fromStatus]?.[toStatus]
+    if (!mutationName) {
+      toast({
+        title: 'Invalid transition',
+        description: `Cannot move from ${fromStatus.replace('_', ' ')} to ${toStatus.replace('_', ' ')}. Campaigns follow: Draft → Active → In Review → Approved → Completed → Archived.`,
+        variant: 'destructive',
+      })
+      return
+    }
+    try {
+      await graphqlRequest((mutations as Record<string, string>)[mutationName], { campaignId })
+      toast({ title: 'Status updated' })
+      list.refetch()
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : 'Failed to update status', variant: 'destructive' })
     }
   }
 
@@ -155,8 +171,8 @@ export default function CampaignsPage() {
               Export CSV
             </Button>
             <ViewToggle
-              view={REVERSE_VIEW_MAP[list.view]}
-              onViewChange={(v) => list.setView(VIEW_MAP[v])}
+              view={list.view}
+              onViewChange={list.setView}
             />
           </div>
         </div>
@@ -233,14 +249,17 @@ export default function CampaignsPage() {
               />
             )}
 
-            {list.view === 'calendar' && (
-              <CampaignsCalendarView campaigns={list.filteredCampaigns} />
+            {list.view === 'board' && (
+              <CampaignsBoardView
+                campaigns={list.filteredCampaigns}
+                onStatusTransition={handleStatusTransition}
+              />
             )}
           </>
         )}
 
         {/* Pagination (not for calendar) */}
-        {list.view !== 'calendar' && (
+        {list.view !== 'board' && (
           <CampaignsPagination
             page={list.page}
             totalPages={list.totalPages}

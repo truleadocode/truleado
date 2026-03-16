@@ -1,10 +1,12 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { UserCircle, MoreHorizontal, Instagram, Youtube, Eye, EyeOff } from 'lucide-react'
+import { UserCircle, MoreHorizontal, Eye, EyeOff, RefreshCw, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import { ListPageShell } from '@/components/layout/list-page-shell'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { useAuth } from '@/contexts/auth-context'
@@ -32,6 +35,7 @@ interface Creator {
   displayName: string
   email: string | null
   phone: string | null
+  profilePictureUrl: string | null
   instagramHandle: string | null
   youtubeHandle: string | null
   tiktokHandle: string | null
@@ -39,6 +43,9 @@ interface Creator {
   linkedinHandle: string | null
   notes: string | null
   isActive: boolean
+  followers: number | null
+  engagementRate: number | null
+  avgLikes: number | null
   createdAt: string
 }
 
@@ -51,6 +58,8 @@ export default function CreatorsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(false)
+  const [platformTab, setPlatformTab] = useState<'instagram' | 'youtube' | 'tiktok'>('instagram')
+  const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set())
 
   const fetchCreators = useCallback(async () => {
     if (!currentAgency?.id) return
@@ -75,7 +84,14 @@ export default function CreatorsPage() {
     fetchCreators()
   }, [fetchCreators])
 
-  const filteredCreators = creators.filter((creator) => {
+  const platformFilteredCreators = creators.filter((creator) => {
+    if (platformTab === 'instagram') return !!creator.instagramHandle
+    if (platformTab === 'youtube') return !!creator.youtubeHandle
+    if (platformTab === 'tiktok') return !!creator.tiktokHandle
+    return false
+  })
+
+  const filteredCreators = platformFilteredCreators.filter((creator) => {
     const query = searchQuery.toLowerCase()
     return (
       creator.displayName.toLowerCase().includes(query) ||
@@ -105,21 +121,56 @@ export default function CreatorsPage() {
     }
   }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
+  const getHandle = (creator: Creator) => {
+    if (platformTab === 'instagram') return creator.instagramHandle ? `@${creator.instagramHandle}` : null
+    if (platformTab === 'youtube') return creator.youtubeHandle
+    if (platformTab === 'tiktok') return creator.tiktokHandle ? `@${creator.tiktokHandle}` : null
+    return null
+  }
+
+  const getInitials = (name: string) =>
+    name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+
+  const handleFetchData = async (creatorId: string) => {
+    setFetchingIds((prev) => new Set(prev).add(creatorId))
+    try {
+      await graphqlRequest(mutations.triggerSocialFetch, {
+        creatorId,
+        platform: platformTab,
+        jobType: 'basic_scrape',
+      })
+      toast({ title: 'Fetching data', description: 'Social data fetch started. Check the creator detail page for results.' })
+    } catch (err) {
+      toast({
+        title: 'Fetch failed',
+        description: err instanceof Error ? err.message : 'Failed to trigger social fetch',
+        variant: 'destructive',
+      })
+    } finally {
+      setFetchingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(creatorId)
+        return next
+      })
+    }
+  }
+
+  const formatNumber = (n: number | null) => {
+    if (n == null) return '—'
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, '')}K`
+    return n.toLocaleString()
   }
 
   const columns = [
-    { label: 'Creator', className: 'w-[240px]' },
-    { label: 'Status' },
+    { label: 'Creator', className: 'w-[220px]' },
+    { label: 'Handle' },
     { label: 'Email' },
-    { label: 'Platforms' },
-    { label: 'Added' },
-    { label: '', className: 'w-[50px]' },
+    { label: 'Followers' },
+    { label: 'Avg Likes' },
+    { label: 'Eng. Rate' },
+    { label: 'Status' },
+    { label: '', className: 'w-[90px]' },
   ]
 
   return (
@@ -140,10 +191,26 @@ export default function CreatorsPage() {
         addLabel: 'Add Your First Creator',
         addHref: '/dashboard/creators/new',
       }}
-      itemCount={creators.length}
+      itemCount={platformFilteredCreators.length}
       filteredCount={filteredCreators.length}
       filterBar={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <Tabs value={platformTab} onValueChange={(v) => setPlatformTab(v as typeof platformTab)}>
+            <TabsList>
+              <TabsTrigger value="instagram" className="gap-1.5">
+                <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />
+                Instagram
+              </TabsTrigger>
+              <TabsTrigger value="youtube" className="gap-1.5">
+                <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />
+                YouTube
+              </TabsTrigger>
+              <TabsTrigger value="tiktok" className="gap-1.5">
+                <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />
+                TikTok
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
           <Button
             variant={showInactive ? 'default' : 'outline'}
             size="sm"
@@ -155,17 +222,18 @@ export default function CreatorsPage() {
         </div>
       }
     >
-      <TooltipProvider>
         <div className="rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[240px]">Creator</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead className="w-[220px]">Creator</TableHead>
+                <TableHead>Handle</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Platforms</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="w-[50px]" />
+                <TableHead className="text-right">Followers</TableHead>
+                <TableHead className="text-right">Avg Likes</TableHead>
+                <TableHead className="text-right">Eng. Rate</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-[90px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -177,110 +245,87 @@ export default function CreatorsPage() {
                 >
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                        <UserCircle className="h-4 w-4 text-purple-500" />
-                      </div>
+                      <Avatar className="h-8 w-8 shrink-0">
+                        {creator.profilePictureUrl && (
+                          <AvatarImage src={`/api/image-proxy?url=${encodeURIComponent(creator.profilePictureUrl)}`} />
+                        )}
+                        <AvatarFallback className="text-xs">{getInitials(creator.displayName)}</AvatarFallback>
+                      </Avatar>
                       <span className="font-medium truncate">{creator.displayName}</span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={creator.isActive ? 'active' : 'inactive'} />
+                    <span className="text-sm text-muted-foreground">
+                      {getHandle(creator) || '—'}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <span className="text-sm text-muted-foreground">
                       {creator.email || '—'}
                     </span>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <span className="text-sm tabular-nums">{formatNumber(creator.followers)}</span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="text-sm tabular-nums">{formatNumber(creator.avgLikes)}</span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <span className="text-sm tabular-nums">
+                      {creator.engagementRate != null ? `${creator.engagementRate.toFixed(2)}%` : '—'}
+                    </span>
+                  </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      {creator.instagramHandle && (
+                    <StatusBadge status={creator.isActive ? 'active' : 'inactive'} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                      <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="flex items-center justify-center h-7 w-7 rounded bg-pink-50 text-pink-600">
-                              <Instagram className="h-3.5 w-3.5" />
-                            </span>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              disabled={fetchingIds.has(creator.id)}
+                              onClick={() => handleFetchData(creator.id)}
+                            >
+                              {fetchingIds.has(creator.id) ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
+                            </Button>
                           </TooltipTrigger>
-                          <TooltipContent>@{creator.instagramHandle}</TooltipContent>
+                          <TooltipContent>Fetch social data</TooltipContent>
                         </Tooltip>
-                      )}
-                      {creator.youtubeHandle && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center justify-center h-7 w-7 rounded bg-red-50 text-red-600">
-                              <Youtube className="h-3.5 w-3.5" />
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{creator.youtubeHandle}</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {creator.tiktokHandle && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center justify-center h-7 w-7 rounded bg-gray-100 text-gray-700 text-xs font-bold">
-                              TT
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>@{creator.tiktokHandle}</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {creator.facebookHandle && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center justify-center h-7 w-7 rounded bg-blue-50 text-blue-600 text-xs font-bold">
-                              FB
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{creator.facebookHandle}</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {creator.linkedinHandle && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="flex items-center justify-center h-7 w-7 rounded bg-sky-50 text-sky-600 text-xs font-bold">
-                              IN
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent>{creator.linkedinHandle}</TooltipContent>
-                        </Tooltip>
-                      )}
-                      {!creator.instagramHandle && !creator.youtubeHandle && !creator.tiktokHandle && !creator.facebookHandle && !creator.linkedinHandle && (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
+                      </TooltipProvider>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem asChild>
+                            <Link href={`/dashboard/creators/${creator.id}`}>View Details</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/dashboard/creators/${creator.id}`}>Edit</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleDeactivate(creator)}>
+                            {creator.isActive ? 'Deactivate' : 'Activate'}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-sm text-muted-foreground">{formatDate(creator.createdAt)}</span>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/dashboard/creators/${creator.id}`}>View Details</Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild>
-                          <Link href={`/dashboard/creators/${creator.id}`}>Edit</Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeactivate(creator)
-                        }}>
-                          {creator.isActive ? 'Deactivate' : 'Activate'}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
-      </TooltipProvider>
     </ListPageShell>
   )
 }

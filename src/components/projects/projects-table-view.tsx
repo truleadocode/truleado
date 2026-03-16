@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import type { ProjectListItem, GroupField } from '@/hooks/use-projects-list'
 
 interface ProjectsTableViewProps {
@@ -74,14 +75,6 @@ const STATUS_COLORS: Record<string, string> = {
   lost: 'bg-red-100 text-red-700',
 }
 
-const PLATFORM_ICONS: Record<string, string> = {
-  instagram: '📷',
-  youtube: '▶️',
-  tiktok: '🎵',
-  facebook: '📘',
-  linkedin: '💼',
-  twitter: '🐦',
-}
 
 function formatDate(dateString: string | null) {
   if (!dateString) return '—'
@@ -156,9 +149,7 @@ function ProjectRow({
                   <Badge variant="secondary" className="text-[10px] h-4 px-1">{project.projectType}</Badge>
                 )}
                 {(project.platforms || []).slice(0, 3).map((pl) => (
-                  <span key={pl} className="text-xs" title={pl}>
-                    {PLATFORM_ICONS[pl] || pl}
-                  </span>
+                  <PlatformIcon key={pl} platform={pl} className="h-3.5 w-3.5" />
                 ))}
               </div>
             </div>

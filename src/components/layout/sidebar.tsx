@@ -13,6 +13,7 @@ import {
   FileCheck,
   UserCircle,
   Compass,
+  CalendarDays,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -22,6 +23,7 @@ import {
   Check,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Logo } from '@/components/ui/logo'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -41,6 +43,7 @@ const navigation = [
   { name: 'Contacts', href: '/dashboard/contacts', icon: ContactRound },
   { name: 'Projects', href: '/dashboard/projects', icon: Briefcase },
   { name: 'Campaigns', href: '/dashboard/campaigns', icon: Megaphone },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays },
   { name: 'Deliverables', href: '/dashboard/deliverables', icon: FolderKanban },
   { name: 'Approvals', href: '/dashboard/approvals', icon: FileCheck },
   { name: 'Creators', href: '/dashboard/creators', icon: UserCircle },
@@ -85,21 +88,7 @@ export const Sidebar = memo(function Sidebar({ collapsed, onCollapsedChange }: S
             collapsed ? "justify-center" : "justify-between"
           )}>
             <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                <svg
-                  className="h-5 w-5 text-white"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-              </div>
+              <Logo className="h-9 w-9" />
               {!collapsed && (
                 <span className="text-lg font-bold text-sidebar-foreground">Truleado</span>
               )}

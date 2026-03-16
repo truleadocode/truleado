@@ -2,14 +2,13 @@
 
 import {
   Users,
-  Instagram,
-  Youtube,
   Globe,
   ImageIcon,
   Megaphone,
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 
 interface SocialProfile {
   id: string
@@ -179,7 +178,7 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <Instagram className="h-4 w-4 text-white" />
+                    <PlatformIcon platform="instagram" className="h-4 w-4 text-white" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">Instagram</p>
@@ -213,7 +212,7 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
               <CardContent className="p-4">
                 <div className="flex items-center gap-3 mb-3">
                   <div className="h-8 w-8 rounded-lg bg-red-500/10 flex items-center justify-center">
-                    <Youtube className="h-4 w-4 text-red-500" />
+                    <PlatformIcon platform="youtube" className="h-4 w-4 text-red-600" />
                   </div>
                   <div>
                     <p className="font-medium text-sm">YouTube</p>

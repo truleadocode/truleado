@@ -948,6 +948,7 @@ export const queries = {
         displayName
         email
         phone
+        profilePictureUrl
         instagramHandle
         youtubeHandle
         tiktokHandle
@@ -955,6 +956,9 @@ export const queries = {
         linkedinHandle
         notes
         isActive
+        followers
+        engagementRate
+        avgLikes
         createdAt
       }
     }

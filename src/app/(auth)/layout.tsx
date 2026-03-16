@@ -1,4 +1,5 @@
 import { Metadata } from 'next'
+import { Logo } from '@/components/ui/logo'
 
 export const metadata: Metadata = {
   title: 'Truleado - Authentication',
@@ -16,21 +17,7 @@ export default function AuthLayout({
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-primary via-primary/90 to-primary/80 p-12 flex-col justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center">
-              <svg
-                className="h-6 w-6 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
-            </div>
+            <Logo className="h-10 w-10" />
             <span className="text-2xl font-bold text-white">Truleado</span>
           </div>
         </div>

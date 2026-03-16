@@ -5,11 +5,6 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   MoreHorizontal,
-  Instagram,
-  Youtube,
-  Facebook,
-  Linkedin,
-  Music2,
   LayoutDashboard,
   UserCircle,
   AtSign,
@@ -42,6 +37,7 @@ import { Header } from '@/components/layout/header'
 import { PageBreadcrumb } from '@/components/layout/page-breadcrumb'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PlatformIcon } from '@/components/ui/platform-icon'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 import { useSocialFetch } from '@/hooks/use-social-fetch'
@@ -555,7 +551,7 @@ export default function CreatorDetailPage() {
                   )}
                   {creator.instagramHandle && (
                     <div className="flex items-center gap-2 text-sm">
-                      <Instagram className="h-4 w-4 text-muted-foreground" />
+                      <PlatformIcon platform="instagram" className="h-4 w-4" />
                       <a
                         href={`https://instagram.com/${creator.instagramHandle}`}
                         target="_blank"
@@ -569,7 +565,7 @@ export default function CreatorDetailPage() {
                   )}
                   {creator.youtubeHandle && (
                     <div className="flex items-center gap-2 text-sm">
-                      <Youtube className="h-4 w-4 text-muted-foreground" />
+                      <PlatformIcon platform="youtube" className="h-4 w-4" />
                       <a
                         href={`https://youtube.com/@${creator.youtubeHandle}`}
                         target="_blank"
@@ -624,28 +620,28 @@ export default function CreatorDetailPage() {
             </TabsTrigger>
             {hasInstagram && (
               <TabsTrigger value="instagram">
-                <Instagram className="mr-2 h-4 w-4" />
+                <PlatformIcon platform="instagram" className="mr-2 h-4 w-4" />
                 Instagram
               </TabsTrigger>
             )}
             {hasYouTube && (
               <TabsTrigger value="youtube">
-                <Youtube className="mr-2 h-4 w-4" />
+                <PlatformIcon platform="youtube" className="mr-2 h-4 w-4" />
                 YouTube
               </TabsTrigger>
             )}
             <TabsTrigger value="tiktok" disabled className="opacity-60">
-              <Music2 className="mr-2 h-4 w-4" />
+              <PlatformIcon platform="tiktok" className="mr-2 h-4 w-4" />
               TikTok
               <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
             </TabsTrigger>
             <TabsTrigger value="facebook" disabled className="opacity-60">
-              <Facebook className="mr-2 h-4 w-4" />
+              <PlatformIcon platform="facebook" className="mr-2 h-4 w-4" />
               Facebook
               <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
             </TabsTrigger>
             <TabsTrigger value="linkedin" disabled className="opacity-60">
-              <Linkedin className="mr-2 h-4 w-4" />
+              <PlatformIcon platform="linkedin" className="mr-2 h-4 w-4" />
               LinkedIn
               <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
             </TabsTrigger>
