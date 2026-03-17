@@ -810,6 +810,7 @@ export const typeResolvers = {
 
   // Finance type resolvers
   CampaignExpense: {
+    status: (parent: { status: string }) => parent.status?.toUpperCase(),
     campaignId: (parent: { campaign_id: string }) => parent.campaign_id,
     originalAmount: (parent: { original_amount: number }) => parent.original_amount,
     originalCurrency: (parent: { original_currency: string }) => parent.original_currency,
@@ -833,6 +834,7 @@ export const typeResolvers = {
   },
 
   CreatorAgreement: {
+    status: (parent: { status: string }) => parent.status?.toUpperCase(),
     campaignId: (parent: { campaign_id: string }) => parent.campaign_id,
     proposalVersionId: (parent: { proposal_version_id: string | null }) => parent.proposal_version_id,
     originalAmount: (parent: { original_amount: number }) => parent.original_amount,
