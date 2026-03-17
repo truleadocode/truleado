@@ -1884,7 +1884,11 @@ export const typeDefs = gql`
     ): CampaignAttachment!
     
     removeCampaignAttachment(attachmentId: ID!): Boolean!
-    
+
+    # Campaign promo codes
+    addCampaignPromoCode(campaignId: ID!, code: String!, creatorId: ID): CampaignPromoCode!
+    removeCampaignPromoCode(promoCodeId: ID!): Boolean!
+
     # Campaign state transitions (explicit, state-machine aligned)
     activateCampaign(campaignId: ID!): Campaign!
     submitCampaignForReview(campaignId: ID!): Campaign!

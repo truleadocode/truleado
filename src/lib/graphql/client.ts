@@ -1041,6 +1041,12 @@ export const queries = {
         utmMedium
         utmCampaign
         utmContent
+        promoCodes {
+          id
+          code
+          creator { id displayName }
+          createdAt
+        }
         createdAt
         project {
           id
@@ -2389,6 +2395,23 @@ export const mutations = {
   removeCampaignAttachment: `
     mutation RemoveCampaignAttachment($attachmentId: ID!) {
       removeCampaignAttachment(attachmentId: $attachmentId)
+    }
+  `,
+
+  addCampaignPromoCode: `
+    mutation AddCampaignPromoCode($campaignId: ID!, $code: String!, $creatorId: ID) {
+      addCampaignPromoCode(campaignId: $campaignId, code: $code, creatorId: $creatorId) {
+        id
+        code
+        creator { id displayName }
+        createdAt
+      }
+    }
+  `,
+
+  removeCampaignPromoCode: `
+    mutation RemoveCampaignPromoCode($promoCodeId: ID!) {
+      removeCampaignPromoCode(promoCodeId: $promoCodeId)
     }
   `,
 

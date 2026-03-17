@@ -15,6 +15,7 @@ import { getIdToken } from '@/lib/firebase/client'
 import { CampaignHeader } from './components/campaign-header'
 import { CampaignSidebar } from './components/campaign-sidebar'
 import { OverviewTab } from './components/overview-tab'
+import { DetailsTab } from './components/details-tab'
 import { InfluencersTab } from './components/influencers-tab'
 import { DeliverablesTab } from './components/deliverables-tab'
 import { ApprovalsTab } from './components/approvals-tab'
@@ -256,6 +257,10 @@ export default function CampaignDetailPage() {
               <OverviewTab campaign={campaign} onTabChange={setActiveTab} />
             )}
 
+            {activeTab === 'details' && (
+              <DetailsTab campaign={campaign} />
+            )}
+
             {activeTab === 'influencers' && (
               <InfluencersTab campaign={campaign} onRefresh={() => refetch()} onTabChange={setActiveTab} />
             )}
@@ -340,6 +345,18 @@ export default function CampaignDetailPage() {
           utmMedium: campaign.utmMedium,
           utmCampaign: campaign.utmCampaign,
           utmContent: campaign.utmContent,
+          approverUserIds: campaign.users
+            .filter((u) => u.role === 'approver')
+            .map((u) => u.user.id),
+          existingApprovers: campaign.users
+            .filter((u) => u.role === 'approver')
+            .map((u) => ({ campaignUserId: u.id, userId: u.user.id })),
+          existingPromoCodes: campaign.promoCodes.map((pc) => ({
+            id: pc.id,
+            code: pc.code,
+            creatorId: pc.creator?.id,
+            creatorName: pc.creator?.displayName,
+          })),
         }}
         onSuccess={() => {
           setEditDrawerOpen(false)

@@ -1291,6 +1291,119 @@ export async function removeUserFromCampaign(
       beforeState: campaignUser,
     });
   }
-  
+
+  return true;
+}
+
+/**
+ * Add promo code to campaign
+ */
+export async function addCampaignPromoCode(
+  _: unknown,
+  { campaignId, code, creatorId }: { campaignId: string; code: string; creatorId?: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+  await requireCampaignAccess(ctx, campaignId, Permission.MANAGE_CAMPAIGN);
+
+  const { data: campaign, error: fetchError } = await supabaseAdmin
+    .from('campaigns')
+    .select('status')
+    .eq('id', campaignId)
+    .single();
+
+  if (fetchError || !campaign) {
+    throw notFoundError('Campaign', campaignId);
+  }
+
+  if (campaign.status === 'archived') {
+    throw invalidStateError('Cannot modify an archived campaign');
+  }
+
+  if (!code.trim()) {
+    throw validationError('Promo code cannot be empty');
+  }
+
+  const insertData: Record<string, unknown> = {
+    campaign_id: campaignId,
+    code: code.trim().toUpperCase(),
+  };
+  if (creatorId) {
+    insertData.creator_id = creatorId;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('campaign_promo_codes')
+    .insert(insertData)
+    .select('*')
+    .single();
+
+  if (error) {
+    throw validationError(error.message);
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaignId);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign_promo_code',
+      entityId: data.id,
+      action: `added promo code "${data.code}"`,
+      actorId: ctx.user!.id,
+      actorType: 'user',
+    });
+  }
+
+  return data;
+}
+
+/**
+ * Remove promo code from campaign
+ */
+export async function removeCampaignPromoCode(
+  _: unknown,
+  { promoCodeId }: { promoCodeId: string },
+  ctx: GraphQLContext
+) {
+  requireAuth(ctx);
+
+  const { data: promoCode, error: fetchError } = await supabaseAdmin
+    .from('campaign_promo_codes')
+    .select('*, campaigns!inner(id, status)')
+    .eq('id', promoCodeId)
+    .single();
+
+  if (fetchError || !promoCode) {
+    throw notFoundError('Promo code', promoCodeId);
+  }
+
+  const campaigns = promoCode.campaigns as { id: string; status: string };
+  await requireCampaignAccess(ctx, campaigns.id, Permission.MANAGE_CAMPAIGN);
+
+  if (campaigns.status === 'archived') {
+    throw invalidStateError('Cannot modify an archived campaign');
+  }
+
+  const { error } = await supabaseAdmin
+    .from('campaign_promo_codes')
+    .delete()
+    .eq('id', promoCodeId);
+
+  if (error) {
+    throw validationError(error.message);
+  }
+
+  const agencyId = await getAgencyIdForCampaign(campaigns.id);
+  if (agencyId) {
+    await logActivity({
+      agencyId,
+      entityType: 'campaign_promo_code',
+      entityId: promoCodeId,
+      action: `removed promo code "${promoCode.code}"`,
+      actorId: ctx.user!.id,
+      actorType: 'user',
+    });
+  }
+
   return true;
 }

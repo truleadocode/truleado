@@ -22,6 +22,7 @@ import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { formatCurrency } from '@/lib/currency'
+import { PlatformBadge } from '@/components/ui/platform-icon'
 import type { Campaign } from '../types'
 
 interface CampaignSidebarProps {
@@ -58,6 +59,7 @@ function copyToClipboard(text: string) {
 
 const TABS = [
   { id: 'overview', label: 'Overview' },
+  { id: 'details', label: 'Details' },
   { id: 'influencers', label: 'Influencers' },
   { id: 'deliverables', label: 'Deliverables' },
   { id: 'approvals', label: 'Content Approvals' },
@@ -121,6 +123,9 @@ export function CampaignSidebar({ campaign, activeTab, onTabChange, counts }: Ca
           {client.industry && (
             <Badge variant="outline" className="text-xs">{client.industry}</Badge>
           )}
+          {campaign.platforms?.map((p) => (
+            <PlatformBadge key={p} platform={p} size="sm" />
+          ))}
         </div>
 
         <Separator />

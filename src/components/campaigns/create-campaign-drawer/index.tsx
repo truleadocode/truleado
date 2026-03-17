@@ -131,6 +131,12 @@ export function CreateCampaignDrawer({
         utmMedium: editCampaign.utmMedium || 'influencer',
         utmCampaign: editCampaign.utmCampaign || '',
         utmContent: editCampaign.utmContent || '',
+        approverUserIds: editCampaign.approverUserIds || [],
+        promoCodes: (editCampaign.existingPromoCodes || []).map((pc) => ({
+          code: pc.code,
+          influencerId: pc.creatorId,
+          influencerName: pc.creatorName,
+        })),
       })
       setStep(1)
       setIsDirty(false)
@@ -284,7 +290,7 @@ export function CreateCampaignDrawer({
       return
     }
 
-    if (!isEditMode && form.approverUserIds.length === 0) {
+    if (form.approverUserIds.length === 0) {
       toast({ title: 'Select at least one approver', variant: 'destructive' })
       setStep(1)
       return
@@ -325,6 +331,54 @@ export function CreateCampaignDrawer({
           utmCampaign: form.utmCampaign || null,
           utmContent: form.utmContent || null,
         })
+
+        // Sync approvers: add new ones, remove deleted ones
+        const existing = editCampaign.existingApprovers || []
+        const existingUserIds = existing.map((a) => a.userId)
+        const newUserIds = form.approverUserIds
+
+        // Add newly selected approvers
+        for (const userId of newUserIds) {
+          if (!existingUserIds.includes(userId)) {
+            await graphqlRequest(mutations.assignUserToCampaign, {
+              campaignId: editCampaign.id,
+              userId,
+              role: 'approver',
+            }).catch(() => {})
+          }
+        }
+
+        // Remove deselected approvers
+        for (const approver of existing) {
+          if (!newUserIds.includes(approver.userId)) {
+            await graphqlRequest(mutations.removeUserFromCampaign, {
+              campaignUserId: approver.campaignUserId,
+            }).catch(() => {})
+          }
+        }
+
+        // Sync promo codes: add new ones, remove deleted ones
+        const existingPCs = editCampaign.existingPromoCodes || []
+        const existingPCCodes = existingPCs.map((pc) => pc.code)
+        const newPCCodes = form.promoCodes.map((pc) => pc.code)
+
+        for (const pc of form.promoCodes) {
+          if (!existingPCCodes.includes(pc.code)) {
+            await graphqlRequest(mutations.addCampaignPromoCode, {
+              campaignId: editCampaign.id,
+              code: pc.code,
+              creatorId: pc.influencerId || undefined,
+            }).catch(() => {})
+          }
+        }
+
+        for (const pc of existingPCs) {
+          if (!newPCCodes.includes(pc.code)) {
+            await graphqlRequest(mutations.removeCampaignPromoCode, {
+              promoCodeId: pc.id,
+            }).catch(() => {})
+          }
+        }
 
         setForm(INITIAL_FORM_STATE)
         setStep(1)
@@ -404,7 +458,16 @@ export function CreateCampaignDrawer({
           }).catch(() => {})
         }
 
-        // 5. Invite creators and create deliverables
+        // 5. Add promo codes
+        for (const pc of form.promoCodes) {
+          await graphqlRequest(mutations.addCampaignPromoCode, {
+            campaignId,
+            code: pc.code,
+            creatorId: pc.influencerId || undefined,
+          }).catch(() => {})
+        }
+
+        // 6. Invite creators and create deliverables
         for (const inf of form.influencers) {
           // Only invite existing creators (not inline-added "new-" ones)
           if (!inf.creatorId.startsWith('new-')) {
@@ -435,7 +498,7 @@ export function CreateCampaignDrawer({
           }
         }
 
-        // 6. If not draft, activate campaign
+        // 7. If not draft, activate campaign
         if (!asDraft) {
           await graphqlRequest(mutations.activateCampaign, { campaignId }).catch(() => {})
         }

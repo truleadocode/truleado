@@ -120,6 +120,18 @@ export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
     return items
   }, [campaign])
 
+  // KPI targets
+  const kpiTargets = useMemo(() => {
+    const items: { label: string; current: number; target: number; unit?: string }[] = []
+    if (campaign.targetReach) items.push({ label: 'Reach', current: 0, target: campaign.targetReach })
+    if (campaign.targetImpressions) items.push({ label: 'Impressions', current: 0, target: campaign.targetImpressions })
+    if (campaign.targetEngagementRate) items.push({ label: 'Engagement Rate', current: 0, target: campaign.targetEngagementRate, unit: '%' })
+    if (campaign.targetViews) items.push({ label: 'Views', current: 0, target: campaign.targetViews })
+    if (campaign.targetConversions) items.push({ label: 'Conversions', current: 0, target: campaign.targetConversions })
+    if (campaign.targetSales) items.push({ label: 'Sales', current: 0, target: campaign.targetSales })
+    return items
+  }, [campaign])
+
   // Activity
   const activities = (campaign.activityLogs || []).slice(0, 10)
 
@@ -138,14 +150,14 @@ export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
         <StatsCard title="Avg ER%" value="—" icon={TrendingUp} />
       </div>
 
-      {/* KPI Progress */}
-      {campaign.totalBudget && (
+      {/* KPI Targets */}
+      {kpiTargets.length > 0 && (
         <Card>
           <CardContent className="p-4 space-y-3">
-            <h3 className="text-sm font-semibold">KPI Progress</h3>
-            <p className="text-xs text-muted-foreground">
-              Campaign performance metrics will appear here once content goes live and analytics are tracked.
-            </p>
+            <h3 className="text-sm font-semibold">KPI Targets</h3>
+            {kpiTargets.map((kpi) => (
+              <KPIBar key={kpi.label} {...kpi} />
+            ))}
           </CardContent>
         </Card>
       )}
