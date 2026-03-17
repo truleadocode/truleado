@@ -87,7 +87,8 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 | State | Description |
 |-------|-------------|
 | `PENDING` | Deliverable created, no content uploaded |
-| `SUBMITTED` | Content uploaded, awaiting review |
+| `RECEIVED` | Content uploaded by creator but not yet submitted for review |
+| `SUBMITTED` | Content submitted for review |
 | `INTERNAL_REVIEW` | Under internal agency review |
 | `CLIENT_REVIEW` | Under client review |
 | `APPROVED` | **Fully Approved** – final approval granted (only deliverable can reach this) |
@@ -99,7 +100,12 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 ┌─────────┐
 │ PENDING │
 └────┬────┘
-     │ uploadDeliverableVersion() + submitDeliverableForReview()
+     │ uploadDeliverableVersion()
+     ▼
+┌──────────┐
+│ RECEIVED │
+└────┬─────┘
+     │ submitDeliverableForReview()
      ▼
 ┌───────────┐
 │ SUBMITTED │
@@ -117,11 +123,11 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 │ CLIENT_REVIEW │    │ REJECTED │◄────────┐
 └────┬──────────┘    └──────────┘         │
      │                    │               │
-     │                    │ (re-submit)   │
+     │                    │ (re-upload)   │
      │                    ▼               │
-     │              ┌─────────┐           │
-     │              │ PENDING │───────────┘
-     │              └─────────┘
+     │              ┌──────────┐          │
+     │              │ RECEIVED │──────────┘
+     │              └──────────┘
      │
      ├──────────────────────┐
      │                      │
@@ -135,13 +141,14 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 
 | From | To | Action | Required Role |
 |------|----|--------|---------------|
-| PENDING | SUBMITTED | Upload + Submit | Operator |
+| PENDING | RECEIVED | Upload content | Operator, Creator |
+| RECEIVED | SUBMITTED | Submit for review | Operator, Creator |
 | SUBMITTED | INTERNAL_REVIEW | Auto or Manual | System |
 | INTERNAL_REVIEW | CLIENT_REVIEW | Internal Approve | Internal Approver |
 | INTERNAL_REVIEW | REJECTED | Internal Reject | Internal Approver |
 | CLIENT_REVIEW | APPROVED | Client Approve | Client User (approver) |
 | CLIENT_REVIEW | REJECTED | Client Reject | Client User (approver) |
-| REJECTED | PENDING | Re-upload | Operator |
+| REJECTED | RECEIVED | Re-upload | Operator, Creator |
 
 ### Rules
 
@@ -188,6 +195,42 @@ Campaigns are **containers** and **approval sources**. Campaign status reflects 
 | INVITED | ACCEPTED | Accept invite | Creator |
 | INVITED | REMOVED | Remove creator | Admin, Account Manager |
 | ACCEPTED | REMOVED | Remove creator | Admin, Account Manager |
+
+### Proposal State (sub-state of Campaign Creator)
+
+Each campaign creator has a `proposal_state` that tracks the proposal lifecycle independently from the creator's participation status.
+
+#### States
+
+| State | Description |
+|-------|-------------|
+| `draft` | Creator added via `inviteCreatorToCampaign`; proposal created but not yet sent |
+| `sent` | Proposal sent to creator via `bulkSendProposals` |
+
+#### Valid Transitions
+
+```
+┌───────┐
+│ draft │
+└───┬───┘
+    │ bulkSendProposals()
+    ▼
+┌──────┐
+│ sent │ (terminal)
+└──────┘
+```
+
+#### Transition Matrix
+
+| From | To | Mutation | Required Role |
+|------|----|----------|---------------|
+| draft | sent | `bulkSendProposals` | Admin, Account Manager, Operator |
+
+#### Rules
+
+- `inviteCreatorToCampaign` adds the creator with status `invited` and `proposal_state = 'draft'`. It does **not** auto-send the proposal.
+- Proposals are sent in bulk via `bulkSendProposals`, which transitions `proposal_state` from `draft` to `sent` for the selected creators.
+- Only creators with `proposal_state = 'draft'` are eligible for `bulkSendProposals`.
 
 ---
 
