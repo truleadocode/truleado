@@ -77,7 +77,7 @@ CREATE TABLE agencies (
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT,
-  name TEXT,
+  full_name TEXT NOT NULL,
   avatar_url TEXT,
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -548,11 +548,13 @@ CREATE TABLE deliverable_versions (
   file_size INTEGER,
   mime_type TEXT,
   caption TEXT,
+  tag TEXT NOT NULL DEFAULT 'untitled',            -- user-defined logical grouping (migration 00054)
   uploaded_by UUID REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- Versions are scoped per file name so a single deliverable
-  -- can have multiple files, each with its own version history.
-  UNIQUE (deliverable_id, file_name, version_number)
+  -- Versions are scoped per tag so a single deliverable
+  -- can have multiple tagged groups, each with its own version history.
+  -- Replaces old file_name-scoped constraint (migration 00054).
+  UNIQUE (deliverable_id, tag, version_number)
 );
 ```
 

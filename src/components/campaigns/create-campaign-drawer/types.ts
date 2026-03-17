@@ -207,6 +207,9 @@ export interface EditCampaignData {
   utmMedium: string | null
   utmCampaign: string | null
   utmContent: string | null
+  approverUserIds?: string[]
+  existingApprovers?: { campaignUserId: string; userId: string }[]
+  existingPromoCodes?: { id: string; code: string; creatorId?: string; creatorName?: string }[]
 }
 
 export interface AgencyUser {

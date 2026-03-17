@@ -132,8 +132,13 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 
 **GraphQL:**
 - `Creator.rates: [CreatorRate!]!`
+- `Creator.profilePictureUrl: String` — creator profile image URL (proxied via `/api/image-proxy` when from external CDNs).
+- `Creator.followers: Int` — total follower count across platforms.
+- `Creator.engagementRate: Float` — average engagement rate across platforms.
+- `Creator.avgLikes: Int` — average likes per post across platforms.
 - Inputs: `CreatorRateInput`
 - Mutations: `addCreator(..., rates)` and `updateCreator(..., rates)` accept a full list replacement for rates.
+- Creator list queries now return `profilePictureUrl`, `followers`, `engagementRate`, and `avgLikes` for use in roster views and campaign creator selection.
 
 **UI:**
 - Create Creator page includes a Rates section
@@ -370,12 +375,14 @@ src/app/creator/
 - `deliverable-rejected-creator`: Creator notified of revision request.
 - `deliverable-approved-creator`: Creator notified of approval.
 
-**Proposal Negotiation Flow**:
+**Proposal Negotiation Flow** (two-step: invite → bulk send):
 ```
 Agency: inviteCreatorToCampaign(rate, scope)
+  → Creates campaign_creator with proposal_state = DRAFT (no notification sent)
   ↓
-Agency: sendProposal
-  → Notification: proposal-sent (Creator)
+Agency: bulkSendProposals(campaignCreatorIds: [ID!]!)
+  → Transitions all specified DRAFT proposals to SENT
+  → Notification: proposal-sent (Creator) — one per creator
   ↓
 Creator: acceptProposal | rejectProposal | counterProposal
   → Notification: proposal-accepted/rejected/countered (Agency)
@@ -383,6 +390,8 @@ Creator: acceptProposal | rejectProposal | counterProposal
 (If accepted) Agency: assignDeliverableToCreator
   → Notification: deliverable-assigned (Creator)
 ```
+
+**Note**: `inviteCreatorToCampaign` no longer auto-sends proposals. The two-step flow (invite as draft, then bulk send) allows agencies to shortlist multiple creators before sending proposals in batch.
 
 **Deliverable Workflow (Creator Portal)**:
 - Creator views assigned deliverables on Deliverables page.
@@ -416,11 +425,14 @@ Transitions are validated server-side only.
 
 **States:**
 - Pending
+- Received
 - Submitted
 - Internal Review
 - Client Review
 - Approved
 - Rejected
+
+**Note**: `RECEIVED` is an intermediate state between `PENDING` and `SUBMITTED`. It indicates the agency has received content from the creator but the deliverable has not yet been formally submitted for review.
 
 Every transition emits an audit event.
 
@@ -587,7 +599,7 @@ Store immutable snapshot
 
 - Resolvers:
   - Mutations (`src/graphql/resolvers/mutations/deliverable-analytics.ts`):
-    - Token-gated using `Permission.FETCH_ANALYTICS` and `agencies.token_balance`.  
+    - Token-gated using `Permission.FETCH_ANALYTICS` and `agencies.credit_balance`.
     - Computes token cost as **number of tracking URLs** (1 token per URL).  
     - Deducts tokens up front; refunds on job creation failure.  
     - Inserts `analytics_fetch_jobs` row and **fire-and-forget** calls `/api/analytics-fetch`.  
@@ -644,26 +656,28 @@ Attached at:
 ## 10. Deliverables & Content Management
 
 - Each **deliverable** is campaign-scoped.
-- A deliverable can have **multiple files**, each with its own version history:
+- A deliverable can have **multiple files**, each grouped by a logical **tag** with its own version history:
   - `deliverable_versions` table stores:
+    - `tag` (user-defined logical grouping label; defaults to `file_name` or `'untitled'` if omitted)
     - `file_name`
     - `version_number`
     - `file_url` (Supabase storage path)
     - `caption` (optional copy/caption from uploader)
-  - Uniqueness is enforced on `(deliverable_id, file_name, version_number)`.
-- The **latest version per file** is shown as “Latest” in the UI, but **versions are selectable via a dropdown (default: latest). Caption editing is available for creator and agency users (audited in deliverable_version_caption_audit). Hashtags in captions are rendered as badge-style highlights**.
+  - Versioning is scoped by `tag` — multiple files under the same tag share a version sequence.
+  - Uniqueness is enforced on `(deliverable_id, tag, version_number)`.
+- The **latest version per tag** is shown as “Latest” in the UI, but **versions are selectable via a dropdown (default: latest). Caption editing is available for creator and agency users (audited in deliverable_version_caption_audit). Hashtags in captions are rendered as badge-style highlights**.
 - Approved deliverables are locked for new uploads.
 
 ### 10.1 Deliverable Detail UX (Preview & Versions)
 
 - **Preview panel** (right column, above Approval History):
-  - **File selector**: Buttons for each file in the deliverable; selecting a file loads its latest version in the preview by default.
-  - **Version selector**: When a file is selected, version buttons (v1, v2, … latest) allow switching the preview to that version.
+  - **Tag selector**: Buttons for each tag in the deliverable; selecting a tag loads its latest version in the preview by default.
+  - **Version selector**: When a tag is selected, version buttons (v1, v2, … latest) allow switching the preview to that version.
   - **Preview content**: Image/video files show an automatic preview (signed URL); other types show "This type of file cannot be previewed" and a Download button.
   - **Pop-out**: Opens the current image/video preview in a new browser window.
   - **Maximize**: Opens the current preview in a large modal (dialog).
   - Caption is shown below the preview and is editable (same caption edit flow as versions list).
-- **Versions list** (left column): One card per file; version dropdown (default: latest) and a single details block for the selected version (size, date, caption, uploader, "Last edited by" when caption was edited, and expandable Caption history). Edit-caption and Download actions available per version.
+- **Versions list** (left column): One card per tag; version dropdown (default: latest) and a single details block for the selected version (size, date, caption, uploader, "Last edited by" when caption was edited, and expandable Caption history). Edit-caption and Download actions available per version.
 
 ### 10.2 File Storage & Access
 
@@ -774,13 +788,14 @@ On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign 
 - `SENT` | `COUNTERED` → `REJECTED` (creator declines)
 
 **Lifecycle**:
-1. Agency invites creator (`inviteCreatorToCampaign`) → creates proposal version with state `SENT` → sends `proposal-sent` email.
-2. Creator can:
+1. Agency invites creator (`inviteCreatorToCampaign`) → creates `campaign_creator` row and proposal version with state `DRAFT`. No notification is sent at this stage.
+2. Agency sends proposals in bulk (`bulkSendProposals`) → transitions specified DRAFT proposals to `SENT` → sends `proposal-sent` email to each creator.
+3. Creator can:
    - Accept: state → `ACCEPTED`, `campaign_creators.status` → `ACCEPTED`, sends `proposal-accepted` notification to agency.
    - Reject: state → `REJECTED`, `campaign_creators.status` → `DECLINED`, sends `proposal-rejected` notification.
    - Counter: creates new version with state `COUNTERED`, sends `proposal-countered` notification.
-3. Agency can create new draft and re-send to move to `SENT`.
-4. Once `ACCEPTED`, agency can assign deliverables to creator via `assignDeliverableToCreator`.
+4. Agency can create new draft and re-send to move to `SENT`.
+5. Once `ACCEPTED`, agency can assign deliverables to creator via `assignDeliverableToCreator`.
 
 **Immutability**: All proposal versions are append-only. No updates to existing versions; new versions always created.
 
@@ -793,7 +808,8 @@ On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign 
 
 **GraphQL mutations**:
 - `createProposal(input: CreateProposalInput!): ProposalVersion!` — agency creates draft.
-- `sendProposal(campaignCreatorId: ID!): ProposalVersion!` — agency sends (state SENT).
+- `sendProposal(campaignCreatorId: ID!): ProposalVersion!` — agency sends single proposal (state SENT).
+- `bulkSendProposals(campaignCreatorIds: [ID!]!): [ProposalVersion!]!` — agency sends multiple DRAFT proposals to SENT in one call; sends `proposal-sent` notification per creator.
 - `acceptProposal(campaignCreatorId: ID!): ProposalVersion!` — creator accepts.
 - `rejectProposal(campaignCreatorId: ID!, reason: String): ProposalVersion!` — creator rejects.
 - `counterProposal(input: CounterProposalInput!): ProposalVersion!` — creator counters.
@@ -811,6 +827,26 @@ On the **individual campaign page** (`/dashboard/campaigns/[id]`), a **Campaign 
   - timestamp
 
 Client and internal approvals are strictly separated.
+
+### 11.2 Resend Notifications
+
+**Purpose**: Allows agency users to re-trigger notifications that were previously sent, in case recipients missed them.
+
+**GraphQL mutation**:
+- `resendNotification(type: NotificationType!, entityId: ID!): Boolean!`
+
+**Supported notification types** (`NotificationType` enum):
+- `PROPOSAL_SENT` — re-sends proposal email to creator (entityId = campaignCreatorId)
+- `APPROVAL_REQUESTED` — re-sends approval request to approver (entityId = approvalId)
+- `DELIVERABLE_ASSIGNED` — re-sends deliverable assignment to creator (entityId = deliverableId)
+- `DELIVERABLE_REMINDER` — re-sends deliverable reminder to creator (entityId = deliverableId)
+
+**Resolver**: `src/graphql/resolvers/mutations/resend-notification.ts`
+
+**Rules**:
+- Validates that the referenced entity exists and belongs to the current agency.
+- Re-triggers the same Novu workflow as the original notification.
+- Requires appropriate permission for the entity type.
 
 ---
 
@@ -1268,6 +1304,14 @@ Same pattern for `clients/[id]/`, `contacts/[id]/`, `projects/[id]/`.
 - `detail-page-header.tsx` — consistent header with breadcrumb + actions
 - `list-page-shell.tsx` — list page wrapper with header, filters, content
 - `page-breadcrumb.tsx` — breadcrumb navigation
+
+**New shared components**:
+- `PlatformIcon` (`src/components/ui/platform-icon.tsx`) — renders platform-specific icons (Instagram, YouTube, TikTok, etc.) used across creator cards, deliverable lists, and analytics.
+- `Logo` (`src/components/ui/logo.tsx`) — Truleado logo component with size variants, used in sidebar, header, and auth pages.
+
+**New pages**:
+- **Agency Calendar** (`/dashboard/calendar`) — calendar view showing campaign timelines, deliverable due dates, and reminders across the agency.
+- **Campaigns Kanban Board** — alternative board view on the campaigns list page, displaying campaigns as cards grouped by status columns (Draft, Active, In Review, Approved, Completed, Archived).
 
 ---
 

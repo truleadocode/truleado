@@ -354,7 +354,17 @@ Campaigns support comprehensive configuration:
 | **KPI Targets** | Target reach, impressions, engagement rate, views, conversions, sales |
 | **UTM Tracking** | UTM source, medium, campaign, content |
 
-### 8.5 Campaign Tabs
+### 8.5 Campaign Views
+
+The campaigns page supports multiple views:
+- **List view** — default tabular listing of campaigns
+- **Kanban board view** — campaigns displayed as cards grouped by status
+
+### 8.6 Agency Calendar
+
+An agency-wide calendar view is available at `/dashboard/calendar`, providing a consolidated timeline of campaign dates and deliverable deadlines across all active campaigns.
+
+### 8.7 Campaign Detail Tabs
 
 The campaign detail page is organised into separate tabs:
 - **Overview** — brief, objectives, key dates
@@ -366,11 +376,11 @@ The campaign detail page is organised into separate tabs:
 - **Files** — attachments
 - **Notes** — pinned and general notes
 
-### 8.6 Campaign Notes
+### 8.8 Campaign Notes
 
 Each campaign supports pinned and general notes. Notes have a `note_type` field for categorisation.
 
-### 8.7 Promo Codes
+### 8.9 Promo Codes
 
 Campaigns support tracking promo codes:
 - Each promo code is linked to a campaign
@@ -383,7 +393,8 @@ Campaigns support tracking promo codes:
 
 - Deliverables are campaign-scoped.
 - Each deliverable can contain **multiple files** (e.g., post image, story asset, caption doc).
-- For each file:
+- Versions are grouped by **tag** (not by file name). Tags default to the original file name if omitted, or `'untitled'` if no file name is available. A unique constraint enforces `(deliverable_id, tag, version_number)`.
+- For each tag:
   - The system tracks a **version history** (v1, v2, v3…).
   - Uploaders can provide **optional copy/caption** with each version, visible to reviewers.
   - **Caption editing** is available to creator and agency users; all changes are **audited** (who, when, old/new caption).
@@ -417,12 +428,18 @@ Campaigns support tracking promo codes:
 - Manual add, import from CSV, or import from Creator Discovery
 - Secure invite links
 - Campaign-scoped access
+- Creators are added to campaigns in **draft** status first
+- Proposals are sent in bulk via `bulkSendProposals` (up to 50 at a time), which returns `{ sent, skipped, errors }`
+- Adding a creator to a campaign no longer auto-sends a proposal
 
 ### Creator Participation
 - Accept campaign
 - View brief and deadlines
 - Submit content URLs
 - Track payment status
+
+### Creator Profile Data
+- Creator list displays `profilePictureUrl`, `followers`, `engagementRate`, and `avgLikes` for at-a-glance evaluation
 
 ### Creator Rates & Retainers
 
@@ -735,6 +752,7 @@ Finance Module and legacy Payments coexist. Payments handle external payment pro
 - Payment updates
 - Team invitation emails (Novu)
 - OTP emails for creator login (Novu)
+- **Resend notifications**: Specific notification types can be re-triggered on demand via `resendNotification`. Supported types: `PROPOSAL_SENT`, `APPROVAL_REQUESTED`, `DELIVERABLE_ASSIGNED`, `DELIVERABLE_REMINDER`. Each resend uses fresh data at the time of re-trigger.
 - Full immutable activity logs
 
 ---

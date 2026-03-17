@@ -31,6 +31,7 @@ export interface Campaign {
   utmMedium: string | null
   utmCampaign: string | null
   utmContent: string | null
+  promoCodes: CampaignPromoCode[]
   createdAt: string
   project: {
     id: string
@@ -148,6 +149,13 @@ export interface CampaignUser {
   id: string
   role: string
   user: { id: string; name: string | null; email: string | null }
+  createdAt: string
+}
+
+export interface CampaignPromoCode {
+  id: string
+  code: string
+  creator: { id: string; displayName: string } | null
   createdAt: string
 }
 

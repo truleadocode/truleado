@@ -134,6 +134,13 @@ enum ContactInteractionType {
   NOTE
   OTHER
 }
+
+enum ResendNotificationType {
+  PROPOSAL_SENT
+  APPROVAL_REQUESTED
+  DELIVERABLE_ASSIGNED
+  DELIVERABLE_REMINDER
+}
 ```
 
 ---
@@ -569,6 +576,7 @@ type DeliverableVersion {
   fileSize: Int
   mimeType: String
   caption: String
+  tag: String
   uploadedBy: User
   createdAt: DateTime!
   captionAudits: [DeliverableVersionCaptionAudit!]!
@@ -1455,6 +1463,7 @@ type Mutation {
     fileSize: Int
     mimeType: String
     caption: String
+    tag: String
   ): DeliverableVersion!
   
   submitDeliverableForReview(deliverableId: ID!): Deliverable!
@@ -1492,6 +1501,7 @@ type Mutation {
 }
 ```
 
+- **Version tagging**: `uploadDeliverableVersion` accepts an optional `tag` field — a logical grouping label chosen by the uploader (e.g. "Raw Footage", "Final Edit"). If omitted, `tag` defaults to `fileName`. Version numbering (`versionNumber`) is scoped to the `tag` within a deliverable, not to `fileName`.
 - **Caption editing**: `updateDeliverableVersionCaption` updates the version's caption and appends a row to `deliverable_version_caption_audit`. Allowed for users with `UPLOAD_VERSION` on the campaign (creator and agency). Changes are fully audited.
 - **deleteDeliverableVersion**: Permanently deletes a deliverable version and its file in the `deliverables` storage bucket. **Allowed only when**: (1) the deliverable status is `PENDING` or `REJECTED`, (2) the user has `UPLOAD_VERSION` on the campaign, and (3) the version has no associated approvals. Throws if the version has been used in any approval. UI: delete button on the deliverable detail page (when status permits).
 - **addDeliverableComment**: Agency and creator can add timeline comments to a deliverable. Creates append-only entry in `deliverable_comments` table. Requires authenticated user with access to the deliverable.
@@ -1574,12 +1584,11 @@ type Mutation {
 - **deactivateCreator**: Soft-deletes a creator by setting `is_active = false`. Preserves all historical data (campaign assignments, analytics, payments). Requires `MANAGE_CREATOR_ROSTER` permission.
 - **activateCreator**: Reactivates a previously deactivated creator. Requires `MANAGE_CREATOR_ROSTER` permission.
 - **deleteCreator**: Permanently deletes a creator. Only allowed if the creator has no campaign assignments. Requires `MANAGE_CREATOR_ROSTER` permission.
-- **inviteCreatorToCampaign**: Assigns a creator to a campaign with optional rate and notes. Requires `INVITE_CREATOR` permission (Agency Admin, Account Manager, Operator). Creator must belong to the same agency as the campaign. Status defaults to `INVITED`.
+- **inviteCreatorToCampaign**: Assigns a creator to a campaign with optional rate and notes. Requires `INVITE_CREATOR` permission (Agency Admin, Account Manager, Operator). Creator must belong to the same agency as the campaign. Creates a draft proposal (`proposal_state = DRAFT`). **Does not auto-send proposals** — use `bulkSendProposals` or `sendProposal` to send.
 - **acceptCampaignInvite**: Changes campaign creator status from `INVITED` to `ACCEPTED`. Currently requires campaign access (future: creator authentication).
 - **declineCampaignInvite**: Changes campaign creator status from `INVITED` to `DECLINED`. Currently requires campaign access (future: creator authentication).
 - **removeCreatorFromCampaign**: Sets campaign creator status to `REMOVED`. Requires `INVITE_CREATOR` permission.
 - **updateCampaignCreator**: Updates rate amount, currency, or notes for a campaign creator assignment. Requires `INVITE_CREATOR` permission.
-- **inviteCreatorToCampaign** (updated Phase 1): Now automatically creates and sends a proposal when inviting a creator. Updates `campaign_creators.proposal_state` to `SENT` and sends notification email via Novu `proposal-sent` workflow.
 
 ---
 
@@ -1629,6 +1638,15 @@ type Mutation {
 
   # Assign a deliverable to a creator with an accepted proposal (agency action)
   assignDeliverableToCreator(deliverableId: ID!, creatorId: ID!): Deliverable!
+
+  # Send proposals to multiple draft campaign creators in bulk (agency action)
+  bulkSendProposals(campaignCreatorIds: [ID!]!): BulkSendProposalsResult!
+}
+
+type BulkSendProposalsResult {
+  sent: Int!
+  skipped: Int!
+  errors: [String!]!
 }
 ```
 
@@ -1639,6 +1657,20 @@ type Mutation {
 - **counterProposal**: Creator counters with different terms. Requires creator authentication. Creates new proposal version with state `COUNTERED`, preserving old version (append-only). Sends `proposal-countered` notification to agency.
 - **assignDeliverableToCreator**: Agency assigns deliverable to creator after proposal accepted. Verifies `campaign_creators.proposal_state === 'accepted'`. Updates `deliverables.creator_id` and `deliverables.proposal_version_id`. Sends `deliverable-assigned` notification to creator.
 - **addProposalNote**: Both agency and creator can add timeline messages to a proposal. Requires authenticated user (agency user or creator) with access to the proposal. Creates append-only entry in `proposal_notes` table. Used for communication during proposal negotiation.
+- **bulkSendProposals**: Sends proposals to multiple draft campaign creators in a single operation. Accepts up to 50 `campaignCreatorIds` (all must belong to the same campaign). Requires `INVITE_CREATOR` permission on the campaign. Skips creators whose `proposal_state` is not `DRAFT`. Returns `BulkSendProposalsResult` with counts of sent, skipped, and any error messages.
+
+---
+
+## 9.2 Mutations – Notifications
+
+```graphql
+type Mutation {
+  # Re-trigger a notification with fresh data from the database
+  resendNotification(type: ResendNotificationType!, entityId: ID!): Boolean!
+}
+```
+
+- **resendNotification**: Re-sends a notification by re-fetching current data from the database and triggering the corresponding Novu workflow. `type` specifies the notification kind (`PROPOSAL_SENT`, `APPROVAL_REQUESTED`, `DELIVERABLE_ASSIGNED`, `DELIVERABLE_REMINDER`). `entityId` is the relevant entity ID for the notification type (e.g., `campaignCreatorId` for proposals, `deliverableId` for deliverable notifications). Requires appropriate permissions for the underlying entity.
 
 ---
 
