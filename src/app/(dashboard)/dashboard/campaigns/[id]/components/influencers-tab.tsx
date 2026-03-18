@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Separator } from '@/components/ui/separator'
 import {
   Select,
@@ -389,7 +390,14 @@ export function InfluencersTab({ campaign, onRefresh, onTabChange }: Influencers
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
                           {handle && <span>@{handle}</span>}
                           {c.followers && <span>· {formatFollowers(c.followers)}</span>}
-                          {c.engagementRate && <span>· {c.engagementRate.toFixed(1)}% ER</span>}
+                          {c.engagementRate && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger className="cursor-help">· {c.engagementRate.toFixed(1)}% ER</TooltipTrigger>
+                                <TooltipContent><p>(Avg Likes + Avg Comments) / Followers</p></TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
                         </div>
                       </div>
                     </div>

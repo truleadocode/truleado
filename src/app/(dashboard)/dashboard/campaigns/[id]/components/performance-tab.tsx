@@ -13,6 +13,7 @@ import {
   FileCheck,
   RefreshCw,
 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
@@ -269,7 +270,12 @@ export function PerformanceTab({ campaignId }: PerformanceTabProps) {
           <div className="rounded-lg border bg-muted/30 p-4">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <TrendingUp className="h-4 w-4" />
-              Engagement Rate
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-4">Engagement Rate</TooltipTrigger>
+                  <TooltipContent><p>(Likes + Comments + Shares) / Views</p></TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
             <p className="text-2xl font-semibold tabular-nums">
               {formatPercent(analyticsDashboard?.avgEngagementRate)}

@@ -11,6 +11,7 @@ import {
   Eye,
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SocialPostChart } from './social-post-chart'
 import { SocialFetchButton } from './social-fetch-button'
 
@@ -224,7 +225,14 @@ export function InstagramTab({
                   <p className="text-lg font-semibold">
                     {profile.engagementRate != null ? `${profile.engagementRate.toFixed(2)}%` : '—'}
                   </p>
-                  <p className="text-xs text-muted-foreground">Engagement</p>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-help">
+                        <p className="text-xs text-muted-foreground underline decoration-dotted underline-offset-4">Engagement</p>
+                      </TooltipTrigger>
+                      <TooltipContent><p>(Avg Likes + Avg Comments) / Followers</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
               {profile.externalUrl && (

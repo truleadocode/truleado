@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { PlatformIcon } from '@/components/ui/platform-icon'
 
 interface SocialProfile {
@@ -200,7 +201,14 @@ export function SocialDashboardTab({ creator, profiles }: SocialDashboardTabProp
                     <p className="font-semibold">
                       {igProfile.engagementRate != null ? `${igProfile.engagementRate.toFixed(2)}%` : '—'}
                     </p>
-                    <p className="text-xs text-muted-foreground">Engagement</p>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="cursor-help">
+                          <p className="text-xs text-muted-foreground underline decoration-dotted underline-offset-4">Engagement</p>
+                        </TooltipTrigger>
+                        <TooltipContent><p>(Avg Likes + Avg Comments) / Followers</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </div>
               </CardContent>

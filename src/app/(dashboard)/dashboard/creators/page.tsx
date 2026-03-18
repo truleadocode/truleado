@@ -231,7 +231,14 @@ export default function CreatorsPage() {
                 <TableHead>Email</TableHead>
                 <TableHead className="text-right">Followers</TableHead>
                 <TableHead className="text-right">Avg Likes</TableHead>
-                <TableHead className="text-right">Eng. Rate</TableHead>
+                <TableHead className="text-right">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-help underline decoration-dotted underline-offset-4">Eng. Rate</TooltipTrigger>
+                      <TooltipContent><p>(Avg Likes + Avg Comments) / Followers</p></TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[90px]" />
               </TableRow>
