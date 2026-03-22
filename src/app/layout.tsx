@@ -4,6 +4,7 @@ import './globals.css'
 import { AuthProvider } from '@/contexts/auth-context'
 import { Toaster } from '@/components/ui/toaster'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from 'next-themes'
 import Script from 'next/script'
 
@@ -40,6 +41,7 @@ export default function RootLayout({
             {children}
             <Toaster />
             <SpeedInsights />
+            <Analytics />
           </AuthProvider>
         </ThemeProvider>
       </body>
