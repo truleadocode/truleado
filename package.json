@@ -86,7 +86,7 @@
     "nodemailer": "^8.0.1",
     "postcss": "^8.5.6",
     "react-grab": "^0.1.28",
-    "supabase": "^1.150.0",
+    "supabase": "^2.78.1",
     "tailwindcss": "^3.4.19",
     "typescript": "5.9.3"
   }
