@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   Users,
   Briefcase,
@@ -8,7 +8,6 @@ import {
   FileCheck,
   TrendingUp,
   ArrowRight,
-  Plus,
   Clock,
   AlertCircle,
   Check,
@@ -20,14 +19,14 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Header } from '@/components/layout/header'
 import { useAuth } from '@/contexts/auth-context'
-import { graphqlRequest } from '@/lib/graphql/client'
+import { useDashboardData, type ActivityItem, type AgencyProfile } from '@/hooks/use-dashboard-data'
 
-const stats = [
-  { name: 'Active Clients', value: '0', icon: Users, href: '/dashboard/clients', color: 'text-blue-600 bg-blue-100' },
-  { name: 'Active Projects', value: '0', icon: Briefcase, href: '/dashboard/projects', color: 'text-purple-600 bg-purple-100' },
-  { name: 'Running Campaigns', value: '0', icon: Megaphone, href: '/dashboard/campaigns', color: 'text-green-600 bg-green-100' },
-  { name: 'Pending Approvals', value: '0', icon: FileCheck, href: '/dashboard/approvals', color: 'text-orange-600 bg-orange-100' },
-]
+const statCardDefs = [
+  { key: 'activeClients', name: 'Active Clients', icon: Users, href: '/dashboard/clients', color: 'text-blue-600 bg-blue-100' },
+  { key: 'activeProjects', name: 'Active Projects', icon: Briefcase, href: '/dashboard/projects', color: 'text-purple-600 bg-purple-100' },
+  { key: 'runningCampaigns', name: 'Running Campaigns', icon: Megaphone, href: '/dashboard/campaigns', color: 'text-green-600 bg-green-100' },
+  { key: 'pendingApprovals', name: 'Pending Approvals', icon: FileCheck, href: '/dashboard/approvals', color: 'text-orange-600 bg-orange-100' },
+] as const
 
 const quickActions = [
   { name: 'Add Client', href: '/dashboard/clients/new', icon: Users },
@@ -81,62 +80,108 @@ function saveOnboardingState(agencyId: string, state: OnboardingState) {
   localStorage.setItem(getStorageKey(agencyId), JSON.stringify(state))
 }
 
-const ONBOARDING_CHECK_QUERY = `
-  query OnboardingCheck($agencyId: ID!) {
-    clients(agencyId: $agencyId) { id }
-    agencyProjects(agencyId: $agencyId) { id }
-    allCampaigns(agencyId: $agencyId) { id }
-  }
-`
+function isProfileComplete(profile: AgencyProfile | null): boolean {
+  if (!profile) return true // hide alert until we know — avoids flash-of-alert on load
+  const hasContact = !!profile.primaryEmail && !!profile.phone
+  const hasAddress = !!profile.addressLine1 && !!profile.city && !!profile.country
+  const hasActiveSub =
+    profile.subscriptionStatus === 'active' || profile.subscriptionStatus === 'trial'
+  return hasContact && hasAddress && hasActiveSub
+}
 
-interface OnboardingCheckResult {
-  clients: { id: string }[]
-  agencyProjects: { id: string }[]
-  allCampaigns: { id: string }[]
+const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime()
+  const diffMs = then - Date.now()
+  const abs = Math.abs(diffMs)
+  const minutes = 60_000
+  const hours = 60 * minutes
+  const days = 24 * hours
+  if (abs < hours) return rtf.format(Math.round(diffMs / minutes), 'minute')
+  if (abs < days) return rtf.format(Math.round(diffMs / hours), 'hour')
+  return rtf.format(Math.round(diffMs / days), 'day')
+}
+
+function describeActivity(item: ActivityItem): string {
+  const verb = item.action.replace(/_/g, ' ')
+  const entity = item.entityType.replace(/_/g, ' ')
+  return `${verb} ${entity}`
+}
+
+function RecentActivityList({ items }: { items: ActivityItem[] | null }) {
+  if (items === null) {
+    return (
+      <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
+    )
+  }
+  if (items.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-center">
+        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
+          <Clock className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium">No recent activity</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          Activity will appear here as your team works
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="max-h-[320px] overflow-y-auto divide-y">
+      {items.map((item) => {
+        const actorName =
+          item.actorType === 'system'
+            ? 'System'
+            : item.actor?.name || item.actor?.email || 'Someone'
+        return (
+          <div key={item.id} className="py-3 first:pt-0 last:pb-0 text-sm">
+            <p>
+              <span className="font-medium">{actorName}</span>{' '}
+              <span className="text-muted-foreground">{describeActivity(item)}</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {relativeTime(item.createdAt)}
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 export default function DashboardPage() {
   const { user, currentAgency } = useAuth()
   const [onboarding, setOnboarding] = useState<OnboardingState>({ dismissed: false, completed: [] })
   const [loaded, setLoaded] = useState(false)
-  const syncedRef = useRef(false)
 
   const agencyId = currentAgency?.id
+  const { stats, activity, profile } = useDashboardData(agencyId)
 
-  // Load from cache immediately, then sync with real data in background
+  // Load onboarding state from localStorage
   useEffect(() => {
     if (!agencyId) return
-    const cached = loadOnboardingState(agencyId)
-    setOnboarding(cached)
+    setOnboarding(loadOnboardingState(agencyId))
     setLoaded(true)
-
-    // Skip background sync if already dismissed or already synced this session
-    if (cached.dismissed || syncedRef.current) return
-    syncedRef.current = true
-
-    // Background fetch — non-blocking, fire-and-forget
-    graphqlRequest<OnboardingCheckResult>(ONBOARDING_CHECK_QUERY, { agencyId })
-      .then(data => {
-        const detected: string[] = []
-        if (data.clients?.length > 0) detected.push('add-client')
-        if (data.agencyProjects?.length > 0) detected.push('create-project')
-        if (data.allCampaigns?.length > 0) detected.push('launch-campaign')
-
-        if (detected.length === 0) return
-
-        setOnboarding(prev => {
-          // Merge: keep anything already completed + add newly detected
-          const merged = Array.from(new Set([...prev.completed, ...detected]))
-          if (merged.length === prev.completed.length) return prev // no change
-          const next = { ...prev, completed: merged }
-          saveOnboardingState(agencyId, next)
-          return next
-        })
-      })
-      .catch(() => {
-        // Silent — onboarding check is non-critical
-      })
   }, [agencyId])
+
+  // Mark onboarding steps complete based on live dashboard counts.
+  useEffect(() => {
+    if (!agencyId || !stats) return
+    if (onboarding.dismissed) return
+    const detected: string[] = []
+    if (stats.activeClients > 0) detected.push('add-client')
+    if (stats.activeProjects > 0) detected.push('create-project')
+    if (stats.runningCampaigns > 0) detected.push('launch-campaign')
+    if (detected.length === 0) return
+    setOnboarding(prev => {
+      const merged = Array.from(new Set([...prev.completed, ...detected]))
+      if (merged.length === prev.completed.length) return prev
+      const next = { ...prev, completed: merged }
+      saveOnboardingState(agencyId, next)
+      return next
+    })
+  }, [agencyId, stats, onboarding.dismissed])
 
   const updateOnboarding = useCallback((updater: (prev: OnboardingState) => OnboardingState) => {
     if (!agencyId) return
@@ -280,25 +325,28 @@ export default function DashboardPage() {
 
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => (
-            <Link key={stat.name} href={stat.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">
-                        {stat.name}
-                      </p>
-                      <p className="text-3xl font-bold mt-1">{stat.value}</p>
+          {statCardDefs.map((def) => {
+            const value = stats ? String(stats[def.key]) : '—'
+            return (
+              <Link key={def.key} href={def.href}>
+                <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">
+                          {def.name}
+                        </p>
+                        <p className="text-3xl font-bold mt-1">{value}</p>
+                      </div>
+                      <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${def.color}`}>
+                        <def.icon className="h-6 w-6" />
+                      </div>
                     </div>
-                    <div className={`h-12 w-12 rounded-lg flex items-center justify-center ${stat.color}`}>
-                      <stat.icon className="h-6 w-6" />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
@@ -340,40 +388,34 @@ export default function DashboardPage() {
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-4">
-                  <Clock className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium">No recent activity</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Activity will appear here as your team works
-                </p>
-              </div>
+              <RecentActivityList items={activity} />
             </CardContent>
           </Card>
         </div>
 
         {/* Alerts / Notifications */}
-        <Card className="border-warning/50 bg-warning/5">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-full bg-warning/20 flex items-center justify-center shrink-0">
-                <AlertCircle className="h-5 w-5 text-warning" />
+        {!isProfileComplete(profile) && (
+          <Card className="border-warning/50 bg-warning/5">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-warning/20 flex items-center justify-center shrink-0">
+                  <AlertCircle className="h-5 w-5 text-warning" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Complete your agency profile</p>
+                  <p className="text-sm text-muted-foreground">
+                    Add billing information and invite team members to get the most out of Truleado
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/dashboard/settings">
+                    Complete Setup
+                  </Link>
+                </Button>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium">Complete your agency profile</p>
-                <p className="text-sm text-muted-foreground">
-                  Add billing information and invite team members to get the most out of Truleado
-                </p>
-              </div>
-              <Button variant="outline" size="sm" asChild>
-                <Link href="/dashboard/settings">
-                  Complete Setup
-                </Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </>
   )
