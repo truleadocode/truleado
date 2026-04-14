@@ -1,5 +1,5 @@
 /**
- * Creator portal: generate and send a 6-digit email OTP.
+ * Client portal: generate and send a 6-digit email OTP to a client contact.
  * POST body: { email: string }
  * Always returns { ok: true } for security (never reveals whether email exists).
  */
@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { sendOTPEmail } from '@/lib/novu/workflows/creator';
+import { sendClientOTPEmail } from '@/lib/novu/workflows/client';
 
 export const runtime = 'nodejs';
 
@@ -32,40 +32,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // Check if creator exists with this email and is active
-    const { data: creators, error } = await supabaseAdmin
-      .from('creators')
-      .select('id, agency_id, display_name')
-      .eq('is_active', true)
+    // Look up contact (must be an approver) and its agency via clients
+    const { data: rows, error } = await supabaseAdmin
+      .from('contacts')
+      .select('id, first_name, last_name, clients!inner(agency_id)')
+      .eq('is_client_approver', true)
       .ilike('email', email)
       .limit(1);
 
-    if (error || !creators || creators.length === 0) {
+    if (error || !rows || rows.length === 0) {
       return NextResponse.json({ ok: true });
     }
 
-    const creator = creators[0];
+    const contact = rows[0];
+    const agencyId = (contact.clients as { agency_id: string })?.agency_id;
+    if (!agencyId) {
+      return NextResponse.json({ ok: true });
+    }
 
-    // Rate limit: if a valid OTP was created in the last RATE_LIMIT_SECONDS, skip
+    // Rate limit per (email, purpose)
     const rateLimitCutoff = new Date(Date.now() - RATE_LIMIT_SECONDS * 1000).toISOString();
     const { data: recentOTP } = await supabaseAdmin
       .from('email_otps')
       .select('id')
-      .eq('purpose', 'creator')
+      .eq('purpose', 'client')
       .ilike('email', email)
       .gt('expires_at', new Date().toISOString())
       .gt('created_at', rateLimitCutoff)
       .limit(1);
 
     if (recentOTP && recentOTP.length > 0) {
-      // Already sent recently — return ok silently
       return NextResponse.json({ ok: true });
     }
 
-    // Delete any existing OTPs for this email (creator scope only)
-    await supabaseAdmin.from('email_otps').delete().eq('purpose', 'creator').ilike('email', email);
+    await supabaseAdmin.from('email_otps').delete().eq('purpose', 'client').ilike('email', email);
 
-    // Generate and store new OTP
     const otp = generateOTP();
     const otpHash = hashOTP(otp);
     const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString();
@@ -75,25 +76,29 @@ export async function POST(request: NextRequest) {
       otp_hash: otpHash,
       expires_at: expiresAt,
       attempt_count: 0,
-      purpose: 'creator',
+      purpose: 'client',
     });
 
     if (insertError) {
-      console.error('send-otp: failed to insert OTP:', insertError);
+      console.error('client send-otp: failed to insert OTP:', insertError);
       return NextResponse.json({ ok: true });
     }
 
-    // Send OTP email via Novu
-    await sendOTPEmail({
-      agencyId: creator.agency_id,
-      creatorEmail: email,
-      creatorName: creator.display_name ?? 'Creator',
+    const contactName = [contact.first_name, contact.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || 'Client';
+
+    await sendClientOTPEmail({
+      agencyId,
+      contactEmail: email,
+      contactName,
       otp,
     });
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error('api/auth/send-otp:', e);
+    console.error('api/client-auth/send-otp:', e);
     return NextResponse.json({ ok: true });
   }
 }

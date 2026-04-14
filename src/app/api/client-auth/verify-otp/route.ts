@@ -1,11 +1,11 @@
 /**
- * Creator portal: verify a 6-digit email OTP, link the creator in the DB,
+ * Client portal: verify a 6-digit email OTP, link the contact in the DB,
  * and return a Firebase custom token.
  *
  * POST body: { email: string, otp: string }
  * Returns: { ok: true, customToken: string } or { ok: false, error: string }
  *
- * All DB linking (user, auth_identity, creator) is done here server-side so
+ * All DB linking (user, auth_identity, contact) is done here server-side so
  * the client only needs signInWithCustomToken() — no further GraphQL calls required.
  */
 
@@ -17,7 +17,7 @@ import { adminAuth } from '@/lib/firebase/admin';
 export const runtime = 'nodejs';
 
 const MAX_ATTEMPTS = 5;
-const PROVIDER_CREATOR_LINK = 'firebase_creator_link';
+const PROVIDER_CLIENT_LINK = 'firebase_email_link';
 
 function hashOTP(otp: string): string {
   return crypto.createHash('sha256').update(otp).digest('hex');
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const { data: otpRows, error: fetchError } = await supabaseAdmin
       .from('email_otps')
       .select('id, otp_hash, expires_at, attempt_count')
-      .eq('purpose', 'creator')
+      .eq('purpose', 'client')
       .ilike('email', email)
       .gt('expires_at', new Date().toISOString())
       .order('created_at', { ascending: false })
@@ -78,22 +78,22 @@ export async function POST(request: NextRequest) {
     // OTP is valid — delete it (single-use)
     await supabaseAdmin.from('email_otps').delete().eq('id', record.id);
 
-    // --- Step 2: Find creator record ---
-    const { data: creators } = await supabaseAdmin
-      .from('creators')
-      .select('id, agency_id, display_name, email, user_id')
-      .eq('is_active', true)
+    // --- Step 2: Find contact record ---
+    const { data: contacts } = await supabaseAdmin
+      .from('contacts')
+      .select('id, email, first_name, last_name, user_id, clients!inner(agency_id)')
+      .eq('is_client_approver', true)
       .ilike('email', email)
       .limit(1);
 
-    if (!creators || creators.length === 0) {
+    if (!contacts || contacts.length === 0) {
       return NextResponse.json(
-        { ok: false, error: 'No creator account found for this email.' },
+        { ok: false, error: 'No client account found for this email.' },
         { status: 403 }
       );
     }
 
-    const creator = creators[0];
+    const contact = contacts[0];
 
     // --- Step 3: Find or create Firebase user ---
     let firebaseUid: string;
@@ -108,64 +108,86 @@ export async function POST(request: NextRequest) {
     // --- Step 4: Find or create DB user and link auth_identity ---
     let userId: string;
 
-    // Check if auth_identity already exists for this Firebase UID
+    // Check if auth_identity already exists for this Firebase UID + client provider
     const { data: existingIdentity } = await supabaseAdmin
       .from('auth_identities')
       .select('user_id')
       .eq('provider_uid', firebaseUid)
+      .eq('provider', PROVIDER_CLIENT_LINK)
       .maybeSingle();
 
     if (existingIdentity?.user_id) {
-      // Auth identity exists — use that user
       userId = existingIdentity.user_id;
-    } else if (creator.user_id) {
-      // Creator already linked to a user — create auth_identity for this Firebase UID
-      userId = creator.user_id;
+    } else if (contact.user_id) {
+      // Contact already linked to a user — add client auth_identity for this Firebase UID
+      userId = contact.user_id;
       await supabaseAdmin.from('auth_identities').insert({
         user_id: userId,
-        provider: PROVIDER_CREATOR_LINK,
+        provider: PROVIDER_CLIENT_LINK,
         provider_uid: firebaseUid,
-        email: creator.email ?? email,
+        email: contact.email ?? email,
         email_verified: true,
       });
     } else {
-      // Completely new user — create user record and auth_identity
-      const fullName = (creator.display_name ?? email.split('@')[0] ?? 'Creator').slice(0, 255);
+      // Check if a user already exists for this Firebase UID via another provider (e.g. agency)
+      const { data: anyIdentity } = await supabaseAdmin
+        .from('auth_identities')
+        .select('user_id')
+        .eq('provider_uid', firebaseUid)
+        .maybeSingle();
 
-      const { data: newUser, error: userError } = await supabaseAdmin
-        .from('users')
-        .insert({ email: creator.email ?? email, full_name: fullName, is_active: true })
-        .select('id')
-        .single();
+      if (anyIdentity?.user_id) {
+        userId = anyIdentity.user_id;
+        await supabaseAdmin.from('auth_identities').insert({
+          user_id: userId,
+          provider: PROVIDER_CLIENT_LINK,
+          provider_uid: firebaseUid,
+          email: contact.email ?? email,
+          email_verified: true,
+        });
+      } else {
+        // Completely new user — create user record and auth_identity
+        const fullName = [contact.first_name, contact.last_name]
+          .filter(Boolean)
+          .join(' ')
+          .trim()
+          .slice(0, 255) || email.split('@')[0] || 'Client';
 
-      if (userError || !newUser) {
-        console.error('verify-otp: failed to create user:', userError);
-        return NextResponse.json({ ok: false, error: 'Failed to create user account.' }, { status: 500 });
-      }
+        const { data: newUser, error: userError } = await supabaseAdmin
+          .from('users')
+          .insert({ email: contact.email ?? email, full_name: fullName, is_active: true })
+          .select('id')
+          .single();
 
-      userId = newUser.id;
+        if (userError || !newUser) {
+          console.error('client verify-otp: failed to create user:', userError);
+          return NextResponse.json({ ok: false, error: 'Failed to create user account.' }, { status: 500 });
+        }
 
-      const { error: identityError } = await supabaseAdmin.from('auth_identities').insert({
-        user_id: userId,
-        provider: PROVIDER_CREATOR_LINK,
-        provider_uid: firebaseUid,
-        email: creator.email ?? email,
-        email_verified: true,
-      });
+        userId = newUser.id;
 
-      if (identityError) {
-        console.error('verify-otp: failed to create auth_identity:', identityError);
-        await supabaseAdmin.from('users').delete().eq('id', userId);
-        return NextResponse.json({ ok: false, error: 'Failed to link identity.' }, { status: 500 });
+        const { error: identityError } = await supabaseAdmin.from('auth_identities').insert({
+          user_id: userId,
+          provider: PROVIDER_CLIENT_LINK,
+          provider_uid: firebaseUid,
+          email: contact.email ?? email,
+          email_verified: true,
+        });
+
+        if (identityError) {
+          console.error('client verify-otp: failed to create auth_identity:', identityError);
+          await supabaseAdmin.from('users').delete().eq('id', userId);
+          return NextResponse.json({ ok: false, error: 'Failed to link identity.' }, { status: 500 });
+        }
       }
     }
 
-    // --- Step 5: Ensure creator.user_id is set ---
-    if (!creator.user_id || creator.user_id !== userId) {
+    // --- Step 5: Ensure contact.user_id is set ---
+    if (!contact.user_id || contact.user_id !== userId) {
       await supabaseAdmin
-        .from('creators')
+        .from('contacts')
         .update({ user_id: userId, updated_at: new Date().toISOString() })
-        .eq('id', creator.id);
+        .eq('id', contact.id);
     }
 
     // --- Step 6: Generate Firebase custom token ---
@@ -173,7 +195,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, customToken });
   } catch (e) {
-    console.error('api/auth/verify-otp:', e);
+    console.error('api/client-auth/verify-otp:', e);
     return NextResponse.json({ ok: false, error: 'Verification failed. Please try again.' }, { status: 500 });
   }
 }

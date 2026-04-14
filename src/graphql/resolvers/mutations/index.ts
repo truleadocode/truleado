@@ -4,7 +4,7 @@
  * Combines all mutation resolvers.
  */
 
-import { createUser, ensureClientUser, ensureCreatorUser } from './user';
+import { createUser, ensureCreatorUser } from './user';
 import { createAgency, joinAgencyByCode, createClient, updateClient, archiveClient, createClientNote, updateClientNote, deleteClientNote, setAgencyUserRole, updateAgencyLocale, updateAgencyProfile } from './agency';
 import { inviteTeamMembers, revokeInvitation, acceptInvitation } from './invitation';
 import { createContact, updateContact, deleteContact } from './contact';
@@ -119,7 +119,6 @@ import { seedDummyData, deleteDummyData } from './onboarding';
 export const mutationResolvers = {
   // Identity (signup)
   createUser,
-  ensureClientUser,
   ensureCreatorUser,
   // Agency & Client
   createAgency,

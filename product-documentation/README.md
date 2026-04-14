@@ -62,7 +62,7 @@ Campaign Permission
 - [x] **Agency & user onboarding**: choose-agency, create-agency, join-agency by code; access guard (redirect to /choose-agency if no agency); createUser mutation (signup → DB user + auth_identities)
 - [x] Client management
 - [x] **Phase 3 — Client & Contacts**: contacts table, Client page Contacts tab (list/add/edit/delete, toggle approver), Global Contacts page, GraphQL Contact type and mutations; client approvers from contacts with `is_client_approver`. Contact CRUD uses `mutations.createContact` / `updateContact` / `deleteContact` (not queries). Phone fields include `phone` (primary), `mobile`, `officePhone`, `homePhone`.
-- [x] **Client login portal**: Magic-link sign-in at `/client/login`; verify at `/client/verify`; dashboard placeholder at `/client`. `ensureClientUser` mutation; `User.contact`; auth redirect for contact-only users → `/client`. Dev-only `POST /api/client-auth/dev-magic-link` to display sign-in link when SMTP not configured.
+- [x] **Client login portal**: OTP sign-in at `/client/login` (6-digit code via Novu workflow `client-otp`); dashboard placeholder at `/client`. API routes `POST /api/client-auth/send-otp` and `POST /api/client-auth/verify-otp` (verify returns a Firebase custom token; server links `users` + `auth_identities` (provider `firebase_email_link`) + `contacts.user_id`). `User.contact` resolver; auth redirect for contact-only users → `/client`.
 - [x] Project management
 - [x] Campaign engine with state machine
 - [x] Deliverables & approvals (incl. caption audit, preview, hashtag badges, **delete deliverable version** when PENDING/REJECTED)
@@ -216,14 +216,14 @@ When adding new features:
 - **Client portal UI**: Contacts tab on client detail (list/add/edit/delete); Global Contacts page at `/dashboard/contacts` with filters
 - **Bug fix**: Corrected contact CRUD to use mutations instead of queries
 
-#### <New Feature> Client Login Portal (Magic Link)
-- **Routes**: `/client` (dashboard), `/client/login`, `/client/verify` with layout at `src/app/client/layout.tsx`
-- **Authentication**: Firebase Email Link auth with helpers in `src/lib/firebase/client.ts`
+#### <New Feature> Client Login Portal (Email OTP)
+- **Routes**: `/client` (dashboard), `/client/login` (two-step: email → 6-digit code) with layout at `src/app/client/layout.tsx`
+- **Authentication**: Email OTP via `email_otps` table (shared with creator portal; scoped by `purpose='client'`); Firebase custom-token sign-in on verify
 - **APIs**:
-  - `POST /api/client-auth/request-magic-link` (validates contact `is_client_approver`)
-  - `POST /api/client-auth/dev-magic-link` (dev-only, localhost only, returns sign-in link for testing)
-- **GraphQL**: `ensureClientUser` mutation (creates user + `auth_identities` provider `firebase_email_link`), `User.contact` query
-- **Redirect logic**: If no agency and contact exists → `/client`; handles "email already in use" with sign-in option
+  - `POST /api/client-auth/send-otp` (validates contact `is_client_approver`; sends code via Novu workflow `client-otp`)
+  - `POST /api/client-auth/verify-otp` (verifies OTP, creates/links `users` + `auth_identities` provider `firebase_email_link` + `contacts.user_id`, returns Firebase custom token)
+- **GraphQL**: `User.contact` resolver (no portal-specific mutation — linking done server-side in `verify-otp`)
+- **Redirect logic**: If no agency and contact exists → `/client`
 
 #### <New Feature> Deliverable Version Management
 - **Delete capability**: `deleteDeliverableVersion(deliverableVersionId)` mutation with UI button when status PENDING/REJECTED
@@ -240,7 +240,7 @@ When adding new features:
 - Initial documentation created from canonical source documents
 - Established MVP scope and implementation priorities
 - **ai-doc.md**: Session context, implemented features tracking, agent handoff format
-- **GraphQL API Contract**: User.contact, ensureClientUser, deleteDeliverableVersion
+- **GraphQL API Contract**: User.contact, deleteDeliverableVersion
 - **Technical LLD**: §4.5 Client Portal design
 - **Database Schema**: auth_identities `firebase_email_link` provider
 

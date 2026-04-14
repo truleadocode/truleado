@@ -1576,9 +1576,6 @@ export const typeDefs = gql`
     # Create user in DB and link to Firebase UID (signup flow)
     createUser(input: CreateUserInput!): User!
     
-    # Client portal: create user from magic-link auth and link to contact. Idempotent.
-    ensureClientUser: User!
-
     # Creator portal: create user from magic-link auth and link to creator. Idempotent.
     ensureCreatorUser: User!
 

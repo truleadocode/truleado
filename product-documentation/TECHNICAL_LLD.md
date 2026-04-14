@@ -189,30 +189,29 @@ Creators can have agency-defined pricing that is independent of campaign assignm
 - Active agency context selected at login (or via header `X-Agency-ID`).
 - Every API call must include `agency_id` where applicable.
 
-### 4.5 Client Portal & Magic-Link Auth
+### 4.5 Client Portal & Email OTP Auth
 
-**Purpose**: Client approvers (contacts with `is_client_approver`) access a **separate client portal** at `/client` — read-only deliverables, approve/reject, simple UI. They are **not** expected to be agency users; they sign in via **magic link** (Firebase Email Link) only.
+**Purpose**: Client approvers (contacts with `is_client_approver`) access a **separate client portal** at `/client` — read-only deliverables, approve/reject, simple UI. They are **not** expected to be agency users; they sign in via a **6-digit email OTP** (same pattern as the creator portal, see §4.6).
 
 **Flow**:
 
-1. **Request link** (`/client/login`): User enters email. Frontend calls `POST /api/client-auth/request-magic-link` (validates email belongs to a contact with `is_client_approver`). Server generates the Firebase email-link (Admin SDK) and sends via **Novu**. Email is stored in `localStorage` for the verify step.
-2. **Verify** (`/client/verify`): User opens the link (same browser). Frontend checks `isSignInWithEmailLink`, completes `signInWithEmailLink`, then calls `ensureClientUser` (GraphQL). Backend creates `users` + `auth_identities` (provider `firebase_email_link`) and links the contact via `contacts.user_id`; idempotent if already done. Redirect to `/client`.
+1. **Request code** (`/client/login`): User enters email. Frontend calls `POST /api/client-auth/send-otp` (validates email belongs to a contact with `is_client_approver`). Server generates a 6-digit OTP, stores a SHA256 hash in `email_otps` with `purpose='client'` and a 10-minute expiry, and sends the code via Novu workflow `client-otp`. Always returns `{ ok: true }` (never leaks whether email exists).
+2. **Verify code** (same page, step 2): User enters the 6 digits. Frontend calls `POST /api/client-auth/verify-otp`. Server validates the OTP (max 5 attempts), finds-or-creates the Firebase user, creates `users` + `auth_identities` (provider `firebase_email_link`) and links the contact via `contacts.user_id`, then returns a Firebase **custom token**. Frontend calls `signInWithCustomToken` and the auth context redirects to `/client`.
 3. **Client dashboard** (`/client`): Placeholder today; will show deliverables for approval, campaigns/projects for their company.
 
-**Auth context**: `GetMe` fetches `me { ... contact { id } }`. `User.contact` is set when the user was created via `ensureClientUser`. Redirect logic uses `contact`: if `user` has no agencies but has `contact`, redirect to `/client` (login, root, onboarding, `ProtectedRoute`).
+**Auth context**: `GetMe` fetches `me { ... contact { id } }`. `User.contact` is set when the user was linked via the client OTP flow. Redirect logic uses `contact`: if `user` has no agencies but has `contact`, redirect to `/client` (login, root, onboarding, `ProtectedRoute`).
 
 **API routes**:
 
-- `POST /api/client-auth/request-magic-link`: Body `{ email, origin }`. Ensures a `contacts` row exists with that email (case-insensitive) and `is_client_approver = true`; generates a Firebase email-link server-side and sends it via Novu. Returns `200 { ok: true }` or `404`.
-- `POST /api/client-auth/dev-magic-link`: **Dev-only** (`NODE_ENV === 'development'`). Body `{ email, origin }`. Same contact check. Uses Firebase Admin `generateSignInWithEmailLink` to return `{ link }` so the app can display the link for copying when SMTP is not configured.
+- `POST /api/client-auth/send-otp`: Body `{ email }`. Ensures a `contacts` row exists with that email (case-insensitive) and `is_client_approver = true`; rate-limited to one code per 60 seconds per (email, `client`). Always returns `{ ok: true }`.
+- `POST /api/client-auth/verify-otp`: Body `{ email, otp }`. Verifies OTP (max 5 attempts), links user records, returns `{ ok: true, customToken }` on success.
 
-**Delivery mode (env)**:
-- `NEXT_PUBLIC_CLIENT_MAGIC_LINK_MODE`: `novu` (always send via Novu), `dev` (always return link), `auto` (default: dev on localhost/127.0.0.1; Novu elsewhere).
-- `NOVU_CLIENT_MAGIC_LINK_WORKFLOW_ID`: Novu workflow identifier for the email (e.g. `client-magic-link`).
+**Env**:
+- `NOVU_CLIENT_OTP_WORKFLOW_ID` (optional): Novu workflow identifier for the OTP email (defaults to `client-otp`). Variables: `{ otp, expiresInMinutes }`.
 
-**Firebase**: Enable **Email link (passwordless sign-in)** under Authentication → Sign-in method → Email/Password. Add `localhost` to **Authorized domains** (Authentication → Settings) for local testing.
+**OTP table (shared)**: `email_otps` stores codes for both portals; `purpose` column (`'creator'` | `'client'`) scopes lookups/rate-limits so pending OTPs for the same email across portals don't clobber each other.
 
-**"Email already in use"**: If the magic-link email already has a Firebase account (e.g. agency sign-in with password), `signInWithEmailLink` throws. The verify page detects this and shows "Use agency sign-in" with a link to `/login`; user signs in with password instead.
+**Same-email collision**: If the email already has a Firebase user (e.g. agency sign-in with password), the custom token flow reuses that Firebase UID and adds a new `auth_identities` row with provider `firebase_email_link` — the same person can be both an agency user and a client-portal user.
 
 ---
 
