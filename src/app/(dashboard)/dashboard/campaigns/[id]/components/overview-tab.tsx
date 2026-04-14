@@ -1,21 +1,28 @@
 "use client"
 
-import { useMemo, useState } from 'react'
-import { Users, Package, CheckCircle, Eye, TrendingUp, AlertTriangle, Clock } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Users, Package, CheckCircle, Eye, TrendingUp, AlertTriangle, Clock, Pencil } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Separator } from '@/components/ui/separator'
 import { RichTextContent } from '@/components/ui/rich-text-editor'
 import { StatsCard } from '@/components/ui/stats-card'
 import { cn } from '@/lib/utils'
-import { formatCurrency } from '@/lib/currency'
-import type { Campaign, ActivityLog } from '../types'
+import { graphqlRequest, queries } from '@/lib/graphql/client'
+import { useAuth } from '@/contexts/auth-context'
+import { EditKpiTargetsDialog } from '@/components/campaigns/edit-kpi-targets-dialog'
+import type { KpiTargetsValues } from '@/components/campaigns/kpi-targets-form'
+import type { Campaign } from '../types'
 
 interface OverviewTabProps {
   campaign: Campaign
   onTabChange: (tab: string) => void
+  onCampaignUpdated?: () => void
+}
+
+interface CampaignAnalyticsDashboard {
+  totalViews: number | null
+  avgEngagementRate: number | null
 }
 
 function formatNumber(n: number) {
@@ -43,7 +50,36 @@ function getInitials(name: string | null | undefined) {
   return name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function KPIBar({ label, current, target, unit }: { label: string; current: number; target: number; unit?: string }) {
+function formatMetric(value: number, unit?: string) {
+  if (unit === '%') return `${value.toFixed(1)}${unit}`
+  return `${formatNumber(value)}${unit ?? ''}`
+}
+
+function KPIBar({
+  label,
+  current,
+  target,
+  unit,
+}: {
+  label: string
+  current: number | null
+  target: number
+  unit?: string
+}) {
+  if (current === null) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">{label}</span>
+          <span className="font-medium">
+            — / {formatMetric(target, unit)}
+            <span className="ml-2 text-muted-foreground">Not tracked yet</span>
+          </span>
+        </div>
+        <div className="w-full bg-muted rounded-full h-2" />
+      </div>
+    )
+  }
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0
   const hit = pct >= 100
   return (
@@ -51,7 +87,7 @@ function KPIBar({ label, current, target, unit }: { label: string; current: numb
       <div className="flex items-center justify-between text-xs">
         <span className="text-muted-foreground">{label}</span>
         <span className="font-medium">
-          {formatNumber(current)}{unit} / {formatNumber(target)}{unit}
+          {formatMetric(current, unit)} / {formatMetric(target, unit)}
           <span className={cn('ml-2', hit ? 'text-green-600' : pct >= 60 ? 'text-yellow-600' : 'text-muted-foreground')}>
             {hit ? '✅ Hit' : `${pct}%`}
           </span>
@@ -67,8 +103,46 @@ function KPIBar({ label, current, target, unit }: { label: string; current: numb
   )
 }
 
-export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
+export function OverviewTab({ campaign, onTabChange, onCampaignUpdated }: OverviewTabProps) {
   const [briefExpanded, setBriefExpanded] = useState(false)
+  const { currentAgency } = useAuth()
+  const role = currentAgency?.role?.toLowerCase()
+  const canEditTargets = role === 'agency_admin' || role === 'account_manager'
+
+  const [editOpen, setEditOpen] = useState(false)
+  const [analytics, setAnalytics] = useState<CampaignAnalyticsDashboard | null>(null)
+
+  const hasAnyTarget = Boolean(
+    campaign.targetReach ||
+      campaign.targetImpressions ||
+      campaign.targetEngagementRate ||
+      campaign.targetViews ||
+      campaign.targetConversions ||
+      campaign.targetSales
+  )
+
+  // Fetch analytics only when at least one target is set — otherwise the bars
+  // don't need currents.
+  useEffect(() => {
+    if (!hasAnyTarget) {
+      setAnalytics(null)
+      return
+    }
+    let cancelled = false
+    graphqlRequest<{ campaignAnalyticsDashboard: CampaignAnalyticsDashboard | null }>(
+      queries.campaignAnalyticsDashboard,
+      { campaignId: campaign.id }
+    )
+      .then((data) => {
+        if (!cancelled) setAnalytics(data.campaignAnalyticsDashboard ?? null)
+      })
+      .catch(() => {
+        if (!cancelled) setAnalytics(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [campaign.id, hasAnyTarget])
 
   // Stats
   const stats = useMemo(() => {
@@ -120,17 +194,30 @@ export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
     return items
   }, [campaign])
 
-  // KPI targets
+  // KPI targets — views + engagement rate have real sources today; the rest
+  // render with current=null (Not tracked yet) until pixel/reach pipelines land.
   const kpiTargets = useMemo(() => {
-    const items: { label: string; current: number; target: number; unit?: string }[] = []
-    if (campaign.targetReach) items.push({ label: 'Reach', current: 0, target: campaign.targetReach })
-    if (campaign.targetImpressions) items.push({ label: 'Impressions', current: 0, target: campaign.targetImpressions })
-    if (campaign.targetEngagementRate) items.push({ label: 'Engagement Rate', current: 0, target: campaign.targetEngagementRate, unit: '%' })
-    if (campaign.targetViews) items.push({ label: 'Views', current: 0, target: campaign.targetViews })
-    if (campaign.targetConversions) items.push({ label: 'Conversions', current: 0, target: campaign.targetConversions })
-    if (campaign.targetSales) items.push({ label: 'Sales', current: 0, target: campaign.targetSales })
+    const items: { label: string; current: number | null; target: number; unit?: string }[] = []
+    if (campaign.targetReach) items.push({ label: 'Reach', current: null, target: campaign.targetReach })
+    if (campaign.targetImpressions) items.push({ label: 'Impressions', current: null, target: campaign.targetImpressions })
+    if (campaign.targetEngagementRate) items.push({ label: 'Engagement Rate', current: analytics?.avgEngagementRate ?? null, target: campaign.targetEngagementRate, unit: '%' })
+    if (campaign.targetViews) items.push({ label: 'Views', current: analytics?.totalViews ?? null, target: campaign.targetViews })
+    if (campaign.targetConversions) items.push({ label: 'Conversions', current: null, target: campaign.targetConversions })
+    if (campaign.targetSales) items.push({ label: 'Sales', current: null, target: campaign.targetSales })
     return items
-  }, [campaign])
+  }, [campaign, analytics])
+
+  const kpiInitialValues: KpiTargetsValues = useMemo(
+    () => ({
+      targetReach: campaign.targetReach ?? null,
+      targetImpressions: campaign.targetImpressions ?? null,
+      targetEngagementRate: campaign.targetEngagementRate ?? null,
+      targetViews: campaign.targetViews ?? null,
+      targetConversions: campaign.targetConversions ?? null,
+      targetSales: campaign.targetSales ?? null,
+    }),
+    [campaign]
+  )
 
   // Activity
   const activities = (campaign.activityLogs || []).slice(0, 10)
@@ -151,16 +238,49 @@ export function OverviewTab({ campaign, onTabChange }: OverviewTabProps) {
       </div>
 
       {/* KPI Targets */}
-      {kpiTargets.length > 0 && (
+      {kpiTargets.length > 0 ? (
         <Card>
           <CardContent className="p-4 space-y-3">
-            <h3 className="text-sm font-semibold">KPI Targets</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">KPI Targets</h3>
+              {canEditTargets && (
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditOpen(true)}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" />
+                  Edit targets
+                </Button>
+              )}
+            </div>
             {kpiTargets.map((kpi) => (
               <KPIBar key={kpi.label} {...kpi} />
             ))}
           </CardContent>
         </Card>
+      ) : (
+        canEditTargets && (
+          <Card className="border-dashed">
+            <CardContent className="p-4 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold">KPI Targets</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Set target metrics to track campaign progress against goals.
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Set targets
+              </Button>
+            </CardContent>
+          </Card>
+        )
       )}
+
+      <EditKpiTargetsDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        campaignId={campaign.id}
+        initialValues={kpiInitialValues}
+        onSaved={() => onCampaignUpdated?.()}
+      />
 
       {/* Deadline Alerts */}
       {alerts.length > 0 && (

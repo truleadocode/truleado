@@ -254,7 +254,11 @@ export default function CampaignDetailPage() {
             />
 
             {activeTab === 'overview' && (
-              <OverviewTab campaign={campaign} onTabChange={setActiveTab} />
+              <OverviewTab
+                campaign={campaign}
+                onTabChange={setActiveTab}
+                onCampaignUpdated={refetch}
+              />
             )}
 
             {activeTab === 'details' && (

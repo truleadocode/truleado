@@ -14,7 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import type { CampaignFormState, CampaignFormInfluencer } from './types'
+import { KpiTargetsForm } from '@/components/campaigns/kpi-targets-form'
+import type { CampaignFormState } from './types'
 
 interface Step4KPIsProps {
   form: CampaignFormState
@@ -26,39 +27,6 @@ function SectionHeader({ icon: Icon, title }: { icon: React.ElementType; title: 
     <div className="flex items-center gap-2">
       <Icon className="h-4 w-4 text-muted-foreground" />
       <h3 className="text-sm font-semibold">{title}</h3>
-    </div>
-  )
-}
-
-function KPIField({
-  label,
-  suffix,
-  value,
-  onChange,
-}: {
-  label: string
-  suffix?: string
-  value: number | null
-  onChange: (v: number | null) => void
-}) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs">{label}</Label>
-      <div className="relative">
-        <Input
-          type="number"
-          min="0"
-          step={suffix === '%' ? '0.1' : '1'}
-          placeholder="—"
-          value={value ?? ''}
-          onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        />
-        {suffix && (
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-            {suffix}
-          </span>
-        )}
-      </div>
     </div>
   )
 }
@@ -103,14 +71,18 @@ export function Step4KPIs({ form, update }: Step4KPIsProps) {
       {/* KPI Targets */}
       <SectionHeader icon={Target} title="KPI Targets" />
       <p className="text-xs text-muted-foreground">Set target metrics for this campaign. Leave blank if not applicable.</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <KPIField label="Target Reach" value={form.targetReach} onChange={(v) => update('targetReach', v)} />
-        <KPIField label="Target Impressions" value={form.targetImpressions} onChange={(v) => update('targetImpressions', v)} />
-        <KPIField label="Engagement Rate" suffix="%" value={form.targetEngagementRate} onChange={(v) => update('targetEngagementRate', v)} />
-        <KPIField label="Target Views" value={form.targetViews} onChange={(v) => update('targetViews', v)} />
-        <KPIField label="Target Conversions" value={form.targetConversions} onChange={(v) => update('targetConversions', v)} />
-        <KPIField label="Target Sales" value={form.targetSales} onChange={(v) => update('targetSales', v)} />
-      </div>
+      <KpiTargetsForm
+        values={{
+          targetReach: form.targetReach,
+          targetImpressions: form.targetImpressions,
+          targetEngagementRate: form.targetEngagementRate,
+          targetViews: form.targetViews,
+          targetConversions: form.targetConversions,
+          targetSales: form.targetSales,
+        }}
+        onChange={(key, value) => update(key, value)}
+      />
+
 
       <Separator />
 
