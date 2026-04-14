@@ -26,7 +26,7 @@ export interface AuthenticatedUser {
 }
 
 /**
- * Linked contact (client portal user) - set when user was created via ensureClientUser
+ * Linked contact (client portal user) - set when user was linked via client OTP sign-in
  */
 export interface ContextContact {
   id: string;

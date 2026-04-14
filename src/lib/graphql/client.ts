@@ -1972,17 +1972,6 @@ export const mutations = {
     }
   `,
 
-  ensureClientUser: `
-    mutation EnsureClientUser {
-      ensureClientUser {
-        id
-        email
-        name
-        contact { id }
-      }
-    }
-  `,
-
   ensureCreatorUser: `
     mutation EnsureCreatorUser {
       ensureCreatorUser {
