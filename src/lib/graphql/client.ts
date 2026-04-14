@@ -128,6 +128,47 @@ export const fragments = {
  * Pre-built queries
  */
 export const queries = {
+  dashboardStats: `
+    query DashboardStats($agencyId: ID!) {
+      dashboardStats(agencyId: $agencyId) {
+        activeClients
+        activeProjects
+        runningCampaigns
+        pendingApprovals
+      }
+    }
+  `,
+  recentActivity: `
+    query RecentActivity($agencyId: ID!, $limit: Int) {
+      recentActivity(agencyId: $agencyId, limit: $limit) {
+        id
+        entityType
+        entityId
+        action
+        actorType
+        metadata
+        createdAt
+        actor {
+          id
+          name
+          email
+        }
+      }
+    }
+  `,
+  agencyProfileCompleteness: `
+    query AgencyProfileCompleteness($id: ID!) {
+      agency(id: $id) {
+        id
+        primaryEmail
+        phone
+        addressLine1
+        city
+        country
+        subscriptionStatus
+      }
+    }
+  `,
   clients: `
     query GetClients($agencyId: ID!) {
       clients(agencyId: $agencyId) {

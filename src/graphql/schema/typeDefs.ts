@@ -764,6 +764,14 @@ export const typeDefs = gql`
     createdAt: DateTime!
   }
 
+  # Dashboard aggregate counts (agency-scoped)
+  type DashboardStats {
+    activeClients: Int!
+    activeProjects: Int!
+    runningCampaigns: Int!
+    pendingApprovals: Int!
+  }
+
   # Activity Logs (Immutable)
   type ActivityLog {
     id: ID!
@@ -1392,6 +1400,10 @@ export const typeDefs = gql`
     campaigns(projectId: ID!): [Campaign!]!
     allCampaigns(agencyId: ID!): [Campaign!]!
     agencyProjects(agencyId: ID!): [Project!]!
+
+    # Dashboard aggregate counts + recent activity (agency-scoped)
+    dashboardStats(agencyId: ID!): DashboardStats!
+    recentActivity(agencyId: ID!, limit: Int): [ActivityLog!]!
     deliverables(campaignId: ID!): [Deliverable!]!
     creators(agencyId: ID!, includeInactive: Boolean): [Creator!]!
     

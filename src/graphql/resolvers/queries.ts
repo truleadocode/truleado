@@ -1820,6 +1820,107 @@ export const queryResolvers = {
   },
 
   // -----------------------------------------------
+  // Dashboard aggregates
+  // -----------------------------------------------
+
+  dashboardStats: async (
+    _: unknown,
+    { agencyId }: { agencyId: string },
+    ctx: GraphQLContext
+  ) => {
+    const user = requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    // projects/campaigns are agency-scoped via clients.agency_id (no direct FK),
+    // so we use the same !inner join pattern as allCampaigns / agencyProjects
+    // and count client-side after applying operator scoping.
+    const role = getAgencyRole(user, agencyId);
+    const assignedProjectIdsPromise: Promise<Set<string> | null> =
+      role === AgencyRole.OPERATOR
+        ? supabaseAdmin
+            .from('project_users')
+            .select('project_id')
+            .eq('user_id', user.id)
+            .then((r: { data: { project_id: string }[] | null }) =>
+              new Set((r.data ?? []).map((x) => x.project_id))
+            )
+        : Promise.resolve(null);
+
+    const [clientsRes, projectsRes, campaignsRes, assignedProjectIds] = await Promise.all([
+      supabaseAdmin
+        .from('clients')
+        .select('id', { count: 'exact', head: true })
+        .eq('agency_id', agencyId)
+        .eq('is_active', true),
+      supabaseAdmin
+        .from('projects')
+        .select('id, client_id, clients!inner(agency_id)')
+        .eq('clients.agency_id', agencyId)
+        .eq('is_archived', false),
+      supabaseAdmin
+        .from('campaigns')
+        .select('id, status, project_id, projects!inner(clients!inner(agency_id))')
+        .eq('projects.clients.agency_id', agencyId),
+      assignedProjectIdsPromise,
+    ]);
+
+    const projects = (projectsRes.data || []) as Array<{ id: string; client_id: string }>;
+    const campaigns = (campaignsRes.data || []) as Array<{ id: string; status: string; project_id: string }>;
+
+    const visibleProjects = assignedProjectIds
+      ? projects.filter((p) => assignedProjectIds.has(p.id))
+      : projects;
+    const visibleCampaigns = assignedProjectIds
+      ? campaigns.filter((c) => assignedProjectIds.has(c.project_id))
+      : campaigns;
+
+    const activeClients = assignedProjectIds
+      ? new Set(visibleProjects.map((p) => p.client_id)).size
+      : clientsRes.count ?? 0;
+
+    const runningCampaigns = visibleCampaigns.filter(
+      (c) => c.status !== 'archived' && c.status !== 'completed'
+    ).length;
+
+    const campaignIds = visibleCampaigns.map((c) => c.id);
+    let pendingApprovals = 0;
+    if (campaignIds.length > 0) {
+      const { count } = await supabaseAdmin
+        .from('deliverables')
+        .select('id', { count: 'exact', head: true })
+        .in('campaign_id', campaignIds)
+        .in('status', ['internal_review', 'pending_project_approval']);
+      pendingApprovals = count ?? 0;
+    }
+
+    return {
+      activeClients,
+      activeProjects: visibleProjects.length,
+      runningCampaigns,
+      pendingApprovals,
+    };
+  },
+
+  recentActivity: async (
+    _: unknown,
+    { agencyId, limit }: { agencyId: string; limit?: number },
+    ctx: GraphQLContext
+  ) => {
+    requireAuth(ctx);
+    requireAgencyMembership(ctx, agencyId);
+
+    const { data, error } = await supabaseAdmin
+      .from('activity_logs')
+      .select('*')
+      .eq('agency_id', agencyId)
+      .order('created_at', { ascending: false })
+      .limit(limit || 10);
+
+    if (error) throw new Error('Failed to fetch recent activity');
+    return data || [];
+  },
+
+  // -----------------------------------------------
   // Contact Detail Queries
   // -----------------------------------------------
 
