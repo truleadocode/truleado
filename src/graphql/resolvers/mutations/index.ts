@@ -91,8 +91,6 @@ import {
   cancelCreatorAgreement,
 } from './finance';
 import {
-  discoveryUnlock,
-  discoveryExport,
   discoveryImportToCreators,
   saveDiscoverySearch,
   deleteDiscoverySearch,
@@ -239,8 +237,9 @@ export const mutationResolvers = {
   cancelCreatorAgreement,
 
   // Discovery
-  discoveryUnlock,
-  discoveryExport,
+  // NOTE: discoveryUnlock + discoveryExport removed in migration to
+  // Influencers.club (Phase B). discoveryImportToCreators still OnSocial-backed
+  // and will be replaced in Phase G by importCreatorsToAgency.
   discoveryImportToCreators,
   saveDiscoverySearch,
   deleteDiscoverySearch,

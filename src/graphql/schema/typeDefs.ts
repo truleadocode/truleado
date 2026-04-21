@@ -1686,15 +1686,31 @@ export const typeDefs = gql`
     # Creator Discovery Queries
     # ---------------------------------------------
 
-    # Search influencers via OnSocial (FREE — no token cost)
+    # Search creators via Influencers.club.
+    # Priced at ~1 Truleado credit per creator returned (0.01 IC credit).
+    # Results are cached per agency for 1 hour; within-TTL hits return cached
+    # data with cached=true and do NOT charge credits. forceRefresh bypasses.
     discoverySearch(
       agencyId: ID!
       platform: DiscoveryPlatform!
-      filters: JSON!
-      sort: JSON
-      skip: Int
+      filters: JSON
+      page: Int
       limit: Int
-    ): DiscoverySearchResult!
+      forceRefresh: Boolean
+    ): CreatorSearchResult!
+
+    # Find creators similar to a reference creator (URL, username, or IC user_id).
+    # Same pricing + caching semantics as discoverySearch.
+    similarCreators(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      referenceKey: String!
+      referenceValue: String!
+      filters: JSON
+      page: Int
+      limit: Int
+      forceRefresh: Boolean
+    ): CreatorSearchResult!
 
     # Get unlock history for an agency
     discoveryUnlocks(agencyId: ID!, platform: DiscoveryPlatform, limit: Int, offset: Int): [DiscoveryUnlock!]!
@@ -2395,22 +2411,10 @@ export const typeDefs = gql`
     # Creator Discovery Mutations
     # ---------------------------------------------
 
-    # Unlock search results (token-gated, no external API call)
-    discoveryUnlock(
-      agencyId: ID!
-      platform: DiscoveryPlatform!
-      influencers: [DiscoveryUnlockInput!]!
-    ): [DiscoveryUnlock!]!
-
-    # Export search results (token-gated)
-    discoveryExport(
-      agencyId: ID!
-      platform: DiscoveryPlatform!
-      filters: JSON!
-      sort: JSON
-      exportType: DiscoveryExportType!
-      limit: Int
-    ): DiscoveryExport!
+    # discoveryUnlock and discoveryExport removed in migration to Influencers.club.
+    # IC has no "hidden result" concept — discovery already returns visible
+    # (but minimal) profiles. To get full profile data, call enrichCreator
+    # (Phase C). Batch exports are replaced by createEnrichmentBatchJob (Phase D).
 
     # Import influencers to creator database (token-gated)
     discoveryImportToCreators(

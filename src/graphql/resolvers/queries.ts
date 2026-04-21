@@ -33,6 +33,7 @@ import {
 } from './queries/creator-portal';
 import {
   discoverySearch,
+  similarCreators,
   discoveryUnlocks,
   discoveryExports,
   savedSearches,
@@ -1628,6 +1629,7 @@ export const queryResolvers = {
   // Discovery Module Queries
   // -----------------------------------------------
   discoverySearch,
+  similarCreators,
   discoveryUnlocks,
   discoveryExports,
   savedSearches,

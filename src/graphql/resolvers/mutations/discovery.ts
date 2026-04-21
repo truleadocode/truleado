@@ -1,12 +1,14 @@
 /**
- * Discovery Mutation Resolvers
+ * Discovery Mutation Resolvers (transitional).
  *
- * Token deduction follows the established pattern from analytics.ts:
- *   1. Check permission
- *   2. Calculate cost
- *   3. Deduct tokens BEFORE external API call
- *   4. Execute external operation
- *   5. On failure: refund tokens
+ * Phase B removed discoveryUnlock + discoveryExport — neither applies under
+ * Influencers.club (no hidden results; native batch enrichment replaces
+ * export). The remaining resolvers in this file are pending migration:
+ *   - discoveryImportToCreators  → replaced by importCreatorsToAgency (Phase G)
+ *   - saveDiscoverySearch / delete / update  → continue unchanged
+ *
+ * Token deduction pattern still used: deduct BEFORE external call, refund on
+ * failure (see src/graphql/resolvers/mutations/analytics.ts for reference).
  */
 
 import { GraphQLContext } from '../../context';
@@ -14,235 +16,10 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAuth, hasAgencyPermission, Permission } from '@/lib/rbac';
 import { forbiddenError, notFoundError } from '../../errors';
 import { logActivity } from '@/lib/audit';
-import { calculateUnlockCost, calculateExportCost, calculateImportCost } from '@/lib/discovery/pricing';
+import { calculateImportCost } from '@/lib/discovery/pricing';
 import { deductCredits, refundCredits } from '@/lib/discovery/token-deduction';
-import { unhideInfluencers } from '@/lib/onsocial/unhide';
 import { getInfluencerContacts } from '@/lib/onsocial/contacts';
-import { createExport } from '@/lib/onsocial/exports';
-import type { OnSocialPlatform, OnSocialExportType } from '@/lib/onsocial/types';
-
-// =============================================================================
-// UNLOCK
-// =============================================================================
-
-export async function discoveryUnlock(
-  _: unknown,
-  {
-    agencyId,
-    platform,
-    influencers,
-  }: {
-    agencyId: string;
-    platform: string;
-    influencers: Array<{
-      onsocialUserId: string;
-      searchResultId: string;
-      username: string;
-      fullname?: string;
-    }>;
-  },
-  ctx: GraphQLContext
-) {
-  const user = requireAuth(ctx);
-
-  if (!hasAgencyPermission(user, agencyId, Permission.DISCOVERY_UNLOCK)) {
-    throw forbiddenError('You do not have permission to unlock discovery profiles');
-  }
-
-  const platformLower = platform.toLowerCase() as OnSocialPlatform;
-
-  if (influencers.length === 0) {
-    throw new Error('No influencers provided for unlock');
-  }
-
-  // Calculate cost and deduct agency tokens BEFORE calling OnSocial
-  const pricing = await calculateUnlockCost(agencyId, influencers.length, false);
-  const deduction = await deductCredits(agencyId, Math.ceil(pricing.totalInternalCost));
-
-  try {
-    // Call OnSocial unhide API to reveal hidden profiles (uses Truleado's subscription tokens)
-    const searchResultIds = influencers.map((inf) => inf.searchResultId);
-    const unhideResult = await unhideInfluencers(searchResultIds, platformLower);
-
-    // Build a map of revealed profiles by search_result_id for easy lookup
-    const revealedMap = new Map<string, Record<string, unknown>>();
-    for (const a of unhideResult.accounts) {
-      if (a.account.search_result_id) {
-        revealedMap.set(a.account.search_result_id, a.account.user_profile as unknown as Record<string, unknown>);
-      }
-    }
-
-    // Store unlock records with the revealed profile data
-    const unlockRows = influencers.map((inf) => {
-      const revealed = revealedMap.get(inf.searchResultId);
-      return {
-        agency_id: agencyId,
-        platform: platformLower,
-        onsocial_user_id: revealed
-          ? (revealed.user_id as string) || inf.onsocialUserId
-          : inf.onsocialUserId,
-        search_result_id: inf.searchResultId,
-        username: revealed ? (revealed.username as string) || inf.username : inf.username,
-        fullname: revealed ? (revealed.fullname as string) || inf.fullname || null : inf.fullname || null,
-        profile_data: revealed || null,
-        tokens_spent: pricing.totalInternalCost / influencers.length,
-        unlocked_by: user.id,
-      };
-    });
-
-    const { data: unlocks, error: insertError } = await supabaseAdmin
-      .from('discovery_unlocks')
-      .insert(unlockRows)
-      .select();
-
-    if (insertError || !unlocks) {
-      throw new Error('Failed to save unlock records');
-    }
-
-    await logActivity({
-      agencyId,
-      entityType: 'discovery_unlock',
-      entityId: unlocks[0]?.id || agencyId,
-      action: 'unlocked',
-      actorId: user.id,
-      actorType: 'user',
-      metadata: {
-        platform: platformLower,
-        count: influencers.length,
-        tokensSpent: Math.ceil(pricing.totalInternalCost),
-        newBalance: deduction.newBalance,
-      },
-    });
-
-    return unlocks.map((u: Record<string, unknown>) => ({
-      id: u.id,
-      platform: u.platform,
-      onsocialUserId: u.onsocial_user_id,
-      searchResultId: u.search_result_id,
-      username: u.username,
-      fullname: u.fullname,
-      profileData: u.profile_data,
-      tokensSpent: u.tokens_spent,
-      unlockedBy: u.unlocked_by,
-      unlockedAt: u.unlocked_at,
-      expiresAt: u.expires_at,
-    }));
-  } catch (err) {
-    await refundCredits(agencyId, deduction.previousBalance);
-    throw err;
-  }
-}
-
-// =============================================================================
-// EXPORT
-// =============================================================================
-
-export async function discoveryExport(
-  _: unknown,
-  {
-    agencyId,
-    platform,
-    filters,
-    sort,
-    exportType,
-    limit,
-  }: {
-    agencyId: string;
-    platform: string;
-    filters: Record<string, unknown>;
-    sort?: { field: string; direction?: string };
-    exportType: 'SHORT' | 'FULL';
-    limit?: number;
-  },
-  ctx: GraphQLContext
-) {
-  const user = requireAuth(ctx);
-
-  if (!hasAgencyPermission(user, agencyId, Permission.DISCOVERY_EXPORT)) {
-    throw forbiddenError('You do not have permission to export discovery results');
-  }
-
-  const platformLower = platform.toLowerCase() as OnSocialPlatform;
-  const sortObj = sort || { field: 'followers', direction: 'desc' };
-  const exportParams = {
-    platform: platformLower,
-    filters,
-    sort: { field: sortObj.field, direction: sortObj.direction },
-    limit: limit || 1000,
-    exportType: exportType as OnSocialExportType,
-  };
-
-  // Dry run first to estimate cost
-  const dryRunResult = await createExport({ ...exportParams, dryRun: true });
-
-  const totalAccounts = dryRunResult.total || 0;
-  const pricing = await calculateExportCost(agencyId, totalAccounts, exportType);
-
-  // Deduct tokens
-  const deduction = await deductCredits(agencyId, Math.ceil(pricing.totalInternalCost));
-
-  try {
-    // Execute real export
-    const exportResult = await createExport({ ...exportParams, dryRun: false });
-
-    // Insert export record
-    const { data: exportRecord, error: insertError } = await supabaseAdmin
-      .from('discovery_exports')
-      .insert({
-        agency_id: agencyId,
-        platform: platformLower,
-        export_type: exportType,
-        filter_snapshot: filters,
-        total_accounts: totalAccounts,
-        tokens_spent: Math.ceil(pricing.totalInternalCost),
-        onsocial_export_id: exportResult.id || null,
-        status: exportResult.status || 'pending',
-        download_url: exportResult.download_url || null,
-        exported_by: user.id,
-      })
-      .select()
-      .single();
-
-    if (insertError || !exportRecord) {
-      throw new Error('Failed to save export record');
-    }
-
-    // Log activity
-    await logActivity({
-      agencyId,
-      entityType: 'discovery_export',
-      entityId: exportRecord.id,
-      action: 'exported',
-      actorId: user.id,
-      actorType: 'user',
-      metadata: {
-        platform: platformLower,
-        exportType,
-        totalAccounts,
-        tokensSpent: Math.ceil(pricing.totalInternalCost),
-        newBalance: deduction.newBalance,
-      },
-    });
-
-    return {
-      id: exportRecord.id,
-      platform: exportRecord.platform,
-      exportType: exportRecord.export_type,
-      filterSnapshot: exportRecord.filter_snapshot,
-      totalAccounts: exportRecord.total_accounts,
-      tokensSpent: exportRecord.tokens_spent,
-      onsocialExportId: exportRecord.onsocial_export_id,
-      status: (exportRecord.status as string).toUpperCase(),
-      downloadUrl: exportRecord.download_url,
-      exportedBy: exportRecord.exported_by,
-      createdAt: exportRecord.created_at,
-      completedAt: exportRecord.completed_at,
-    };
-  } catch (err) {
-    await refundCredits(agencyId, deduction.previousBalance);
-    throw err;
-  }
-}
+import type { OnSocialPlatform } from '@/lib/onsocial/types';
 
 // =============================================================================
 // IMPORT TO CREATORS
@@ -313,11 +90,15 @@ export async function discoveryImportToCreators(
       const phone = influencer.phone || contact?.phone || null;
       const contactLinks = contact?.contactLinks || influencer.contactLinks || null;
 
-      // Check if creator already exists
+      // Check if creator already exists.
+      // NOTE: creators.onsocial_user_id was renamed to provider_user_id
+      // in migration 00056. We keep this resolver on the 'onsocial' provider
+      // until Phase G replaces it with importCreatorsToAgency.
       const { data: existing } = await supabaseAdmin
         .from('creators')
         .select('*')
-        .eq('onsocial_user_id', influencer.onsocialUserId)
+        .eq('provider_user_id', influencer.onsocialUserId)
+        .eq('provider', 'onsocial')
         .eq('agency_id', agencyId)
         .maybeSingle();
 
@@ -355,12 +136,15 @@ export async function discoveryImportToCreators(
         }
         results.push(updated);
       } else {
-        // Insert new creator
+        // Insert new creator. provider='onsocial' + provider_user_id pair
+        // satisfies the idx_creators_agency_provider_user unique index
+        // introduced in migration 00056.
         const insertData: Record<string, unknown> = {
           agency_id: agencyId,
           display_name: influencer.fullname || influencer.username,
           [handleColumn]: influencer.username,
-          onsocial_user_id: influencer.onsocialUserId,
+          provider: 'onsocial',
+          provider_user_id: influencer.onsocialUserId,
           discovery_source: 'discovery',
           discovery_imported_at: new Date().toISOString(),
           is_active: true,

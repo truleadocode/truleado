@@ -39,3 +39,26 @@ export {
   fetchDictionaryFromProvider,
 } from './dictionary';
 export type { IcDictionaryType, IcDiscoveryPlatform } from './types';
+
+// Phase B additions — discovery search + cache + credit pre-flight
+export type { DiscoveryFilterInput } from './filters';
+export {
+  buildIcDiscoveryFilters,
+  validateDiscoveryFilter,
+  toIcPlatform,
+} from './filters';
+export { searchDiscovery, findSimilarCreators } from './discovery';
+export type { DiscoverySearchArgs, SimilarCreatorsArgs } from './discovery';
+export {
+  computeFiltersHash,
+  readDiscoveryCache,
+  writeDiscoveryCache,
+  recordCacheHit,
+} from './cache';
+export type { CacheKeyComponents, CachedDiscoveryRow } from './cache';
+export {
+  previewAgencyCredits,
+  requireAgencyCredits,
+  requireIcCredits,
+} from './credit-preflight';
+export type { AgencyPreflightResult } from './credit-preflight';
