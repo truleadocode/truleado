@@ -1109,6 +1109,8 @@ export const typeDefs = gql`
     INSTAGRAM
     YOUTUBE
     TIKTOK
+    TWITTER
+    TWITCH
   }
 
   enum DiscoveryExportType {
@@ -1233,6 +1235,177 @@ export const typeDefs = gql`
     engagementRate: Float
     avgLikes: Int
     contactLinks: JSON
+  }
+
+  # =============================================================================
+  # INFLUENCERS.CLUB CREATOR DISCOVERY (Phase A — additive types)
+  # Queries and mutations are wired in Phase B+. These types exist now so the
+  # schema compiles and resolvers can start returning them incrementally.
+  # =============================================================================
+
+  enum EnrichmentMode {
+    RAW
+    FULL
+    FULL_WITH_AUDIENCE
+    EMAIL
+    CONNECTED_SOCIALS
+  }
+
+  enum BatchEnrichmentMode {
+    RAW
+    FULL
+    BASIC
+  }
+
+  enum BatchJobStatus {
+    SUBMITTED
+    IC_QUEUED
+    IC_PROCESSING
+    IC_PAUSED_CREDITS
+    IC_FINISHED
+    DOWNLOADING
+    IMPORTING
+    COMPLETED
+    FAILED
+    CANCELLED
+  }
+
+  enum IdentityConfidence {
+    VERIFIED
+    PROBABLE
+    POSSIBLE
+  }
+
+  # Global cached creator profile (from creator_profiles table)
+  type CreatorProfile {
+    id: ID!
+    provider: String!
+    platform: DiscoveryPlatform!
+    providerUserId: String!
+    username: String!
+    fullName: String
+    followers: Int
+    engagementPercent: Float
+    biography: String
+    nichePrimary: String
+    nicheSecondary: [String!]
+    email: String
+    location: String
+    language: String
+    isVerified: Boolean
+    isBusiness: Boolean
+    isCreator: Boolean
+    profilePictureUrl: String
+    enrichmentMode: EnrichmentMode
+    lastEnrichedAt: DateTime
+    firstSeenAt: DateTime!
+    rawData: JSON
+  }
+
+  # Cross-platform identity link (from creator_identities table)
+  type CreatorIdentity {
+    id: ID!
+    canonicalId: ID!
+    creatorProfileId: ID!
+    platform: DiscoveryPlatform!
+    source: String!
+    confidence: IdentityConfidence!
+    discoveredAt: DateTime!
+    profile: CreatorProfile
+  }
+
+  # Minimal shape returned by discovery search (pictureUrl is temporary 24h)
+  type DiscoveryCreator {
+    providerUserId: String!
+    username: String!
+    fullName: String
+    followers: Int
+    engagementPercent: Float
+    pictureUrl: String
+    platform: DiscoveryPlatform!
+    creatorProfileId: ID
+  }
+
+  # Discovery result with cache metadata and credit accounting
+  type CreatorSearchResult {
+    accounts: [DiscoveryCreator!]!
+    total: Int!
+    cached: Boolean!
+    cachedAt: DateTime
+    expiresAt: DateTime
+    creditsSpent: Int!
+    creditsSavedOnHit: Int
+  }
+
+  # Chargeable-event ledger (replaces DiscoveryUnlock)
+  type CreatorEnrichment {
+    id: ID!
+    agencyId: ID!
+    creatorProfileId: ID
+    platform: DiscoveryPlatform!
+    handle: String!
+    mode: EnrichmentMode!
+    creditsSpent: Int!
+    cacheHit: Boolean!
+    icCreditsCost: Float
+    triggeredBy: ID!
+    createdAt: DateTime!
+    profile: CreatorProfile
+  }
+
+  # Batch enrichment job record with state machine status
+  type EnrichmentBatchJob {
+    id: ID!
+    agencyId: ID!
+    icBatchId: String
+    platform: DiscoveryPlatform
+    mode: BatchEnrichmentMode!
+    includeAudienceData: Boolean!
+    emailRequired: String
+    status: BatchJobStatus!
+    statusMessage: String
+    totalRows: Int!
+    processedRows: Int!
+    successCount: Int!
+    failedCount: Int!
+    creditsHeld: Int!
+    creditsCharged: Int!
+    metadata: JSON
+    submittedBy: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    completedAt: DateTime
+  }
+
+  # Audience-overlap cached report (up to 10 creators same platform)
+  type AudienceOverlapReport {
+    id: ID!
+    agencyId: ID!
+    platform: DiscoveryPlatform!
+    creatorHandles: [String!]!
+    totalFollowers: Int
+    totalUniqueFollowers: Int
+    details: JSON!
+    creditsSpent: Int!
+    computedBy: ID
+    computedAt: DateTime!
+  }
+
+  # Cached creator post (IG/TT/YT only per IC spec)
+  type CreatorPost {
+    id: ID!
+    creatorProfileId: ID!
+    platform: DiscoveryPlatform!
+    postPk: String!
+    takenAt: DateTime
+    caption: String
+    mediaUrl: String
+    mediaType: Int
+    likes: Int
+    comments: Int
+    views: Int
+    thumbnailUrl: String
+    fetchedAt: DateTime!
   }
 
   input UpdateProjectInput {
