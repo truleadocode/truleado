@@ -10,7 +10,7 @@
     "lint": "next lint",
     "db:migrate": "supabase db push",
     "db:reset": "supabase db reset",
-    "db:gen-types": "supabase gen types typescript --local > src/lib/database.types.ts",
+    "db:gen-types": "supabase gen types typescript --linked > src/lib/supabase/database.types.ts",
     "graphql:codegen": "graphql-codegen --config codegen.ts",
     "test": "vitest run",
     "test:watch": "vitest"
