@@ -35,7 +35,9 @@ CREATE TABLE creator_profiles (
   platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok','twitter','twitch')),
   provider_user_id TEXT NOT NULL,
   username TEXT NOT NULL,
-  username_lower TEXT GENERATED ALWAYS AS (lower(username)) STORED,
+  -- Note: historical attempts at `username_lower GENERATED ALWAYS AS (lower(username)) STORED`
+  -- were rejected by Supabase Postgres as non-immutable for this collation. We use a
+  -- functional index on lower(username) instead — same query performance, no generation.
 
   -- Normalized queryable columns
   full_name TEXT,
@@ -68,10 +70,10 @@ CREATE TABLE creator_profiles (
   UNIQUE (provider, platform, provider_user_id)
 );
 
-CREATE INDEX idx_creator_profiles_handle        ON creator_profiles(platform, username_lower);
+CREATE INDEX idx_creator_profiles_handle        ON creator_profiles(platform, lower(username));
 CREATE INDEX idx_creator_profiles_followers     ON creator_profiles(platform, followers DESC);
 CREATE INDEX idx_creator_profiles_last_enriched ON creator_profiles(last_enriched_at DESC);
-CREATE INDEX idx_creator_profiles_username_trgm ON creator_profiles USING gin (username_lower gin_trgm_ops);
+CREATE INDEX idx_creator_profiles_username_trgm ON creator_profiles USING gin (lower(username) gin_trgm_ops);
 
 ALTER TABLE creator_profiles ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "creator_profiles_read_authenticated" ON creator_profiles
@@ -213,7 +215,10 @@ CREATE TABLE audience_overlap_reports (
   agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
   platform TEXT NOT NULL CHECK (platform IN ('instagram','youtube','tiktok','twitter','twitch')),
   creator_handles TEXT[] NOT NULL,
-  creator_handles_hash TEXT GENERATED ALWAYS AS (md5(array_to_string(creator_handles, ','))) STORED,
+  -- Application must compute: md5(handles.map(h => h.toLowerCase()).sort().join(','))
+  -- Moved out of a GENERATED column because array_to_string() is STABLE, not IMMUTABLE,
+  -- and Postgres rejects non-IMMUTABLE expressions in generated columns.
+  creator_handles_hash TEXT NOT NULL,
   total_followers BIGINT,
   total_unique_followers BIGINT,
   details JSONB NOT NULL,
