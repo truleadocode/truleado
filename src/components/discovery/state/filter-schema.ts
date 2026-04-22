@@ -58,7 +58,7 @@ export const filterSchema = z.object({
   followers: rangeTuple.optional(),
   lastPost: z.enum(['7d', '30d', '90d', '1y']).optional(),
   er: rangeTuple.optional(),
-  gender: z.enum(['any', 'f', 'm', 'nb']).default('any'),
+  gender: z.enum(['any', 'male', 'female']).default('any'),
   languages: z.array(z.string()).default([]),
 
   // Advanced — Creator

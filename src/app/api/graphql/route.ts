@@ -26,9 +26,15 @@ const apolloServer = new ApolloServer<GraphQLContext>({
   schema,
   introspection: process.env.NODE_ENV !== 'production',
   formatError: (formattedError, error) => {
-    // Log errors for debugging
-    console.error('GraphQL Error:', error);
-    
+    // Log errors for debugging. For nested (wrapped) errors like IcApiError,
+    // pull the originalError so its structured fields (status, details) are
+    // visible instead of just the Apollo-wrapped message.
+    const underlying = (error as { originalError?: Error }).originalError ?? error;
+    console.error('GraphQL Error:', underlying);
+    if ((underlying as { details?: unknown }).details !== undefined) {
+      console.error('  details:', (underlying as { details?: unknown }).details);
+    }
+
     // In production, don't expose internal error details
     if (process.env.NODE_ENV === 'production') {
       // Keep the error code but sanitize the message for certain errors

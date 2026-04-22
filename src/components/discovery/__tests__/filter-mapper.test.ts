@@ -110,9 +110,9 @@ describe('toIcDiscoveryArgs — quick row', () => {
     const none = toIcDiscoveryArgs(override({ gender: 'any' })).filters;
     expect(none.platformFilters).toBeUndefined();
 
-    const { filters } = toIcDiscoveryArgs(override({ gender: 'f' }));
+    const { filters } = toIcDiscoveryArgs(override({ gender: 'female' }));
     const pf = filters.platformFilters as Record<string, unknown>;
-    expect(pf.gender).toBe('f');
+    expect(pf.gender).toBe('female');
   });
 });
 

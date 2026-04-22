@@ -110,7 +110,7 @@ describe('round-trip', () => {
       locations: ['United States', 'France'],
       followers: [50000, 1000000],
       lastPost: '30d',
-      gender: 'f',
+      gender: 'female',
       languages: ['en', 'fr'],
       creator: {
         ...defaultFilterState.creator,

@@ -55,20 +55,51 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Best-effort extraction of a human-readable error string from an IC JSON
+ * body. IC is inconsistent about the shape: sometimes a string, sometimes an
+ * array of `{msg, loc, type}` (FastAPI/pydantic style), sometimes a free-form
+ * object under `detail` / `message` / `error`. Whatever we get, return a
+ * string — never an object — so `new Error(message)` doesn't print
+ * "[object Object]".
+ */
+function stringifyErrorValue(v: unknown): string | null {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) {
+    const parts = v.map((d) => {
+      if (d && typeof d === 'object' && 'msg' in d && typeof (d as { msg: unknown }).msg === 'string') {
+        const rec = d as { msg: string; loc?: unknown };
+        const loc = Array.isArray(rec.loc) ? rec.loc.join('.') : undefined;
+        return loc ? `${loc}: ${rec.msg}` : rec.msg;
+      }
+      return JSON.stringify(d);
+    });
+    return parts.join('; ');
+  }
+  if (typeof v === 'object') {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 async function parseErrorBody(response: Response): Promise<{ message: string; body?: IcErrorResponse }> {
   try {
     const body = (await response.json()) as IcErrorResponse;
-    let message: string;
-    if (typeof body.detail === 'string') {
-      message = body.detail;
-    } else if (Array.isArray(body.detail) && body.detail.length > 0) {
-      message = body.detail.map((d) => d?.msg ?? JSON.stringify(d)).join('; ');
-    } else {
-      message = body.message ?? body.error ?? response.statusText;
-    }
+    const message =
+      stringifyErrorValue(body.detail) ??
+      stringifyErrorValue(body.message) ??
+      stringifyErrorValue(body.error) ??
+      response.statusText ??
+      'Unknown IC error';
     return { message, body };
   } catch {
-    return { message: response.statusText };
+    return { message: response.statusText || 'Unknown IC error' };
   }
 }
 

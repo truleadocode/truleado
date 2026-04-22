@@ -93,9 +93,8 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
         defaultValue="any"
         options={[
           { value: 'any', label: 'Any' },
-          { value: 'f', label: 'Female' },
-          { value: 'm', label: 'Male' },
-          { value: 'nb', label: 'Non-binary' },
+          { value: 'female', label: 'Female' },
+          { value: 'male', label: 'Male' },
         ]}
         value={state.gender}
         onChange={(v) => patch('gender', v ?? 'any')}
