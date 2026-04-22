@@ -302,6 +302,228 @@ export function useUpdateDiscoverySearch() {
 }
 
 // ---------------------------------------------------------------------------
+// Single-creator enrichment & detail sheet
+// ---------------------------------------------------------------------------
+
+export type EnrichmentMode = 'RAW' | 'FULL' | 'FULL_WITH_AUDIENCE' | 'EMAIL' | 'CONNECTED_SOCIALS';
+
+export interface CreatorProfile {
+  id: string;
+  provider: string;
+  platform: string;
+  providerUserId: string;
+  username: string;
+  fullName: string | null;
+  followers: number | null;
+  engagementPercent: number | null;
+  biography: string | null;
+  nichePrimary: string | null;
+  nicheSecondary: string[] | null;
+  email: string | null;
+  location: string | null;
+  language: string | null;
+  isVerified: boolean | null;
+  isBusiness: boolean | null;
+  isCreator: boolean | null;
+  profilePictureUrl: string | null;
+  enrichmentMode: 'RAW' | 'FULL' | 'FULL_WITH_AUDIENCE' | 'NONE' | null;
+  lastEnrichedAt: string | null;
+  firstSeenAt: string;
+  rawData: Record<string, unknown> | null;
+}
+
+export interface CreatorEnrichment {
+  id: string;
+  agencyId: string;
+  creatorProfileId: string | null;
+  platform: string;
+  handle: string;
+  mode: EnrichmentMode;
+  creditsSpent: number;
+  cacheHit: boolean;
+  icCreditsCost: number | null;
+  triggeredBy: string;
+  createdAt: string;
+  profile: CreatorProfile | null;
+}
+
+export function useCreatorProfile(platform: string | undefined, handle: string | undefined) {
+  return useQuery({
+    queryKey: ['creatorProfile', platform, handle],
+    enabled: Boolean(platform && handle),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const data = await graphqlRequest<{ creatorProfile: CreatorProfile | null }>(
+        queries.creatorProfile,
+        { platform: platform!.toUpperCase(), handle: handle! }
+      );
+      return data.creatorProfile;
+    },
+  });
+}
+
+export function useEnrichCreator() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      agencyId: string;
+      platform: string;
+      handle: string;
+      mode: 'RAW' | 'FULL' | 'FULL_WITH_AUDIENCE';
+      forceRefresh?: boolean;
+    }) => {
+      const data = await graphqlRequest<{ enrichCreator: CreatorEnrichment }>(
+        mutations.enrichCreator,
+        {
+          agencyId: input.agencyId,
+          platform: input.platform.toUpperCase(),
+          handle: input.handle,
+          mode: input.mode,
+          forceRefresh: input.forceRefresh ?? null,
+        }
+      );
+      return data.enrichCreator;
+    },
+    onSuccess: (enrichment, input) => {
+      client.invalidateQueries({
+        queryKey: ['creatorProfile', input.platform.toUpperCase(), input.handle],
+      });
+      if (enrichment.profile) {
+        client.setQueryData(
+          ['creatorProfile', input.platform.toUpperCase(), input.handle],
+          enrichment.profile
+        );
+      }
+    },
+  });
+}
+
+export interface ConnectedIdentity {
+  id: string;
+  canonicalId: string;
+  creatorProfileId: string;
+  platform: string;
+  source: string;
+  confidence: string;
+  discoveredAt: string;
+  profile: {
+    id: string;
+    username: string;
+    fullName: string | null;
+    followers: number | null;
+    profilePictureUrl: string | null;
+  } | null;
+}
+
+export function useFindConnectedSocials() {
+  return useMutation({
+    mutationFn: async (input: { agencyId: string; platform: string; handle: string }) => {
+      const data = await graphqlRequest<{ findConnectedSocials: ConnectedIdentity[] }>(
+        mutations.findConnectedSocials,
+        {
+          agencyId: input.agencyId,
+          platform: input.platform.toUpperCase(),
+          handle: input.handle,
+        }
+      );
+      return data.findConnectedSocials;
+    },
+  });
+}
+
+export function useFetchCreatorPosts() {
+  return useMutation({
+    mutationFn: async (input: {
+      agencyId: string;
+      platform: string;
+      handle: string;
+      count?: number;
+      paginationToken?: string;
+    }) => {
+      const data = await graphqlRequest<{ fetchCreatorPosts: unknown }>(
+        mutations.fetchCreatorPosts,
+        {
+          agencyId: input.agencyId,
+          platform: input.platform.toUpperCase(),
+          handle: input.handle,
+          count: input.count ?? null,
+          paginationToken: input.paginationToken ?? null,
+        }
+      );
+      return data.fetchCreatorPosts;
+    },
+  });
+}
+
+export function useSimilarCreators(input: {
+  agencyId: string | undefined;
+  platform: string | undefined;
+  referenceKey: 'url' | 'username' | 'id';
+  referenceValue: string | undefined;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: [
+      'similarCreators',
+      input.agencyId,
+      input.platform,
+      input.referenceKey,
+      input.referenceValue,
+    ],
+    enabled:
+      input.enabled &&
+      Boolean(input.agencyId && input.platform && input.referenceValue),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const data = await graphqlRequest<{ similarCreators: CreatorSearchResult }>(
+        queries.similarCreators,
+        {
+          agencyId: input.agencyId,
+          platform: input.platform!.toUpperCase(),
+          referenceKey: input.referenceKey,
+          referenceValue: input.referenceValue,
+          page: 1,
+          limit: 12,
+        }
+      );
+      return data.similarCreators;
+    },
+  });
+}
+
+export function useImportCreatorsToAgency() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      agencyId: string;
+      items: Array<{
+        creatorProfileId?: string;
+        platform?: string;
+        handle?: string;
+        enrichIfMissing?: boolean;
+      }>;
+    }) => {
+      const normalisedItems = input.items.map((item) => ({
+        creatorProfileId: item.creatorProfileId ?? null,
+        platform: item.platform ? item.platform.toUpperCase() : null,
+        handle: item.handle ?? null,
+        enrichIfMissing: item.enrichIfMissing ?? null,
+      }));
+      const data = await graphqlRequest<{ importCreatorsToAgency: Array<Record<string, unknown>> }>(
+        mutations.importCreatorsToAgency,
+        { agencyId: input.agencyId, items: normalisedItems }
+      );
+      return data.importCreatorsToAgency;
+    },
+    onSuccess: (_rows, input) => {
+      // Creator list view will re-fetch next time it mounts.
+      client.invalidateQueries({ queryKey: ['creatorProfile'] });
+      void input;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Multi-select state for the floating action bar
 // ---------------------------------------------------------------------------
 

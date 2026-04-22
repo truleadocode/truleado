@@ -8,6 +8,7 @@ import { ResultsCard } from './results-card';
 import { SaveFiltersDialog } from './dialogs/save-filters-dialog';
 import { FilterPresetsPopover } from './dialogs/filter-presets-popover';
 import { ManagePresetsDialog } from './dialogs/manage-presets-dialog';
+import { CreatorDetailSheet } from './creator-detail-sheet';
 import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator, type SavedSearch } from './hooks';
 import { useFilterState } from './state/url-state';
 import { toIcDiscoveryArgs } from './state/filter-mapper';
@@ -33,6 +34,7 @@ export function CreatorDiscoveryPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
+  const [detailCreator, setDetailCreator] = useState<DiscoveryCreator | null>(null);
 
   const { searchOn, filters } = useMemo(() => toIcDiscoveryArgs(state), [state]);
   const agencyId = currentAgency?.id;
@@ -108,12 +110,9 @@ export function CreatorDiscoveryPage() {
     });
   }, []);
 
-  const handleRowClick = useCallback(
-    (_creator: DiscoveryCreator) => {
-      toast({ title: 'Creator detail', description: 'Coming in Phase F6.' });
-    },
-    [toast]
-  );
+  const handleRowClick = useCallback((creator: DiscoveryCreator) => {
+    setDetailCreator(creator);
+  }, []);
 
   const handleAddToRoster = useCallback(() => {
     toast({ title: 'Add to roster', description: 'Bulk import UI ships in Phase F7.' });
@@ -225,6 +224,14 @@ export function CreatorDiscoveryPage() {
         open={manageDialogOpen}
         onOpenChange={setManageDialogOpen}
         agencyId={agencyId}
+      />
+      <CreatorDetailSheet
+        agencyId={agencyId}
+        creator={detailCreator}
+        open={!!detailCreator}
+        onOpenChange={(open) => {
+          if (!open) setDetailCreator(null);
+        }}
       />
     </main>
   );
