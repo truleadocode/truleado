@@ -16,6 +16,19 @@ import type { IcDictionaryType, IcDiscoveryPlatform, IcDictionaryResponse } from
 const PROVIDER = 'influencers_club';
 const DEFAULT_TTL_DAYS = 7;
 
+/**
+ * IC only honours `?search=` / `?offset=` on the audience-* classifier
+ * endpoints. The other dictionaries (languages, locations, brands, yt-topics,
+ * games) ignore those params and always return the full static list. For
+ * those types we keep the cached full list and filter server-side ourselves.
+ */
+const IC_SERVER_SIDE_SEARCH_TYPES: ReadonlySet<IcDictionaryType> = new Set([
+  'audience-brand-categories',
+  'audience-brand-names',
+  'audience-interests',
+  'audience-locations',
+]);
+
 type DictionarySearchParams = {
   search?: string;
   offset?: number;
@@ -76,8 +89,10 @@ export async function getDictionary(
   platform?: IcDiscoveryPlatform,
   searchParams: DictionarySearchParams = {}
 ): Promise<IcDictionaryResponse> {
-  // Search/offset = bypass cache, pass through to IC.
-  if (searchParams.search || typeof searchParams.offset === 'number') {
+  const supportsServerSearch = IC_SERVER_SIDE_SEARCH_TYPES.has(type);
+
+  // Audience-* endpoints: search/offset bypass cache and pass through to IC.
+  if (supportsServerSearch && (searchParams.search || typeof searchParams.offset === 'number')) {
     return fetchDictionaryFromProvider(type, platform, searchParams);
   }
 
@@ -89,27 +104,68 @@ export async function getDictionary(
     .eq('platform', platform ?? null)
     .maybeSingle();
 
+  let data: IcDictionaryResponse;
   if (row && new Date(row.expires_at).getTime() > Date.now()) {
-    return row.data as IcDictionaryResponse;
+    data = row.data as IcDictionaryResponse;
+  } else {
+    const fresh = await fetchDictionaryFromProvider(type, platform);
+    const expiresAt = new Date(Date.now() + DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+    await supabaseAdmin.from('provider_dictionary_cache').upsert(
+      {
+        provider: PROVIDER,
+        dictionary_type: type,
+        platform: platform ?? null,
+        data: fresh,
+        fetched_at: new Date().toISOString(),
+        expires_at: expiresAt,
+        fetch_count: 1,
+      },
+      { onConflict: 'provider,dictionary_type,platform' }
+    );
+    data = fresh;
   }
 
-  const fresh = await fetchDictionaryFromProvider(type, platform);
-  const expiresAt = new Date(Date.now() + DEFAULT_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  // For types IC doesn't filter itself, apply the search locally against the
+  // cached full list. This is the normal code path for locations / languages
+  // / brands / yt-topics / games when the user types in the filter popover.
+  if (!supportsServerSearch && searchParams.search) {
+    return filterDictionaryLocally(data, searchParams.search);
+  }
 
-  await supabaseAdmin.from('provider_dictionary_cache').upsert(
-    {
-      provider: PROVIDER,
-      dictionary_type: type,
-      platform: platform ?? null,
-      data: fresh,
-      fetched_at: new Date().toISOString(),
-      expires_at: expiresAt,
-      fetch_count: 1,
-    },
-    { onConflict: 'provider,dictionary_type,platform' }
-  );
+  return data;
+}
 
-  return fresh;
+/**
+ * Narrow a dictionary array by a case-insensitive substring match against the
+ * entry's searchable fields. Keeps whatever shape IC returned (strings or
+ * `{full_name, cleaned, …}` objects) so downstream callers don't have to care.
+ */
+function filterDictionaryLocally(
+  data: IcDictionaryResponse,
+  search: string
+): IcDictionaryResponse {
+  if (!Array.isArray(data)) return data;
+  const q = search.toLowerCase();
+  return data.filter((entry) => {
+    if (typeof entry === 'string') return entry.toLowerCase().includes(q);
+    if (entry && typeof entry === 'object') {
+      const e = entry as Record<string, unknown>;
+      const candidates = [
+        e.full_name,
+        e.cleaned,
+        e.username,
+        e.name,
+        e.topic_details,
+        e.language,
+        e.abbreviation,
+      ];
+      return candidates.some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes(q)
+      );
+    }
+    return false;
+  });
 }
 
 /**
