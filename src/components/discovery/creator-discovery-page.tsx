@@ -5,15 +5,34 @@ import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { FilterCard } from './filter-card';
 import { ResultsCard } from './results-card';
-import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator } from './hooks';
+import { SaveFiltersDialog } from './dialogs/save-filters-dialog';
+import { FilterPresetsPopover } from './dialogs/filter-presets-popover';
+import { ManagePresetsDialog } from './dialogs/manage-presets-dialog';
+import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator, type SavedSearch } from './hooks';
 import { useFilterState } from './state/url-state';
 import { toIcDiscoveryArgs } from './state/filter-mapper';
+import { filterSchema, type FilterState, type SearchPlatform, searchPlatforms } from './state/filter-schema';
+
+function suggestPresetName(state: FilterState): string {
+  const parts: string[] = [];
+  if (state.content.hashtags.length > 0) parts.push(state.content.hashtags[0]);
+  if (state.audience.interests.length > 0) parts.push(state.audience.interests[0]);
+  if (state.locations.length > 0) parts.push(state.locations[0]);
+  if (state.followers) {
+    const [min, max] = state.followers;
+    if (min != null || max != null) parts.push(`${min ?? '0'}–${max ?? '∞'}`);
+  }
+  parts.push(state.searchOn);
+  return parts.slice(0, 4).join(', ');
+}
 
 export function CreatorDiscoveryPage() {
   const { currentAgency, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const { state, patch, reset } = useFilterState();
+  const { state, patch, reset, setState } = useFilterState();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [manageDialogOpen, setManageDialogOpen] = useState(false);
 
   const { searchOn, filters } = useMemo(() => toIcDiscoveryArgs(state), [state]);
   const agencyId = currentAgency?.id;
@@ -39,13 +58,37 @@ export function CreatorDiscoveryPage() {
     patch('page', state.page + 1);
   }, [patch, state.page]);
 
-  const handleSave = useCallback(() => {
-    toast({ title: 'Save filters', description: 'Coming in Phase F5.' });
-  }, [toast]);
+  const handleSave = useCallback(() => setSaveDialogOpen(true), []);
 
-  const handleOpenPresets = useCallback(() => {
-    toast({ title: 'Filter presets', description: 'Coming in Phase F5.' });
-  }, [toast]);
+  const handleApplyPreset = useCallback(
+    (preset: SavedSearch) => {
+      // Merge stored filters (Zod state sans pagination) with defaults.
+      const rawPlatform = preset.platform.toLowerCase();
+      const platform: SearchPlatform =
+        searchPlatforms.includes(rawPlatform as SearchPlatform)
+          ? (rawPlatform as SearchPlatform)
+          : 'instagram';
+      const candidate = {
+        ...(preset.filters as object),
+        searchOn: platform,
+        page: 1,
+        limit: state.limit,
+      };
+      const parsed = filterSchema.safeParse(candidate);
+      if (!parsed.success) {
+        toast({
+          title: 'Preset is incompatible',
+          description: 'The saved filters could not be re-applied to the current schema.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setState(parsed.data);
+      setSelectedIds(new Set());
+      toast({ title: 'Preset applied', description: `Loaded "${preset.name}".` });
+    },
+    [setState, state.limit, toast]
+  );
 
   const handleToggleSelect = useCallback((creator: DiscoveryCreator) => {
     setSelectedIds((prev) => {
@@ -76,9 +119,7 @@ export function CreatorDiscoveryPage() {
     toast({ title: 'Add to roster', description: 'Bulk import UI ships in Phase F7.' });
   }, [toast]);
 
-  const handleSaveView = useCallback(() => {
-    toast({ title: 'Save view', description: 'Coming in Phase F5.' });
-  }, [toast]);
+  const handleSaveView = useCallback(() => setSaveDialogOpen(true), []);
 
   const handleCopyLink = useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -123,7 +164,7 @@ export function CreatorDiscoveryPage() {
     );
   }
 
-  if (!currentAgency) {
+  if (!currentAgency || !agencyId) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-16 text-center text-sm text-tru-slate-500">
         Join or create an agency to access Creator Discovery.
@@ -145,7 +186,13 @@ export function CreatorDiscoveryPage() {
         patch={patch}
         onSubmit={handleSubmit}
         onSave={handleSave}
-        onOpenPresets={handleOpenPresets}
+        presetsSlot={
+          <FilterPresetsPopover
+            agencyId={agencyId}
+            onApply={handleApplyPreset}
+            onManage={() => setManageDialogOpen(true)}
+          />
+        }
       />
 
       <ResultsCard
@@ -165,6 +212,19 @@ export function CreatorDiscoveryPage() {
         onCopyLink={handleCopyLink}
         onReset={handleReset}
         onForceRefresh={handleForceRefresh}
+      />
+
+      <SaveFiltersDialog
+        open={saveDialogOpen}
+        onOpenChange={setSaveDialogOpen}
+        agencyId={agencyId}
+        state={state}
+        suggestedName={suggestPresetName(state)}
+      />
+      <ManagePresetsDialog
+        open={manageDialogOpen}
+        onOpenChange={setManageDialogOpen}
+        agencyId={agencyId}
       />
     </main>
   );

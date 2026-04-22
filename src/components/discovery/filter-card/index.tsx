@@ -12,7 +12,7 @@ interface FilterCardProps {
   patch: <K extends keyof FilterState>(k: K, v: FilterState[K]) => void;
   onSubmit: () => void;
   onSave: () => void;
-  onOpenPresets: () => void;
+  presetsSlot: React.ReactNode;
 }
 
 export function FilterCard(props: FilterCardProps) {
@@ -25,7 +25,7 @@ export function FilterCard(props: FilterCardProps) {
       <QuickFilterRow state={props.state} patch={props.patch} />
       <AdvancedSection state={props.state} patch={props.patch} />
       <PlatformPicker state={props.state} patch={props.patch} />
-      <SaveFiltersRow onSave={props.onSave} onOpenPresets={props.onOpenPresets} />
+      <SaveFiltersRow onSave={props.onSave} presetsSlot={props.presetsSlot} />
     </section>
   );
 }
