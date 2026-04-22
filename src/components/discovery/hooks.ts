@@ -524,6 +524,45 @@ export function useImportCreatorsToAgency() {
 }
 
 // ---------------------------------------------------------------------------
+// Audience overlap
+// ---------------------------------------------------------------------------
+
+export interface AudienceOverlapReport {
+  id: string;
+  agencyId: string;
+  platform: string;
+  creatorHandles: string[];
+  totalFollowers: number | null;
+  totalUniqueFollowers: number | null;
+  details: Record<string, unknown>;
+  creditsSpent: number;
+  computedBy: string | null;
+  computedAt: string;
+}
+
+export function useComputeAudienceOverlap() {
+  return useMutation({
+    mutationFn: async (input: {
+      agencyId: string;
+      platform: string;
+      handles: string[];
+      forceRefresh?: boolean;
+    }) => {
+      const data = await graphqlRequest<{ computeAudienceOverlap: AudienceOverlapReport }>(
+        mutations.computeAudienceOverlap,
+        {
+          agencyId: input.agencyId,
+          platform: input.platform.toUpperCase(),
+          handles: input.handles,
+          forceRefresh: input.forceRefresh ?? null,
+        }
+      );
+      return data.computeAudienceOverlap;
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Multi-select state for the floating action bar
 // ---------------------------------------------------------------------------
 

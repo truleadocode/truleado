@@ -9,6 +9,9 @@ import { SaveFiltersDialog } from './dialogs/save-filters-dialog';
 import { FilterPresetsPopover } from './dialogs/filter-presets-popover';
 import { ManagePresetsDialog } from './dialogs/manage-presets-dialog';
 import { CreatorDetailSheet } from './creator-detail-sheet';
+import { FloatingActionBar } from './results-card/floating-action-bar';
+import { AddToRosterDialog } from './dialogs/add-to-roster-dialog';
+import { CompareOverlapDialog } from './dialogs/compare-overlap-dialog';
 import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator, type SavedSearch } from './hooks';
 import { useFilterState } from './state/url-state';
 import { toIcDiscoveryArgs } from './state/filter-mapper';
@@ -31,10 +34,13 @@ export function CreatorDiscoveryPage() {
   const { currentAgency, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const { state, patch, reset, setState } = useFilterState();
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedMap, setSelectedMap] = useState<Map<string, DiscoveryCreator>>(new Map());
+  const selectedIds = useMemo(() => new Set(selectedMap.keys()), [selectedMap]);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [manageDialogOpen, setManageDialogOpen] = useState(false);
   const [detailCreator, setDetailCreator] = useState<DiscoveryCreator | null>(null);
+  const [rosterDialogOpen, setRosterDialogOpen] = useState(false);
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
 
   const { searchOn, filters } = useMemo(() => toIcDiscoveryArgs(state), [state]);
   const agencyId = currentAgency?.id;
@@ -52,7 +58,7 @@ export function CreatorDiscoveryPage() {
 
   const handleSubmit = useCallback(() => {
     patch('page', 1);
-    setSelectedIds(new Set());
+    setSelectedMap(new Map());
     search.refetch();
   }, [patch, search]);
 
@@ -86,37 +92,70 @@ export function CreatorDiscoveryPage() {
         return;
       }
       setState(parsed.data);
-      setSelectedIds(new Set());
+      setSelectedMap(new Map());
       toast({ title: 'Preset applied', description: `Loaded "${preset.name}".` });
     },
     [setState, state.limit, toast]
   );
 
   const handleToggleSelect = useCallback((creator: DiscoveryCreator) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
+    setSelectedMap((prev) => {
+      const next = new Map(prev);
       if (next.has(creator.providerUserId)) next.delete(creator.providerUserId);
-      else next.add(creator.providerUserId);
+      else next.set(creator.providerUserId, creator);
       return next;
     });
   }, []);
 
-  const handleToggleSelectAll = useCallback((ids: string[], select: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (select) ids.forEach((id) => next.add(id));
-      else ids.forEach((id) => next.delete(id));
-      return next;
-    });
-  }, []);
+  const handleToggleSelectAll = useCallback(
+    (ids: string[], select: boolean) => {
+      const rows = search.data?.accounts ?? [];
+      const byId = new Map(rows.map((r) => [r.providerUserId, r] as const));
+      setSelectedMap((prev) => {
+        const next = new Map(prev);
+        if (select) {
+          for (const id of ids) {
+            const row = byId.get(id);
+            if (row) next.set(id, row);
+          }
+        } else {
+          for (const id of ids) next.delete(id);
+        }
+        return next;
+      });
+    },
+    [search.data]
+  );
 
   const handleRowClick = useCallback((creator: DiscoveryCreator) => {
     setDetailCreator(creator);
   }, []);
 
   const handleAddToRoster = useCallback(() => {
-    toast({ title: 'Add to roster', description: 'Bulk import UI ships in Phase F7.' });
-  }, [toast]);
+    if (selectedMap.size === 0) {
+      toast({
+        title: 'Select creators first',
+        description: 'Pick one or more rows, then click "Add to Creator Roster".',
+      });
+      return;
+    }
+    setRosterDialogOpen(true);
+  }, [selectedMap.size, toast]);
+
+  const handleCompare = useCallback(() => {
+    if (selectedMap.size < 2) return;
+    setCompareDialogOpen(true);
+  }, [selectedMap.size]);
+
+  const clearSelection = useCallback(() => setSelectedMap(new Map()), []);
+
+  const selectedArray = useMemo(() => Array.from(selectedMap.values()), [selectedMap]);
+  const compareDisabled = selectedMap.size < 2 || selectedMap.size > 10;
+  const compareHint = selectedMap.size < 2
+    ? 'Select at least 2 creators.'
+    : selectedMap.size > 10
+      ? 'Select at most 10 creators.'
+      : undefined;
 
   const handleSaveView = useCallback(() => setSaveDialogOpen(true), []);
 
@@ -131,7 +170,7 @@ export function CreatorDiscoveryPage() {
 
   const handleReset = useCallback(() => {
     reset();
-    setSelectedIds(new Set());
+    setSelectedMap(new Map());
   }, [reset]);
 
   const handleForceRefresh = useCallback(() => {
@@ -232,6 +271,29 @@ export function CreatorDiscoveryPage() {
         onOpenChange={(open) => {
           if (!open) setDetailCreator(null);
         }}
+      />
+
+      <AddToRosterDialog
+        open={rosterDialogOpen}
+        onOpenChange={setRosterDialogOpen}
+        agencyId={agencyId}
+        creators={selectedArray}
+        onSuccess={clearSelection}
+      />
+      <CompareOverlapDialog
+        open={compareDialogOpen}
+        onOpenChange={setCompareDialogOpen}
+        agencyId={agencyId}
+        creators={selectedArray}
+      />
+
+      <FloatingActionBar
+        count={selectedMap.size}
+        onAddToRoster={handleAddToRoster}
+        onCompare={handleCompare}
+        onClear={clearSelection}
+        compareDisabled={compareDisabled}
+        compareHint={compareHint}
       />
     </main>
   );
