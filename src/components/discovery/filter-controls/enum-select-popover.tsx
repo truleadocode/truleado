@@ -15,7 +15,7 @@ interface EnumOption<T extends string> {
 }
 
 interface EnumSelectPopoverProps<T extends string> {
-  label: string;
+  label: React.ReactNode;
   options: EnumOption<T>[];
   value: T | undefined;
   /** A value that should be treated as "no filter applied" (e.g. 'any'). */
@@ -39,7 +39,14 @@ export function EnumSelectPopover<T extends string>({
 
   const active = value !== undefined && value !== defaultValue;
   const selected = options.find((o) => o.value === value);
-  const displayLabel = active && selected ? `${label}: ${selected.label}` : label;
+  const displayLabel: React.ReactNode =
+    active && selected ? (
+      <>
+        {label}: <span className="font-semibold">{selected.label}</span>
+      </>
+    ) : (
+      label
+    );
 
   const clear = () => {
     onChange(undefined);

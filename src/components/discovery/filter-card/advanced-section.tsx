@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FilterState } from '../state/filter-schema';
-import { CreatorFilterGrid } from './creator-filter-grid';
-import { AudienceFilterGrid } from './audience-filter-grid';
-import { ContentFilterGrid } from './content-filter-grid';
+import { InstagramSections } from './platform-sections/instagram-sections';
+import { YoutubeSections } from './platform-sections/youtube-sections';
+import { TiktokSections } from './platform-sections/tiktok-sections';
+import { TwitterSections } from './platform-sections/twitter-sections';
+import { TwitchSections } from './platform-sections/twitch-sections';
 
 const LS_KEY = 'discovery.advanced.expanded';
 
@@ -54,18 +56,7 @@ export function AdvancedSection({ state, patch }: AdvancedSectionProps) {
       >
         <div className="overflow-hidden">
           <div className="pt-5">
-            <FilterSectionLabel>Creator</FilterSectionLabel>
-            <CreatorFilterGrid state={state} patch={patch} />
-          </div>
-
-          <div className="pt-6">
-            <FilterSectionLabel>Audience</FilterSectionLabel>
-            <AudienceFilterGrid state={state} patch={patch} />
-          </div>
-
-          <div className="pt-6">
-            <FilterSectionLabel>Content</FilterSectionLabel>
-            <ContentFilterGrid state={state} patch={patch} />
+            <PlatformSections state={state} patch={patch} />
           </div>
         </div>
       </div>
@@ -73,10 +64,19 @@ export function AdvancedSection({ state, patch }: AdvancedSectionProps) {
   );
 }
 
-function FilterSectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-2.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">
-      {children}
-    </div>
-  );
+function PlatformSections({ state, patch }: AdvancedSectionProps) {
+  switch (state.searchOn) {
+    case 'instagram':
+      return <InstagramSections state={state} patch={patch} />;
+    case 'youtube':
+      return <YoutubeSections state={state} patch={patch} />;
+    case 'tiktok':
+      return <TiktokSections state={state} patch={patch} />;
+    case 'twitter':
+      return <TwitterSections state={state} patch={patch} />;
+    case 'twitch':
+      return <TwitchSections state={state} patch={patch} />;
+    default:
+      return null;
+  }
 }

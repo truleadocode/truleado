@@ -251,3 +251,155 @@ describe('toIcDiscoveryArgs — platformFilters container', () => {
     expect(filters.platformFilters).toBeUndefined();
   });
 });
+
+describe('toIcDiscoveryArgs — per-platform IC key translation', () => {
+  it('YouTube: followers → number_of_subscribers, postCount → number_of_videos, bioLink → links_from_description, followerGrowth → subscriber_growth', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'youtube',
+        followers: [1000, 10000],
+        creator: {
+          ...defaultFilterState.creator,
+          postCount: [50, 500],
+          bioLink: ['https://patreon.com/x'],
+          bioKeywords: ['tutorial'],
+          followerGrowth: [10, null],
+        },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.number_of_subscribers).toEqual({ min: 1000, max: 10000 });
+    expect(pf.number_of_videos).toEqual({ min: 50, max: 500 });
+    expect(pf.links_from_description).toEqual(['https://patreon.com/x']);
+    expect(pf.keywords_in_description).toEqual(['tutorial']);
+    expect(pf.subscriber_growth).toEqual({ growth_percentage: 10, time_range_months: 12 });
+    expect(pf.number_of_followers).toBeUndefined();
+    expect(pf.number_of_posts).toBeUndefined();
+    expect(pf.link_in_bio).toBeUndefined();
+    expect(pf.follower_growth).toBeUndefined();
+  });
+
+  it('Twitch: followers → followers, lastPost → most_recent_stream_date, bioKeywords → keywords_in_description', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'twitch',
+        followers: [100, 5000],
+        lastPost: '30d',
+        creator: { ...defaultFilterState.creator, bioKeywords: ['gaming'] },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.followers).toEqual({ min: 100, max: 5000 });
+    expect(pf.most_recent_stream_date).toBe(30);
+    expect(pf.keywords_in_description).toEqual(['gaming']);
+    expect(pf.last_post).toBeUndefined();
+    expect(pf.number_of_followers).toBeUndefined();
+  });
+
+  it('Twitch: type is suppressed (IC does not support type on Twitch)', () => {
+    const { filters } = toIcDiscoveryArgs(override({ searchOn: 'twitch', type: 'creator' }));
+    expect(filters.platformFilters).toBeUndefined();
+  });
+
+  it('Twitch: engagement rate is suppressed', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({ searchOn: 'twitch', er: [2, 10] })
+    );
+    expect(filters.platformFilters).toBeUndefined();
+  });
+
+  it('YouTube-specific flags + ranges flow under YT IC keys', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'youtube',
+        yt: {
+          ...defaultFilterState.yt,
+          isMonetizing: true,
+          hasCommunityPosts: true,
+          hasShorts: true,
+          topics: ['Gaming'],
+          keywordsInVideoTitles: ['minecraft'],
+          avgViewsLongVideos: [1000, null],
+          shortsPct: [50, 100],
+        },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.is_monetizing).toBe(true);
+    expect(pf.has_community_posts).toBe(true);
+    expect(pf.has_shorts).toBe(true);
+    expect(pf.topics).toEqual(['Gaming']);
+    expect(pf.keywords_in_video_titles).toEqual(['minecraft']);
+    expect(pf.average_views_on_long_videos).toEqual({ min: 1000 });
+    expect(pf.shorts_percentage).toEqual({ min: 50, max: 100 });
+  });
+
+  it('TikTok-specific: hasTikTokShop + avgViews + avgDownloads', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'tiktok',
+        tt: {
+          ...defaultFilterState.tt,
+          hasTikTokShop: true,
+          avgViews: [10000, null],
+          avgDownloads: [100, 1000],
+          videoDescription: ['dance'],
+        },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.has_tik_tok_shop).toBe(true);
+    expect(pf.average_views).toEqual({ min: 10000 });
+    expect(pf.average_video_downloads).toEqual({ min: 100, max: 1000 });
+    expect(pf.video_description).toEqual(['dance']);
+  });
+
+  it('Twitter-specific: keywordsInTweets + numberOfTweets', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'twitter',
+        tw: {
+          ...defaultFilterState.tw,
+          keywordsInTweets: ['crypto'],
+          numberOfTweets: [1000, 100000],
+        },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.keywords_in_tweets).toEqual(['crypto']);
+    expect(pf.tweets_count).toEqual({ min: 1000, max: 100000 });
+  });
+
+  it('Twitch-specific: partner flag + streamed hours + games played', () => {
+    const { filters } = toIcDiscoveryArgs(
+      override({
+        searchOn: 'twitch',
+        twitch: {
+          ...defaultFilterState.twitch,
+          isTwitchPartner: true,
+          streamedHoursLast30: [40, 200],
+          gamesPlayed: ['valorant'],
+          avgViewsLast30: [500, null],
+        },
+      })
+    );
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.is_twitch_partner).toBe(true);
+    expect(pf.streamed_hours_last_30_days).toEqual({ min: 40, max: 200 });
+    expect(pf.games_played).toEqual(['valorant']);
+    expect(pf.avg_views_last_30_days).toEqual({ min: 500 });
+  });
+
+  it('YT/Twitch suppress audience block (IG-only)', () => {
+    const audience = {
+      ageRange: [25, 34] as [number, number],
+      interests: ['fitness'],
+      brandCategory: ['nike'],
+      credibility: [0.8, 1.0] as [number, number],
+    };
+    const yt = toIcDiscoveryArgs(override({ searchOn: 'youtube', audience }));
+    expect(yt.filters.audience).toBeUndefined();
+    const twitch = toIcDiscoveryArgs(override({ searchOn: 'twitch', audience }));
+    expect(twitch.filters.audience).toBeUndefined();
+  });
+});

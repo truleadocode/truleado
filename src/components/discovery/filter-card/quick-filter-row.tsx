@@ -1,6 +1,15 @@
 'use client';
 
-import { MapPin, Users, Clock, Activity, User, Languages, Briefcase } from 'lucide-react';
+import {
+  MapPin,
+  Users,
+  Clock,
+  Activity,
+  User,
+  Languages,
+  Briefcase,
+  CalendarClock,
+} from 'lucide-react';
 import { MultiSelectPopover } from '../filter-controls/multi-select-popover';
 import {
   RangePopover,
@@ -20,9 +29,19 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
   const locationsLookup = useDictionaryLookup('locations', state.searchOn);
   const languagesLookup = useDictionaryLookup('languages');
 
-  // Twitch doesn't support the IC `type` filter. Hide the Type pill when
-  // searching Twitch; mapper-side it's a no-op either way.
-  const showTypeFilter = state.searchOn !== 'twitch';
+  const p = state.searchOn;
+  // Per-platform filter visibility (mirrors IC's documented filter sets
+  // and the screenshots in product-documentation/ic_frontend/*.png).
+  const showEngagementRate = p === 'instagram' || p === 'youtube' || p === 'tiktok';
+  const showType = p !== 'twitch';
+  const followersLabel = p === 'youtube' ? 'Subscribers' : 'Followers';
+  const lastPostLabel = p === 'twitch' ? 'Last Streamed' : 'Last Post';
+  const lastPostIcon =
+    p === 'twitch' ? (
+      <CalendarClock className="h-3.5 w-3.5" />
+    ) : (
+      <Clock className="h-3.5 w-3.5" />
+    );
 
   return (
     <div className="mt-2.5 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-7">
@@ -36,17 +55,17 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
       />
 
       <RangePopover
-        label="Followers"
+        label={followersLabel}
         value={state.followers}
         onChange={(v) => patch('followers', v)}
-        formatActiveLabel={(v) => `Followers: ${formatCountRange(v)}`}
+        formatActiveLabel={(v) => `${followersLabel}: ${formatCountRange(v)}`}
         icon={<Users className="h-3.5 w-3.5" />}
         placeholderMin="1,000"
         placeholderMax="1,000,000"
       />
 
       <EnumSelectPopover
-        label="Last Post"
+        label={lastPostLabel}
         options={[
           { value: '7d', label: 'Last 7 days' },
           { value: '30d', label: 'Last 30 days' },
@@ -55,17 +74,19 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
         ]}
         value={state.lastPost}
         onChange={(v) => patch('lastPost', v)}
-        icon={<Clock className="h-3.5 w-3.5" />}
+        icon={lastPostIcon}
       />
 
-      <RangePopover
-        label="Engagement Rate"
-        value={state.er}
-        onChange={(v) => patch('er', v)}
-        formatActiveLabel={(v) => `ER: ${formatPercentRange(v)}`}
-        unit="%"
-        icon={<Activity className="h-3.5 w-3.5" />}
-      />
+      {showEngagementRate ? (
+        <RangePopover
+          label="Engagement Rate"
+          value={state.er}
+          onChange={(v) => patch('er', v)}
+          formatActiveLabel={(v) => `ER: ${formatPercentRange(v)}`}
+          unit="%"
+          icon={<Activity className="h-3.5 w-3.5" />}
+        />
+      ) : null}
 
       <EnumSelectPopover
         label="Gender"
@@ -89,7 +110,7 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
         icon={<Languages className="h-3.5 w-3.5" />}
       />
 
-      {showTypeFilter ? (
+      {showType ? (
         <EnumSelectPopover
           label="Type"
           defaultValue="any"

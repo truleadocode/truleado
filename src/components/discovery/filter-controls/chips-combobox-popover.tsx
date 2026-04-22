@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { FilterPill } from './filter-pill';
 
 interface ChipsComboboxPopoverProps {
-  label: string;
+  label: React.ReactNode;
   value: string[];
   onChange: (next: string[]) => void;
   placeholder?: string;

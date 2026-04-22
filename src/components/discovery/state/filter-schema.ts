@@ -99,6 +99,69 @@ export const filterSchema = z.object({
     })
     .default({}),
 
+  // ─────────────────────────────────────────────────────────────────
+  // Platform-specific advanced filters (rendered only when
+  // searchOn === <platform>). Values persist across platform switches
+  // so a user can tweak IG filters, flip to YT, and come back without
+  // losing their IG-side work.
+  // ─────────────────────────────────────────────────────────────────
+
+  yt: z
+    .object({
+      // Creator
+      isMonetizing: z.boolean().default(false),
+      youtubeMembership: z.boolean().default(false),
+      hasYoutubeStore: z.boolean().default(false),
+      hasCommunityPosts: z.boolean().default(false),
+      streamsLive: z.boolean().default(false),
+      hasYouTubePodcast: z.boolean().default(false),
+      hasYouTubeCourses: z.boolean().default(false),
+      numberOfVideos: rangeTuple.optional(),
+      // Content
+      topics: z.array(z.string()).default([]),
+      keywordsInVideoTitles: z.array(z.string()).default([]),
+      keywordsInVideoDescription: z.array(z.string()).default([]),
+      linkInVideoDescription: z.array(z.string()).default([]),
+      hasShorts: z.boolean().default(false),
+      shortsPct: rangeTuple.optional(),
+      avgViewsLongVideos: rangeTuple.optional(),
+      longVideoDuration: rangeTuple.optional(),
+      avgViewsShorts: rangeTuple.optional(),
+      avgStreamViews: rangeTuple.optional(),
+      avgStreamDuration: rangeTuple.optional(),
+      lastStream: rangeTuple.optional(),
+    })
+    .default({}),
+
+  tt: z
+    .object({
+      hasTikTokShop: z.boolean().default(false),
+      videoDescription: z.array(z.string()).default([]),
+      avgViews: rangeTuple.optional(),
+      avgDownloads: rangeTuple.optional(),
+    })
+    .default({}),
+
+  tw: z
+    .object({
+      keywordsInTweets: z.array(z.string()).default([]),
+      numberOfTweets: rangeTuple.optional(),
+    })
+    .default({}),
+
+  twitch: z
+    .object({
+      isTwitchPartner: z.boolean().default(false),
+      keywordsInDescription: z.array(z.string()).default([]),
+      streamedHoursLast30: rangeTuple.optional(),
+      totalStreamsLast30: rangeTuple.optional(),
+      maximumViewCount: rangeTuple.optional(),
+      avgViewsLast30: rangeTuple.optional(),
+      gamesPlayed: z.array(z.string()).default([]),
+      lastStreamedDate: rangeTuple.optional(),
+    })
+    .default({}),
+
   // "Creator has" — platforms the creator must also have.
   creatorHas: z.array(z.enum(creatorHasPlatforms)).default([]),
 

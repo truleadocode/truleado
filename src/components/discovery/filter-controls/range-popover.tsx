@@ -9,7 +9,7 @@ import { FilterPill } from './filter-pill';
 export type RangeValue = [number | null, number | null];
 
 interface RangePopoverProps {
-  label: string;
+  label: React.ReactNode;
   value: RangeValue | undefined;
   onChange: (value: RangeValue | undefined) => void;
   /** Format the displayed label for a non-empty range (e.g. "10K–50K"). */

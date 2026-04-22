@@ -14,7 +14,7 @@ export interface MultiSelectOption {
 }
 
 interface MultiSelectPopoverProps {
-  label: string;
+  label: React.ReactNode;
   /** Static options OR a promise-returning fetcher for async (dictionary) sources. */
   options?: MultiSelectOption[];
   fetchOptions?: (query: string) => Promise<MultiSelectOption[]>;
@@ -87,10 +87,16 @@ export function MultiSelectPopover({
   const selectedLabels = active
     ? (staticOptions ?? asyncOptions ?? []).filter((o) => value.includes(o.value)).map((o) => o.label)
     : [];
-  const displayLabel = active
-    ? selectedLabels.length > 0 && selectedLabels.length <= 2
-      ? `${label}: ${selectedLabels.join(', ')}`
-      : `${label} (${value.length})`
+  const displayLabel: React.ReactNode = active
+    ? selectedLabels.length > 0 && selectedLabels.length <= 2 ? (
+        <>
+          {label}: <span className="font-semibold">{selectedLabels.join(', ')}</span>
+        </>
+      ) : (
+        <>
+          {label} ({value.length})
+        </>
+      )
     : label;
 
   const toggle = (v: string) => {
@@ -115,7 +121,7 @@ export function MultiSelectPopover({
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={`Search ${label.toLowerCase()}...`}
+              placeholder="Search..."
               className="h-9 pl-8 text-sm"
             />
           </div>

@@ -92,6 +92,18 @@ export function filterStateToSearchParams(state: FilterState): URLSearchParams {
   if (JSON.stringify(state.content) !== JSON.stringify(defaultFilterState.content)) {
     params.set('content', JSON.stringify(state.content));
   }
+  if (JSON.stringify(state.yt) !== JSON.stringify(defaultFilterState.yt)) {
+    params.set('yt', JSON.stringify(state.yt));
+  }
+  if (JSON.stringify(state.tt) !== JSON.stringify(defaultFilterState.tt)) {
+    params.set('tt', JSON.stringify(state.tt));
+  }
+  if (JSON.stringify(state.tw) !== JSON.stringify(defaultFilterState.tw)) {
+    params.set('tw', JSON.stringify(state.tw));
+  }
+  if (JSON.stringify(state.twitch) !== JSON.stringify(defaultFilterState.twitch)) {
+    params.set('twitch', JSON.stringify(state.twitch));
+  }
 
   if (state.creatorHas.length > 0) {
     params.set('creatorHas', state.creatorHas.join(','));
@@ -127,6 +139,10 @@ export function searchParamsToFilterState(params: URLSearchParams): FilterState 
     creator: safeParseJson(params.get('creator')),
     audience: safeParseJson(params.get('audience')),
     content: safeParseJson(params.get('content')),
+    yt: safeParseJson(params.get('yt')),
+    tt: safeParseJson(params.get('tt')),
+    tw: safeParseJson(params.get('tw')),
+    twitch: safeParseJson(params.get('twitch')),
     creatorHas: params.get('creatorHas') ? decodeStringArray(params.get('creatorHas')) : undefined,
     page: params.get('page') ? Number(params.get('page')) : undefined,
     limit: params.get('limit') ? Number(params.get('limit')) : undefined,
