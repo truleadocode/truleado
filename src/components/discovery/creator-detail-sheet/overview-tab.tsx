@@ -41,7 +41,7 @@ export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewT
           const costLabel = `${result.creditsSpent} credit${result.creditsSpent === 1 ? '' : 's'}`;
           toast({
             title: result.cacheHit ? 'Loaded from cache' : 'Enriched',
-            description: `${costLabel} charged.${result.cacheHit ? ' Served without an IC API call.' : ''}`,
+            description: `${costLabel} charged.${result.cacheHit ? ' Served from cache.' : ''}`,
           });
           setPendingMode(null);
         },
@@ -101,8 +101,7 @@ export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewT
         <ProfileSummary profile={profile} />
       ) : (
         <div className="rounded-md border border-dashed border-tru-slate-300 bg-tru-slate-50 p-4 text-sm text-tru-slate-600">
-          We don&apos;t have this creator in our cache yet. Enrich to pull their full profile
-          from Influencers.club.
+          We don&apos;t have this creator&apos;s full profile yet. Enrich to pull it in.
         </div>
       )}
 
@@ -143,8 +142,7 @@ export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewT
           />
         </div>
         <p className="mt-2 text-[11px] text-tru-slate-500">
-          Cached profiles charge their full credit cost even when we skip the IC call — every
-          agency pays for fresh data once.
+          Cached profiles charge their full credit cost — every agency pays for fresh data once.
         </p>
       </section>
 

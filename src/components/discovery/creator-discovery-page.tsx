@@ -184,7 +184,7 @@ export function CreatorDiscoveryPage() {
       { agencyId, platform: searchOn, filters, page: state.page, limit: state.limit },
       {
         onSuccess: () =>
-          toast({ title: 'Refreshed', description: 'Results pulled fresh from Influencers.club.' }),
+          toast({ title: 'Refreshed', description: 'Results refreshed with the latest data.' }),
         onError: (err) =>
           toast({
             title: 'Refresh failed',

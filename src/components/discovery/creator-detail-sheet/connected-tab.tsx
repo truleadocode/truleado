@@ -43,8 +43,7 @@ export function ConnectedTab({ agencyId, creator }: ConnectedTabProps) {
     return (
       <div className="rounded-md border border-tru-border-soft bg-tru-slate-50 p-6 text-center text-sm">
         <p className="text-tru-slate-600">
-          Identifying every social platform this creator has accounts on costs 15 Truleado
-          credits (0.50 IC credits).
+          Identifying every social platform this creator has accounts on costs 15 credits.
         </p>
         <Button onClick={run} className="mt-4 gap-2">
           <ShieldCheck className="h-3.5 w-3.5" />
@@ -57,7 +56,7 @@ export function ConnectedTab({ agencyId, creator }: ConnectedTabProps) {
   if (findConnected.isPending) {
     return (
       <div className="flex items-center gap-2 text-xs text-tru-slate-500">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Querying Influencers.club…
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up connected accounts…
       </div>
     );
   }

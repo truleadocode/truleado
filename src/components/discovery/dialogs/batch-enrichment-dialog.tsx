@@ -177,7 +177,7 @@ function NewBatchPanel({ agencyId, onSubmitted }: { agencyId: string; onSubmitte
     if (f && f.size > 10 * 1024 * 1024) {
       toast({
         title: 'File too large',
-        description: 'IC batches cap at 10 MB.',
+        description: 'Batch uploads cap at 10 MB.',
         variant: 'destructive',
       });
       return;
@@ -263,7 +263,7 @@ function NewBatchPanel({ agencyId, onSubmitted }: { agencyId: string; onSubmitte
           <div>
             <div className="text-sm font-medium text-tru-slate-900">Include audience data</div>
             <div className="text-[11px] text-tru-slate-500">
-              Adds demographics / interest affinities (same IC cost; separate Truleado action).
+              Adds demographics / interest affinities (no extra provider cost).
             </div>
           </div>
           <Switch checked={includeAudience} onCheckedChange={setIncludeAudience} />

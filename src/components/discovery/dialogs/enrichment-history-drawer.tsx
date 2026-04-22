@@ -49,7 +49,7 @@ export function EnrichmentHistoryDrawer({ open, onOpenChange, agencyId }: Enrich
           <SheetTitle className="text-left">Enrichment history</SheetTitle>
           <SheetDescription className="text-left text-xs text-tru-slate-500">
             Every enrichment this agency has paid for. Cache-hit rows are those served from
-            the global profile cache without calling Influencers.club.
+            the global profile cache.
           </SheetDescription>
           {rows.length > 0 ? (
             <div className="mt-2 flex gap-2 text-[11px]">

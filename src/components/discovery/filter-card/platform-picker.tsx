@@ -82,7 +82,7 @@ export function PlatformPicker({ state, patch }: PlatformPickerProps) {
               type="button"
               aria-pressed={active}
               aria-label={meta.label}
-              title={`${meta.label}${meta.supported ? '' : ' (best-effort — not fully supported by Influencers.club)'}`}
+              title={`${meta.label}${meta.supported ? '' : ' (best-effort — not fully supported)'}`}
               onClick={() => toggle(p)}
               className={cn(
                 'relative flex h-[38px] w-[38px] items-center justify-center rounded-[8px] border bg-white transition-colors',
