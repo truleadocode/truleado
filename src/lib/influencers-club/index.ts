@@ -111,3 +111,7 @@ export {
   normalizeHandlesForHash,
 } from './audience';
 export type { AudienceOverlapArgs } from './audience';
+
+// Phase D2 additions — batch result import pipeline
+export { importBatchResult, parseBatchCsv, parseBatchRow } from './batch-import';
+export type { BatchImportResult, ParsedBatchRow } from './batch-import';

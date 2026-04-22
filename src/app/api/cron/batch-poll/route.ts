@@ -28,6 +28,7 @@ import {
   canTransition,
   nextPollTime,
   backoffPollTime,
+  importBatchResult,
   type BatchJobStatus,
 } from '@/lib/influencers-club';
 
@@ -191,12 +192,17 @@ async function advanceJob(job: Record<string, unknown>): Promise<BatchJobStatus>
     }
   }
 
-  // importing → completed
-  // Phase D1 stores the result file and marks the job complete. Parsing the
-  // CSV + upserting creator_profiles is left to a follow-up so we don't
-  // exceed maxDuration for large batches. The result file is auditable in
-  // batch-outputs/.
+  // importing → completed (Phase D2: actually parse the CSV and upsert).
   if (fromStatus === 'importing') {
+    const importResult = await importBatchResult({
+      id: job.id as string,
+      agency_id: job.agency_id as string,
+      submitted_by: job.submitted_by as string,
+      platform: (job.platform as string | null) ?? null,
+      enrichment_mode: job.enrichment_mode as 'raw' | 'full' | 'basic',
+      result_file_storage_path: (job.result_file_storage_path as string | null) ?? null,
+    });
+
     const chargedFromIc = Math.ceil(((job.credits_used as number) ?? 0) * 1);
     await transitionJob(
       job,
@@ -204,6 +210,12 @@ async function advanceJob(job: Record<string, unknown>): Promise<BatchJobStatus>
       {
         completed_at: new Date().toISOString(),
         credits_charged: chargedFromIc,
+        success_count: importResult.successCount,
+        failed_count: importResult.failedCount,
+        status_message:
+          importResult.skipped.length > 0
+            ? `Imported ${importResult.successCount}; skipped ${importResult.skipped.length} (see logs)`
+            : null,
       },
       null
     );
