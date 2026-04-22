@@ -1,0 +1,181 @@
+/* ==========================================================================
+   Truleado Design System — Tokens
+   Source of truth for colors, type, spacing, radii, shadows.
+   ========================================================================== */
+
+/* Brand fonts — local Inter variable files (opsz + wght axes).
+   Plus Jakarta Sans still pulled from Google Fonts until a brand file is supplied. */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('fonts/Inter-VariableFont_opsz_wght.ttf') format('truetype-variations'),
+       url('fonts/Inter-VariableFont_opsz_wght.ttf') format('truetype');
+  font-variation-settings: 'opsz' 14;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('fonts/Inter-Italic-VariableFont_opsz_wght.ttf') format('truetype-variations'),
+       url('fonts/Inter-Italic-VariableFont_opsz_wght.ttf') format('truetype');
+  font-variation-settings: 'opsz' 14;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+
+:root {
+  /* ── Brand ─────────────────────────────────────────────────────────────── */
+  --tru-logo: #0025CC;          /* Deep navy-blue used in the wordmark */
+  --tru-blue-600: #2563EB;      /* Primary action & gradient start */
+  --tru-blue-700: #1D4ED8;
+  --tru-indigo-600: #4F46E5;
+  --tru-indigo-700: #4338CA;    /* Gradient end */
+  --tru-violet-600: #7C3AED;    /* Testimonials / premium accents */
+  --tru-violet-700: #6D28D9;
+
+  /* ── Signature gradient ───────────────────────────────────────────────── */
+  --tru-gradient: linear-gradient(135deg, #2563EB 0%, #4338CA 100%);
+  --tru-gradient-text: linear-gradient(90deg, #2563EB 0%, #4F46E5 100%);
+
+  /* ── Semantic ──────────────────────────────────────────────────────────── */
+  --tru-success: #10B981;       /* emerald-500 */
+  --tru-success-50: #ECFDF5;
+  --tru-warning: #F59E0B;       /* amber-500 */
+  --tru-warning-50: #FFFBEB;
+  --tru-danger: #EF4444;        /* red-500 */
+  --tru-danger-50: #FEF2F2;
+  --tru-info: #2563EB;
+
+  /* ── Neutrals (slate scale) ────────────────────────────────────────────── */
+  --tru-slate-50:  #F8FAFC;
+  --tru-slate-100: #F1F5F9;
+  --tru-slate-200: #E2E8F0;
+  --tru-slate-300: #CBD5E1;
+  --tru-slate-400: #94A3B8;
+  --tru-slate-500: #64748B;
+  --tru-slate-600: #475569;
+  --tru-slate-700: #334155;
+  --tru-slate-800: #1E293B;
+  --tru-slate-900: #0F172A;
+
+  /* ── App tokens (shadcn/ui mapping) ────────────────────────────────────── */
+  --tru-bg:          #FFFFFF;
+  --tru-fg:          #0F172A;
+  --tru-muted:       #F1F5F9;
+  --tru-muted-fg:    #64748B;
+  --tru-border:      #E2E8F0;
+  --tru-input:       #E2E8F0;
+  --tru-ring:        #2563EB;
+  --tru-primary:     #2563EB;
+  --tru-primary-fg:  #FFFFFF;
+  --tru-card:        #FFFFFF;
+  --tru-accent:      #F1F5F9;
+
+  /* ── Type ──────────────────────────────────────────────────────────────── */
+  --tru-font-sans:    'Inter', ui-sans-serif, system-ui, sans-serif;
+  --tru-font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --tru-font-mono:    ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Type scale — values in rem assuming 16px root */
+  --tru-text-xs:   0.75rem;    /* 12 */
+  --tru-text-sm:   0.875rem;   /* 14 */
+  --tru-text-base: 1rem;       /* 16 */
+  --tru-text-lg:   1.125rem;   /* 18 */
+  --tru-text-xl:   1.25rem;    /* 20 */
+  --tru-text-2xl:  1.5rem;     /* 24 */
+  --tru-text-3xl:  1.875rem;   /* 30 */
+  --tru-text-4xl:  2.25rem;    /* 36 */
+  --tru-text-5xl:  3rem;       /* 48 */
+  --tru-text-6xl:  3.75rem;    /* 60 */
+
+  /* ── Radius ────────────────────────────────────────────────────────────── */
+  --tru-radius-sm:   0.25rem;  /*  4 — inline chips, tags */
+  --tru-radius:      0.5rem;   /*  8 — APP default (shadcn) */
+  --tru-radius-md:   0.75rem;  /* 12 — inputs, small cards */
+  --tru-radius-lg:   1rem;     /* 16 — marketing cards */
+  --tru-radius-xl:   1.5rem;   /* 24 — hero cards, CTA blocks */
+  --tru-radius-2xl:  2rem;     /* 32 — marketing bento cards use rounded-2xl = 1rem; 2xl reserved for XL panels */
+  --tru-radius-full: 9999px;   /* pills, status dots */
+
+  /* ── Shadows ───────────────────────────────────────────────────────────── */
+  --tru-shadow-xs:  0 1px 2px rgba(15, 23, 42, 0.04);
+  --tru-shadow-sm:  0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --tru-shadow-md:  0 4px 12px -2px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --tru-shadow-lg:  0 12px 32px -8px rgba(15, 23, 42, 0.12), 0 4px 8px -4px rgba(15, 23, 42, 0.06);
+  --tru-shadow-xl:  0 24px 48px -12px rgba(15, 23, 42, 0.18);
+  --tru-shadow-blue: 0 12px 24px -8px rgba(37, 99, 235, 0.35);
+
+  /* ── Spacing — aligned to 4px grid (Tailwind-compatible) ───────────────── */
+  --tru-space-1:  0.25rem;  /*  4 */
+  --tru-space-2:  0.5rem;   /*  8 */
+  --tru-space-3:  0.75rem;  /* 12 */
+  --tru-space-4:  1rem;     /* 16 */
+  --tru-space-5:  1.25rem;  /* 20 */
+  --tru-space-6:  1.5rem;   /* 24 */
+  --tru-space-8:  2rem;     /* 32 */
+  --tru-space-10: 2.5rem;   /* 40 */
+  --tru-space-12: 3rem;     /* 48 */
+  --tru-space-16: 4rem;     /* 64 */
+  --tru-space-24: 6rem;     /* 96 */
+
+  /* ── Motion ────────────────────────────────────────────────────────────── */
+  --tru-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --tru-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --tru-dur-fast: 150ms;
+  --tru-dur: 250ms;
+  --tru-dur-slow: 500ms;
+}
+
+/* Global utility classes used across previews */
+html, body { font-family: var(--tru-font-sans); color: var(--tru-fg); background: var(--tru-bg); }
+body { margin: 0; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+
+.tru-gradient-text {
+  background: var(--tru-gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.tru-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--tru-radius-full);
+  background: #EFF6FF; /* blue-50 */
+  color: var(--tru-blue-600);
+  padding: 0.375rem 1rem;
+  font-size: var(--tru-text-xs);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+}
+
+.tru-card {
+  background: #fff;
+  border: 1px solid var(--tru-border);
+  border-radius: var(--tru-radius-lg);
+  box-shadow: var(--tru-shadow-sm);
+}
+
+.tru-btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: var(--tru-primary); color: var(--tru-primary-fg);
+  font-weight: 700; padding: 0.625rem 1.125rem;
+  border-radius: var(--tru-radius-md); border: 0; cursor: pointer;
+  transition: background var(--tru-dur-fast) var(--tru-ease-out);
+}
+.tru-btn-primary:hover { background: var(--tru-blue-700); }
+
+.tru-btn-ghost {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  background: #fff; color: var(--tru-fg);
+  font-weight: 600; padding: 0.625rem 1.125rem;
+  border-radius: var(--tru-radius-md);
+  border: 1px solid var(--tru-border);
+  cursor: pointer;
+  transition: background var(--tru-dur-fast) var(--tru-ease-out);
+}
+.tru-btn-ghost:hover { background: var(--tru-slate-50); }

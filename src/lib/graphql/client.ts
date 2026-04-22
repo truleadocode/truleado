@@ -1681,64 +1681,203 @@ export const queries = {
     }
   `,
 
-  // Discovery Module
+  // ───── Creator Discovery (Influencers.club) ─────
+
   discoverySearch: `
-    query DiscoverySearch($agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON!, $sort: JSON, $skip: Int, $limit: Int) {
-      discoverySearch(agencyId: $agencyId, platform: $platform, filters: $filters, sort: $sort, skip: $skip, limit: $limit) {
+    query DiscoverySearch(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON,
+      $page: Int, $limit: Int, $forceRefresh: Boolean
+    ) {
+      discoverySearch(
+        agencyId: $agencyId, platform: $platform, filters: $filters,
+        page: $page, limit: $limit, forceRefresh: $forceRefresh
+      ) {
         accounts {
-          userId
+          providerUserId
           username
-          fullname
+          fullName
           followers
-          engagementRate
-          engagements
-          avgViews
-          avgLikes
-          isVerified
-          picture
-          url
-          searchResultId
-          isHidden
+          engagementPercent
+          pictureUrl
           platform
+          creatorProfileId
         }
         total
-      }
-    }
-  `,
-
-  discoveryUnlocks: `
-    query DiscoveryUnlocks($agencyId: ID!, $platform: DiscoveryPlatform, $limit: Int, $offset: Int) {
-      discoveryUnlocks(agencyId: $agencyId, platform: $platform, limit: $limit, offset: $offset) {
-        id
-        platform
-        onsocialUserId
-        searchResultId
-        username
-        fullname
-        profileData
-        tokensSpent
-        unlockedBy
-        unlockedAt
+        cached
+        cachedAt
         expiresAt
+        creditsSpent
+        creditsSavedOnHit
       }
     }
   `,
 
-  discoveryExports: `
-    query DiscoveryExports($agencyId: ID!, $limit: Int, $offset: Int) {
-      discoveryExports(agencyId: $agencyId, limit: $limit, offset: $offset) {
+  similarCreators: `
+    query SimilarCreators(
+      $agencyId: ID!, $platform: DiscoveryPlatform!,
+      $referenceKey: String!, $referenceValue: String!,
+      $filters: JSON, $page: Int, $limit: Int, $forceRefresh: Boolean
+    ) {
+      similarCreators(
+        agencyId: $agencyId, platform: $platform,
+        referenceKey: $referenceKey, referenceValue: $referenceValue,
+        filters: $filters, page: $page, limit: $limit, forceRefresh: $forceRefresh
+      ) {
+        accounts {
+          providerUserId
+          username
+          fullName
+          followers
+          engagementPercent
+          pictureUrl
+          platform
+          creatorProfileId
+        }
+        total
+        cached
+        cachedAt
+        expiresAt
+        creditsSpent
+        creditsSavedOnHit
+      }
+    }
+  `,
+
+  creatorProfile: `
+    query CreatorProfile($platform: DiscoveryPlatform!, $handle: String!) {
+      creatorProfile(platform: $platform, handle: $handle) {
         id
+        provider
         platform
-        exportType
-        filterSnapshot
-        totalAccounts
-        tokensSpent
-        onsocialExportId
-        status
-        downloadUrl
-        exportedBy
+        providerUserId
+        username
+        fullName
+        followers
+        engagementPercent
+        biography
+        nichePrimary
+        nicheSecondary
+        email
+        location
+        language
+        isVerified
+        isBusiness
+        isCreator
+        profilePictureUrl
+        enrichmentMode
+        lastEnrichedAt
+        firstSeenAt
+        rawData
+      }
+    }
+  `,
+
+  creatorEnrichmentHistory: `
+    query CreatorEnrichmentHistory(
+      $agencyId: ID!, $mode: EnrichmentMode, $platform: DiscoveryPlatform,
+      $limit: Int, $offset: Int
+    ) {
+      creatorEnrichmentHistory(
+        agencyId: $agencyId, mode: $mode, platform: $platform,
+        limit: $limit, offset: $offset
+      ) {
+        id
+        agencyId
+        creatorProfileId
+        platform
+        handle
+        mode
+        creditsSpent
+        cacheHit
+        icCreditsCost
+        triggeredBy
         createdAt
+        profile {
+          id
+          username
+          fullName
+          followers
+          profilePictureUrl
+        }
+      }
+    }
+  `,
+
+  enrichmentBatchJobs: `
+    query EnrichmentBatchJobs(
+      $agencyId: ID!, $status: BatchJobStatus, $limit: Int, $offset: Int
+    ) {
+      enrichmentBatchJobs(
+        agencyId: $agencyId, status: $status, limit: $limit, offset: $offset
+      ) {
+        id
+        agencyId
+        icBatchId
+        platform
+        mode
+        includeAudienceData
+        emailRequired
+        status
+        statusMessage
+        totalRows
+        processedRows
+        successCount
+        failedCount
+        creditsHeld
+        creditsCharged
+        metadata
+        submittedBy
+        createdAt
+        updatedAt
         completedAt
+      }
+    }
+  `,
+
+  enrichmentBatchJob: `
+    query EnrichmentBatchJob($id: ID!) {
+      enrichmentBatchJob(id: $id) {
+        id
+        agencyId
+        icBatchId
+        platform
+        mode
+        includeAudienceData
+        emailRequired
+        status
+        statusMessage
+        totalRows
+        processedRows
+        successCount
+        failedCount
+        creditsHeld
+        creditsCharged
+        metadata
+        submittedBy
+        createdAt
+        updatedAt
+        completedAt
+      }
+    }
+  `,
+
+  audienceOverlapReports: `
+    query AudienceOverlapReports(
+      $agencyId: ID!, $platform: DiscoveryPlatform, $limit: Int, $offset: Int
+    ) {
+      audienceOverlapReports(
+        agencyId: $agencyId, platform: $platform, limit: $limit, offset: $offset
+      ) {
+        id
+        agencyId
+        platform
+        creatorHandles
+        totalFollowers
+        totalUniqueFollowers
+        details
+        creditsSpent
+        computedBy
+        computedAt
       }
     }
   `,
@@ -2997,47 +3136,203 @@ export const mutations = {
     }
   `,
 
-  // Discovery Module
-  discoveryUnlock: `
-    mutation DiscoveryUnlock($agencyId: ID!, $platform: DiscoveryPlatform!, $influencers: [DiscoveryUnlockInput!]!) {
-      discoveryUnlock(agencyId: $agencyId, platform: $platform, influencers: $influencers) {
+  // ───── Creator Discovery (Influencers.club) ─────
+
+  enrichCreator: `
+    mutation EnrichCreator(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $handle: String!,
+      $mode: EnrichmentMode!, $forceRefresh: Boolean, $emailRequired: String
+    ) {
+      enrichCreator(
+        agencyId: $agencyId, platform: $platform, handle: $handle,
+        mode: $mode, forceRefresh: $forceRefresh, emailRequired: $emailRequired
+      ) {
         id
+        agencyId
+        creatorProfileId
         platform
-        onsocialUserId
-        searchResultId
-        username
-        fullname
-        profileData
-        tokensSpent
-        unlockedBy
-        unlockedAt
-        expiresAt
+        handle
+        mode
+        creditsSpent
+        cacheHit
+        icCreditsCost
+        triggeredBy
+        createdAt
+        profile {
+          id
+          provider
+          platform
+          providerUserId
+          username
+          fullName
+          followers
+          engagementPercent
+          biography
+          nichePrimary
+          nicheSecondary
+          email
+          location
+          language
+          isVerified
+          isBusiness
+          isCreator
+          profilePictureUrl
+          enrichmentMode
+          lastEnrichedAt
+          firstSeenAt
+          rawData
+        }
       }
     }
   `,
 
-  discoveryExport: `
-    mutation DiscoveryExport($agencyId: ID!, $platform: DiscoveryPlatform!, $filters: JSON!, $sort: JSON, $exportType: DiscoveryExportType!, $limit: Int) {
-      discoveryExport(agencyId: $agencyId, platform: $platform, filters: $filters, sort: $sort, exportType: $exportType, limit: $limit) {
+  enrichCreatorByEmail: `
+    mutation EnrichCreatorByEmail($agencyId: ID!, $email: String!) {
+      enrichCreatorByEmail(agencyId: $agencyId, email: $email) {
         id
         platform
-        exportType
-        filterSnapshot
-        totalAccounts
-        tokensSpent
-        onsocialExportId
-        status
-        downloadUrl
-        exportedBy
+        handle
+        mode
+        creditsSpent
+        cacheHit
+        icCreditsCost
         createdAt
+        profile {
+          id
+          username
+          fullName
+          followers
+          profilePictureUrl
+        }
+      }
+    }
+  `,
+
+  findConnectedSocials: `
+    mutation FindConnectedSocials(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $handle: String!
+    ) {
+      findConnectedSocials(agencyId: $agencyId, platform: $platform, handle: $handle) {
+        id
+        canonicalId
+        creatorProfileId
+        platform
+        source
+        confidence
+        discoveredAt
+        profile {
+          id
+          username
+          fullName
+          followers
+          profilePictureUrl
+        }
+      }
+    }
+  `,
+
+  createEnrichmentBatchJob: `
+    mutation CreateEnrichmentBatchJob(
+      $agencyId: ID!, $platform: DiscoveryPlatform, $mode: BatchEnrichmentMode!,
+      $csvStorageKey: String!, $includeAudienceData: Boolean,
+      $emailRequired: String, $metadata: JSON
+    ) {
+      createEnrichmentBatchJob(
+        agencyId: $agencyId, platform: $platform, mode: $mode,
+        csvStorageKey: $csvStorageKey, includeAudienceData: $includeAudienceData,
+        emailRequired: $emailRequired, metadata: $metadata
+      ) {
+        id
+        agencyId
+        icBatchId
+        platform
+        mode
+        status
+        statusMessage
+        totalRows
+        processedRows
+        successCount
+        failedCount
+        creditsHeld
+        creditsCharged
+        createdAt
+      }
+    }
+  `,
+
+  cancelEnrichmentBatchJob: `
+    mutation CancelEnrichmentBatchJob($id: ID!) {
+      cancelEnrichmentBatchJob(id: $id) {
+        id
+        status
+        statusMessage
+        creditsHeld
+        creditsCharged
         completedAt
       }
     }
   `,
 
-  discoveryImportToCreators: `
-    mutation DiscoveryImportToCreators($agencyId: ID!, $influencers: [DiscoveryImportInput!]!, $withContact: Boolean) {
-      discoveryImportToCreators(agencyId: $agencyId, influencers: $influencers, withContact: $withContact) {
+  resumeEnrichmentBatchJob: `
+    mutation ResumeEnrichmentBatchJob($id: ID!) {
+      resumeEnrichmentBatchJob(id: $id) {
+        id
+        status
+        statusMessage
+      }
+    }
+  `,
+
+  fetchCreatorPosts: `
+    mutation FetchCreatorPosts(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $handle: String!,
+      $count: Int, $paginationToken: String
+    ) {
+      fetchCreatorPosts(
+        agencyId: $agencyId, platform: $platform, handle: $handle,
+        count: $count, paginationToken: $paginationToken
+      )
+    }
+  `,
+
+  fetchPostDetails: `
+    mutation FetchPostDetails(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $postId: String!,
+      $contentType: String!, $paginationToken: String
+    ) {
+      fetchPostDetails(
+        agencyId: $agencyId, platform: $platform, postId: $postId,
+        contentType: $contentType, paginationToken: $paginationToken
+      )
+    }
+  `,
+
+  computeAudienceOverlap: `
+    mutation ComputeAudienceOverlap(
+      $agencyId: ID!, $platform: DiscoveryPlatform!, $handles: [String!]!,
+      $forceRefresh: Boolean
+    ) {
+      computeAudienceOverlap(
+        agencyId: $agencyId, platform: $platform, handles: $handles,
+        forceRefresh: $forceRefresh
+      ) {
+        id
+        agencyId
+        platform
+        creatorHandles
+        totalFollowers
+        totalUniqueFollowers
+        details
+        creditsSpent
+        computedBy
+        computedAt
+      }
+    }
+  `,
+
+  importCreatorsToAgency: `
+    mutation ImportCreatorsToAgency($agencyId: ID!, $items: [CreatorImportInput!]!) {
+      importCreatorsToAgency(agencyId: $agencyId, items: $items) {
         id
         displayName
         email

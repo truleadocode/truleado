@@ -1,0 +1,833 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1440" />
+<title>Discovery — Truleado</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  :root {
+    --page-bg: #F4F6FA;
+    --surface: #FFFFFF;
+    --ink: #0F172A;
+    --ink-2: #1E293B;
+    --muted: #64748B;
+    --muted-2: #94A3B8;
+    --border: #E2E8F0;
+    --border-soft: #EEF2F7;
+    --primary: #2563EB;
+    --primary-ink: #1D4ED8;
+    --blue-50: #EFF6FF;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page-bg);
+    font-family: var(--tru-font-sans);
+    color: var(--ink);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ── App frame ─────────────────────────────────────────── */
+  .app {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ──────────────────────────────────────────── */
+  .sidebar {
+    background: #fff;
+    border-right: 1px solid var(--border);
+    padding: 14px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .sidebar .logo {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--tru-gradient);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 15px;
+    margin-bottom: 10px;
+    box-shadow: var(--tru-shadow-blue);
+  }
+  .nav-btn {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: transparent; border: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    transition: all 160ms var(--tru-ease-out);
+  }
+  .nav-btn:hover { background: var(--tru-slate-100); color: var(--ink); }
+  .nav-btn.active { background: var(--blue-50); color: var(--primary); }
+  .nav-btn svg { width: 20px; height: 20px; }
+  .sidebar .divider { width: 28px; height: 1px; background: var(--border); margin: 6px 0; }
+  .sidebar .spacer { flex: 1; }
+
+  /* ── Main column ──────────────────────────────────────── */
+  .main {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .topbar {
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .crumbs {
+    display: flex; align-items: center; gap: 8px;
+    color: var(--muted); font-size: 13px;
+  }
+  .crumbs b { color: var(--ink); font-weight: 600; }
+  .crumbs .sep { color: var(--muted-2); }
+  .topbar .spacer { flex: 1; }
+  .chip-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 9999px; padding: 6px 14px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+    transition: border-color 150ms;
+  }
+  .chip-btn:hover { border-color: var(--tru-slate-300); }
+  .chip-btn svg { width: 14px; height: 14px; }
+
+  /* ── Content area ─────────────────────────────────────── */
+  .content {
+    padding: 20px 28px 40px;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── Filter bar ───────────────────────────────────────── */
+  .filter-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+  }
+
+  .primary-row {
+    display: grid;
+    grid-template-columns: auto 1.1fr 2.4fr auto auto;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .search-mode {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 10px;
+    height: 44px;
+    color: var(--muted);
+  }
+  .search-mode .icn {
+    width: 32px; height: 32px;
+    border-radius: 8px; background: var(--tru-slate-100);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+  }
+  .search-mode .icn svg { width: 16px; height: 16px; }
+  .search-mode .caret { color: var(--muted-2); }
+
+  .dd {
+    display: inline-flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 12px;
+    height: 44px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+    font-weight: 500;
+    transition: border-color 150ms, box-shadow 150ms;
+    width: 100%;
+  }
+  .dd:hover { border-color: var(--tru-slate-300); }
+  .dd .label { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); }
+  .dd .label .hint { color: var(--muted); font-weight: 400; }
+  .dd .caret { color: var(--muted-2); width: 14px; height: 14px; }
+  .dd.ai .label { color: var(--muted); }
+
+  .search-input {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 14px;
+    height: 44px;
+    width: 100%;
+  }
+  .search-input input {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    font-family: inherit; font-size: 13.5px; color: var(--ink);
+  }
+  .search-input input::placeholder { color: var(--muted-2); }
+
+  .search-btn {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--tru-slate-100);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+  }
+  .search-btn:hover { background: var(--tru-slate-200); }
+  .search-btn svg { width: 16px; height: 16px; }
+
+  .type-dd { min-width: 140px; }
+
+  /* Secondary filter row */
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  /* Checkboxed filters */
+  .dd .cbox {
+    width: 16px; height: 16px;
+    border-radius: 3px;
+    border: 1.5px solid var(--tru-slate-300);
+    flex-shrink: 0;
+  }
+  .dd.has-info .info {
+    width: 14px; height: 14px; color: var(--muted-2);
+    flex-shrink: 0;
+  }
+
+  /* See more / fewer toggle */
+  .see-toggle {
+    display: flex; justify-content: center; align-items: center;
+    margin: 14px 0 4px;
+    position: relative;
+  }
+  .see-toggle::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 50%;
+    height: 1px; background: var(--border-soft);
+  }
+  .see-toggle button {
+    position: relative; z-index: 1;
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #fff; border: 1px solid var(--border);
+    border-radius: 9999px; padding: 6px 14px;
+    font-size: 12.5px; font-weight: 600; color: var(--primary);
+  }
+  .see-toggle button:hover { background: var(--blue-50); }
+  .see-toggle .bar { width: 10px; height: 1.5px; background: currentColor; border-radius: 2px; }
+
+  /* Section */
+  .filter-section { padding-top: 14px; }
+  .filter-section + .filter-section { margin-top: 4px; }
+  .section-label {
+    font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted-2);
+    margin: 0 0 10px 2px;
+  }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .grid-4 + .grid-4, .grid-4 + .grid-5, .grid-5 + .grid-4 { margin-top: 8px; }
+
+  /* Creator has row (social icons) */
+  .has-row {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .has-row .label {
+    font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted-2);
+    margin-bottom: 10px;
+  }
+  .platform-row {
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  }
+  .platform-btn {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: #fff; border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+    transition: all 150ms;
+  }
+  .platform-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--blue-50); }
+  .platform-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .platform-btn svg { width: 16px; height: 16px; }
+  .more-btn {
+    padding: 0 14px;
+    height: 38px;
+    border-radius: 8px;
+    background: #fff; border: 1px solid var(--border);
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-weight: 500; color: var(--ink-2);
+  }
+  .more-btn:hover { border-color: var(--tru-slate-300); }
+
+  /* Save row */
+  .save-row {
+    display: flex; gap: 10px;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .btn-save {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--tru-slate-400); color: #fff;
+    border: 0; border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 13px; font-weight: 600;
+  }
+  .btn-save:hover { background: var(--tru-slate-500); }
+  .btn-preset {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #fff; color: var(--ink-2);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 13px; font-weight: 600;
+  }
+  .btn-preset:hover { background: var(--tru-slate-50); }
+  .icon-sm { width: 14px; height: 14px; }
+
+  /* ── Results card ─────────────────────────────────────── */
+  .results-card {
+    margin-top: 20px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.03);
+    overflow: hidden;
+  }
+  .results-head {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .count-pill {
+    background: var(--tru-slate-100);
+    border-radius: 9999px;
+    padding: 6px 14px;
+    font-size: 13px;
+  }
+  .count-pill b { color: var(--ink); font-weight: 700; }
+  .count-pill .muted { color: var(--muted); font-weight: 500; }
+  .sort-dd {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 0;
+    color: var(--muted); font-size: 13px; font-weight: 500;
+    padding: 6px 10px; border-radius: 8px;
+  }
+  .sort-dd:hover { background: var(--tru-slate-50); }
+  .sort-dd b { color: var(--primary); font-weight: 600; }
+  .sort-dd svg { width: 12px; height: 12px; color: var(--primary); }
+  .results-head .spacer { flex: 1; }
+  .menu-btn {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: transparent; border: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+  }
+  .menu-btn:hover { background: var(--tru-slate-100); color: var(--ink); }
+  .btn-export {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--primary); color: #fff;
+    border: 0; border-radius: 8px;
+    padding: 9px 16px;
+    font-size: 13px; font-weight: 600;
+    box-shadow: 0 1px 2px rgba(37,99,235,0.25);
+  }
+  .btn-export:hover { background: var(--tru-blue-700); }
+
+  /* Table */
+  .table-wrap { overflow-x: auto; }
+  table.results {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+  }
+  table.results thead th {
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12.5px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    white-space: nowrap;
+    background: #fff;
+  }
+  table.results thead th.right { text-align: right; }
+  table.results thead th.center { text-align: center; }
+  table.results tbody td {
+    padding: 18px 14px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+  }
+  table.results tbody tr:hover { background: #FAFBFD; }
+  table.results tbody tr:last-child td { border-bottom: 0; }
+
+  .check {
+    width: 16px; height: 16px;
+    border: 1.5px solid var(--tru-slate-300);
+    border-radius: 3px;
+    display: inline-block;
+  }
+  .th-select { width: 52px; padding-left: 18px !important; }
+
+  .creator { display: flex; align-items: center; gap: 12px; min-width: 260px; }
+  .creator .check { margin-right: 2px; flex-shrink: 0; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px;
+    flex-shrink: 0;
+    box-shadow: inset 0 0 0 2px #fff;
+  }
+  .creator-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .creator-name {
+    display: flex; align-items: center; gap: 4px;
+    font-weight: 600; color: var(--ink); font-size: 14px;
+  }
+  .verified { width: 14px; height: 14px; color: var(--primary); flex-shrink: 0; }
+  .creator-loc { color: var(--muted); font-size: 12.5px; }
+
+  .social-cell { text-align: center; }
+  .social-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    border: 1px solid var(--border);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+  }
+  .email-icon {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--ink-2);
+  }
+  .email-icon svg { width: 16px; height: 16px; }
+
+  .num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+  .er { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 500; }
+
+  .growth-cell { display: flex; align-items: center; gap: 8px; }
+  .spark { width: 54px; height: 18px; display: block; }
+  .growth-val { font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; }
+  .growth-val.pos { color: #059669; }
+  .growth-val.neg { color: #DC2626; }
+  .growth-val.flat { color: var(--muted); }
+
+  .link-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--ink-2);
+    font-weight: 500;
+  }
+  .link-chip svg { width: 11px; height: 11px; color: var(--muted); }
+
+  .tags { display: flex; gap: 6px; flex-wrap: nowrap; min-width: 0; }
+  .tag {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: var(--ink-2);
+    font-weight: 500;
+    max-width: 110px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .tag.more { color: var(--muted); }
+
+  /* Unlock row */
+  .unlock-row {
+    padding: 16px 18px 20px;
+    text-align: center;
+    border-top: 1px solid var(--border-soft);
+  }
+  .unlock-btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--primary);
+  }
+  .unlock-btn:hover { background: var(--blue-50); border-color: var(--primary); }
+  .unlock-note { margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+  /* Locked preview row */
+  .locked td { filter: blur(3px); opacity: 0.55; pointer-events: none; user-select: none; }
+  .locked .check { filter: none; }
+</style>
+</head>
+<body>
+
+<!-- Inline SVG sprite -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-caret" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-2h6l2 2h3v10H4V8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 7v4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="5" r="0.8" fill="currentColor"/></symbol>
+    <symbol id="i-save" viewBox="0 0 16 16"><path d="M3 2h8l2 2v10H3V2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 2v4h5V2" fill="none" stroke="currentColor" stroke-width="1.5"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 16 16"><path d="M4 2h8v12l-4-2.5L4 14V2z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+    <symbol id="i-verified" viewBox="0 0 16 16"><path d="M8 1l1.6 1.2 2-.3.3 2L13 5l-1.1 1.7L13 8.4l-1.1 1.1-.3 2-2-.3L8 12.4l-1.6-1.2-2 .3-.3-2L3 8.4l1.1-1.7L3 5l1.1-1.1.3-2 2 .3L8 1z" fill="#2563EB"/><path d="M5.5 8l1.8 1.8L10.8 6" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2 4l6 4.5L14 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></symbol>
+    <symbol id="i-link" viewBox="0 0 16 16"><path d="M6 10l4-4M6.5 4.5l1-1a2.5 2.5 0 013.5 3.5l-1 1M9.5 11.5l-1 1a2.5 2.5 0 01-3.5-3.5l1-1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 16 16"><circle cx="4" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12" cy="8" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="i-export" viewBox="0 0 16 16"><path d="M8 2v8M4.5 5.5L8 2l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 10v3h10v-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+
+    <!-- Sidebar -->
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="17" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15 15c3 0 6 1.5 6 5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18h11a4 4 0 000-8 6 6 0 00-11.6-1A4 4 0 007 18z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 4v16" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6V3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 9h3.5a2 2 0 010 4H10v-4zM10 13h4a2 2 0 010 4h-4v-4zM12 6v2M12 16v2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 10h18M8 3v4M16 3v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 2-2.5 2-2.5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="17" r="0.9" fill="currentColor"/></symbol>
+
+    <!-- Platform icons -->
+    <symbol id="p-ig" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor"/></symbol>
+    <symbol id="p-tt" viewBox="0 0 24 24"><path d="M14 3v9.5a3.5 3.5 0 11-3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3c.5 2.5 2.5 4.5 5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="p-yt" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M10 9l5 3-5 3V9z" fill="currentColor"/></symbol>
+    <symbol id="p-twitch" viewBox="0 0 24 24"><path d="M4 3v14h4v4l4-4h4l5-5V3H4z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 8v5M15 8v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="p-patreon" viewBox="0 0 24 24"><circle cx="14" cy="10" r="6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="4" width="3" height="17" fill="currentColor"/></symbol>
+    <symbol id="p-twitter" viewBox="0 0 24 24"><path d="M4 4l7.5 10L4.5 20h2l6-6.5L17 20h3L12.5 10 19 4h-2l-5 5.5L8 4H4z" fill="currentColor"/></symbol>
+    <symbol id="p-discord" viewBox="0 0 24 24"><path d="M7 7c2-1 3-1.5 5-1.5S15 6 17 7c2 3 3 7 3 10-1.5 1-3 1.5-4.5 2l-1-2c-1 .5-2 .5-2.5.5s-1.5 0-2.5-.5l-1 2C7 18.5 5.5 18 4 17c0-3 1-7 3-10z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="10" cy="13" r="1.3" fill="currentColor"/><circle cx="14" cy="13" r="1.3" fill="currentColor"/></symbol>
+    <symbol id="p-clubhouse" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+    <symbol id="p-snap" viewBox="0 0 24 24"><path d="M12 3c-3 0-5 2-5 5 0 3-1 4-3 5 1 2 3 2 4 3 0 2 2 3 4 3s4-1 4-3c1-1 3-1 4-3-2-1-3-2-3-5 0-3-2-5-5-5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="p-fb" viewBox="0 0 24 24"><path d="M14 21v-8h2.5l.5-3H14V8c0-1 .3-1.5 1.5-1.5H17V4h-2.5C12 4 11 5.3 11 7.5V10H9v3h2v8h3z" fill="currentColor"/></symbol>
+    <symbol id="p-mastodon" viewBox="0 0 24 24"><path d="M6 4h12a2 2 0 012 2v8a4 4 0 01-4 4h-3l-1 2H9l-1-2H5a3 3 0 01-3-3V6a2 2 0 014-2z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M9 14V9a2 2 0 014 0v3M13 14V9a2 2 0 014 0v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="p-phone" viewBox="0 0 24 24"><path d="M5 4h4l2 4-2 1a10 10 0 006 6l1-2 4 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="p-spotify" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7 10c3-1 7-1 10 1M7.5 13c2.5-.5 6-.5 8.5 1M8 16c2-.5 4.5-.5 6.5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="p-wa" viewBox="0 0 24 24"><path d="M4 20l1.5-4a8 8 0 113 3L4 20z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 10c0 3 2 5 5 5l1-1.5 2 1v1c0 1-1 2-2 2-4 0-8-4-8-8 0-1 1-2 2-2l1 0 1 2-1.5 1z" fill="currentColor"/></symbol>
+    <symbol id="p-telegram" viewBox="0 0 24 24"><path d="M3 11l17-7-3 17-5-5-3 4v-5l10-8-12 6-4-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+    <symbol id="p-vk" viewBox="0 0 24 24"><path d="M3 7h3l3 6V7h2v10h-2l-4-4-2 4H3V7zM14 7h2l1 4 2-4h2l-3 5 3 5h-2l-2-4-1 4h-2V7z" fill="currentColor"/></symbol>
+    <symbol id="p-x" viewBox="0 0 24 24"><path d="M4 4l7.5 10L4.5 20h2l6-6.5L17 20h3L12.5 10 19 4h-2l-5 5.5L8 4H4z" fill="currentColor"/></symbol>
+    <symbol id="p-li" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7" cy="8" r="1.3" fill="currentColor"/><path d="M6 11v7h2v-7H6zM10 11v7h2v-3.5c0-1 .5-2 1.8-2s1.7 1 1.7 2V18h2v-4c0-2-1.3-3-3-3s-2.2 1-2.5 1.5V11h-2z" fill="currentColor"/></symbol>
+    <symbol id="p-tumblr" viewBox="0 0 24 24"><path d="M11 4v4H8v4h3v5a3 3 0 003 3h3v-4h-2c-.5 0-1-.5-1-1v-3h3V8h-3V4h-3z" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- ── Sidebar ───────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="logo">T</div>
+    <button class="nav-btn active" title="Discovery"><svg><use href="#i-users"/></svg></button>
+    <button class="nav-btn" title="Lists"><svg><use href="#i-cloud"/></svg></button>
+    <button class="nav-btn" title="AI insights"><svg><use href="#i-spark"/></svg></button>
+    <button class="nav-btn" title="Campaigns"><svg><use href="#i-board"/></svg></button>
+    <button class="nav-btn" title="Reports"><svg><use href="#i-doc"/></svg></button>
+    <button class="nav-btn" title="Payments"><svg><use href="#i-coin"/></svg></button>
+    <div class="spacer"></div>
+    <button class="nav-btn" title="Calendar"><svg><use href="#i-cal"/></svg></button>
+    <button class="nav-btn" title="Help"><svg><use href="#i-help"/></svg></button>
+  </aside>
+
+  <!-- ── Main ──────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="crumbs">
+        <b>Discovery</b>
+        <span class="sep">/</span>
+        <span>Creator search</span>
+      </div>
+      <div class="spacer"></div>
+      <button class="chip-btn">
+        <span style="width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7C3AED,#2563EB);border-radius:3px;color:#fff;font-size:9px;font-weight:800;">✦</span>
+        Ask Chat
+      </button>
+    </div>
+
+    <!-- Content -->
+    <main class="content">
+
+      <!-- Filter card -->
+      <section class="filter-card">
+
+        <!-- Primary row -->
+        <div class="primary-row">
+          <div class="search-mode" title="Visual search">
+            <span class="icn"><svg><use href="#i-cam"/></svg></span>
+            <svg class="caret" width="12" height="12"><use href="#i-caret"/></svg>
+          </div>
+
+          <button class="dd ai">
+            <span class="label">
+              <span style="color:var(--primary);font-weight:600;">✦</span>
+              Search with AI/Keywords
+            </span>
+            <svg class="caret"><use href="#i-caret"/></svg>
+          </button>
+
+          <div class="search-input">
+            <input placeholder="Find creators by content—one niche at a time (e.g. 'Plant-based recipes')" />
+          </div>
+
+          <button class="search-btn" title="Search"><svg><use href="#i-search"/></svg></button>
+
+          <button class="dd type-dd">
+            <span class="label">Type</span>
+            <svg class="caret"><use href="#i-caret"/></svg>
+          </button>
+        </div>
+
+        <!-- Row 2 -->
+        <div class="filter-row">
+          <button class="dd"><span class="label">Location</span><svg class="caret"><use href="#i-caret"/></svg></button>
+          <button class="dd"><span class="label">Followers</span><svg class="caret"><use href="#i-caret"/></svg></button>
+          <button class="dd"><span class="label">Last Post</span><svg class="caret"><use href="#i-caret"/></svg></button>
+          <button class="dd"><span class="label">Engagement Rate</span><svg class="caret"><use href="#i-caret"/></svg></button>
+          <button class="dd"><span class="label">Gender</span><svg class="caret"><use href="#i-caret"/></svg></button>
+          <button class="dd"><span class="label">Language</span><svg class="caret"><use href="#i-caret"/></svg></button>
+        </div>
+
+        <!-- See fewer/more toggle -->
+        <div class="see-toggle">
+          <button id="see-toggle">
+            <span>See fewer</span>
+            <span class="bar"></span>
+          </button>
+        </div>
+
+        <!-- Advanced filters (expanded by default) -->
+        <div id="advanced">
+
+          <!-- CREATOR -->
+          <div class="filter-section">
+            <div class="section-label">Creator</div>
+            <div class="grid-4">
+              <button class="dd"><span class="label">Link in bio contains</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Keywords in bio</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Estimated Income</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd has-info"><span class="label"><span class="cbox"></span>Exclude Private Profiles</span><svg class="info"><use href="#i-info"/></svg></button>
+            </div>
+            <div class="grid-4">
+              <button class="dd has-info"><span class="label"><span class="cbox"></span>Verified Profile</span><svg class="info"><use href="#i-info"/></svg></button>
+              <button class="dd"><span class="label">Follower Growth</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Posting Frequency</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Number of posts</span><svg class="caret"><use href="#i-caret"/></svg></button>
+            </div>
+          </div>
+
+          <!-- AUDIENCE -->
+          <div class="filter-section">
+            <div class="section-label">Audience</div>
+            <div class="grid-4">
+              <button class="dd"><span class="label">Age Range</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Interests</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Brand Category</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Audience Credibility</span><svg class="caret"><use href="#i-caret"/></svg></button>
+            </div>
+          </div>
+
+          <!-- CONTENT -->
+          <div class="filter-section">
+            <div class="section-label">Content</div>
+            <div class="grid-4">
+              <button class="dd"><span class="label">Hashtags</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Keywords in captions</span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd has-info"><span class="label"><span class="cbox"></span>Has Reels <span style="color:var(--muted);font-weight:400;">(Has Videos Previously)</span></span><svg class="info"><use href="#i-info"/></svg></button>
+              <button class="dd"><span class="label">Reels %</span><svg class="caret"><use href="#i-caret"/></svg></button>
+            </div>
+            <div class="grid-4">
+              <button class="dd"><span class="label">Avg. Views for Reels <span style="color:var(--muted);font-weight:400;">(last 30 reels)</span></span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Average Likes <span style="color:var(--muted);font-weight:400;">(last 30 posts)</span></span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Average Comments <span style="color:var(--muted);font-weight:400;">(last 30 posts)</span></span><svg class="caret"><use href="#i-caret"/></svg></button>
+              <button class="dd"><span class="label">Tagged Profiles</span><svg class="caret"><use href="#i-caret"/></svg></button>
+            </div>
+          </div>
+
+          <!-- CREATOR HAS -->
+          <div class="has-row">
+            <div class="label">Creator has</div>
+            <div class="platform-row">
+              <button class="platform-btn active" title="Instagram"><svg><use href="#p-ig"/></svg></button>
+              <button class="platform-btn" title="TikTok"><svg><use href="#p-tt"/></svg></button>
+              <button class="platform-btn" title="YouTube"><svg><use href="#p-yt"/></svg></button>
+              <button class="platform-btn" title="Twitch"><svg><use href="#p-twitch"/></svg></button>
+              <button class="platform-btn" title="Patreon"><svg><use href="#p-patreon"/></svg></button>
+              <button class="platform-btn" title="Twitter"><svg><use href="#p-twitter"/></svg></button>
+              <button class="platform-btn" title="Discord"><svg><use href="#p-discord"/></svg></button>
+              <button class="platform-btn" title="Clubhouse"><svg><use href="#p-clubhouse"/></svg></button>
+              <button class="platform-btn" title="Snapchat"><svg><use href="#p-snap"/></svg></button>
+              <button class="platform-btn" title="Facebook"><svg><use href="#p-fb"/></svg></button>
+              <button class="platform-btn" title="Mastodon"><svg><use href="#p-mastodon"/></svg></button>
+              <button class="platform-btn" title="Phone"><svg><use href="#p-phone"/></svg></button>
+              <button class="platform-btn" title="Spotify"><svg><use href="#p-spotify"/></svg></button>
+              <button class="platform-btn" title="WhatsApp"><svg><use href="#p-wa"/></svg></button>
+              <button class="platform-btn" title="Telegram"><svg><use href="#p-telegram"/></svg></button>
+              <button class="platform-btn" title="VK"><svg><use href="#p-vk"/></svg></button>
+              <button class="platform-btn" title="X"><svg><use href="#p-x"/></svg></button>
+              <button class="platform-btn" title="LinkedIn"><svg><use href="#p-li"/></svg></button>
+              <button class="platform-btn" title="Tumblr"><svg><use href="#p-tumblr"/></svg></button>
+              <button class="more-btn">More <svg width="12" height="12"><use href="#i-caret"/></svg></button>
+            </div>
+          </div>
+
+          <!-- Save row -->
+          <div class="save-row">
+            <button class="btn-save"><svg class="icon-sm"><use href="#i-save"/></svg> Save Filters</button>
+            <button class="btn-preset"><svg class="icon-sm"><use href="#i-bookmark"/></svg> Filters Preset <svg width="12" height="12"><use href="#i-caret"/></svg></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results -->
+      <section class="results-card">
+        <div class="results-head">
+          <div class="count-pill"><b>341.8M</b> <span class="muted">Creators with contact details found</span></div>
+          <button class="sort-dd">Show me <b>Most Relevant</b> <svg><use href="#i-caret"/></svg></button>
+          <div class="spacer"></div>
+          <button class="menu-btn"><svg width="16" height="16"><use href="#i-dots"/></svg></button>
+          <button class="btn-export"><svg class="icon-sm"><use href="#i-export"/></svg> Export Results to a List</button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="results">
+            <thead>
+              <tr>
+                <th class="th-select"><span class="check"></span></th>
+                <th>Select all on page (341.8M)</th>
+                <th class="center">Social Links</th>
+                <th>Followers</th>
+                <th>Email</th>
+                <th>ER <svg width="11" height="11" style="color:var(--muted-2);vertical-align:-1px;"><use href="#i-info"/></svg></th>
+                <th>Growth</th>
+                <th>External Links Used</th>
+                <th>Frequently used hashtags</th>
+              </tr>
+            </thead>
+            <tbody id="results-body"></tbody>
+          </table>
+        </div>
+
+        <div class="unlock-row">
+          <button class="unlock-btn">Unlock the next 10 results <svg class="icon-sm"><use href="#i-plus"/></svg></button>
+          <div class="unlock-note">Only available on Pro or higher plans</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<script>
+  /* ── Data ──────────────────────────────────────────── */
+  const CREATORS = [
+    { name: 'John Harris',     loc: 'United States',               verified: true,  platform: 'ig', followers: '119.2K', er: '0.94%',  growth: '+0.57%',  growthDir: 'up',   links: 2,  tags: ['#5percentnu...', '#loveitkill...'], more: 8,  avatarColor: '#7C3AED' },
+    { name: 'ElifVolkanOkay',  loc: 'United States',               verified: false, platform: 'ig', followers: '129.3K', er: '3.44%',  growth: '—',       growthDir: 'flat', links: 24, tags: ['#juryinspir...', '#baginbag'], more: 8, avatarColor: '#F59E0B' },
+    { name: 'Vicente Gutierrez', loc: 'Berlin, Germany',           verified: true,  platform: 'ig', followers: '92.3K',  er: '0.01%',  growth: '-1.53%',  growthDir: 'down', links: 1,  tags: ['#instagramt...', '#instagramg...'], more: 8, avatarColor: '#0F172A' },
+    { name: 'Laura Dawson',    loc: 'United Kingdom',              verified: true,  platform: 'ig', followers: '10.3K',  er: '5.84%',  growth: '+2.58%',  growthDir: 'up',   links: 1,  tags: ['#dubai', '#shein'], more: 8, avatarColor: '#EC4899' },
+    { name: 'Hari',            loc: 'Queens, New York, United States', verified: false, platform: 'ig', followers: '510.5K', er: '0.10%', growth: '+26.82%', growthDir: 'up', links: 1, tags: [], more: 0, avatarColor: '#2563EB' },
+  ];
+
+  const LOCKED = [
+    { name: 'Megan Wain', loc: '', verified: true, platform: 'ig', followers: '250K', er: '3.5%', growth: '+1.2%', growthDir: 'up', links: 10, tags: ['#fitness', '#sports', '#coach'], more: 0, avatarColor: '#0EA5E9' },
+  ];
+
+  function initials(name) {
+    return name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  }
+
+  function sparklinePath(dir) {
+    if (dir === 'flat') return null;
+    if (dir === 'up')   return { d: 'M2 14 L10 12 L18 13 L26 9 L34 8 L42 5 L50 3', color: '#059669' };
+    if (dir === 'down') return { d: 'M2 5 L10 7 L18 6 L26 10 L34 11 L42 13 L50 15', color: '#DC2626' };
+    return null;
+  }
+
+  function renderRow(c, locked = false) {
+    const sp = sparklinePath(c.growthDir);
+    const spark = c.growthDir === 'flat'
+      ? '<span style="color:var(--muted);font-size:16px;line-height:1;">—</span>'
+      : sp ? `<svg class="spark" viewBox="0 0 52 18" fill="none"><path d="${sp.d}" stroke="${sp.color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>` : '';
+
+    const growthCls = c.growthDir === 'up' ? 'pos' : c.growthDir === 'down' ? 'neg' : 'flat';
+    const growthTxt = c.growth !== '—' ? `<span class="growth-val ${growthCls}">${c.growth}</span>` : '';
+
+    const tagsHtml = c.tags.length
+      ? `<div class="tags">${c.tags.map(t => `<span class="tag">${t}</span>`).join('')}${c.more ? `<span class="tag more">+${c.more}</span>` : ''}</div>`
+      : '';
+
+    return `
+      <tr class="${locked ? 'locked' : ''}">
+        <td class="th-select"><span class="check"></span></td>
+        <td>
+          <div class="creator">
+            <div class="avatar" style="background:${c.avatarColor}">${initials(c.name)}</div>
+            <div class="creator-info">
+              <div class="creator-name">${c.name}${c.verified ? '<svg class="verified"><use href="#i-verified"/></svg>' : ''}</div>
+              ${c.loc ? `<div class="creator-loc">${c.loc}</div>` : ''}
+            </div>
+          </div>
+        </td>
+        <td class="social-cell"><span class="social-icon"><svg width="16" height="16"><use href="#p-${c.platform}"/></svg></span></td>
+        <td><span class="num">${c.followers}</span></td>
+        <td><span class="email-icon"><svg><use href="#i-mail"/></svg></span></td>
+        <td><span class="er">${c.er}</span></td>
+        <td><div class="growth-cell">${spark}${growthTxt}</div></td>
+        <td><span class="link-chip"><svg><use href="#i-link"/></svg>${c.links}</span></td>
+        <td>${tagsHtml}</td>
+      </tr>
+    `;
+  }
+
+  const body = document.getElementById('results-body');
+  body.innerHTML = CREATORS.map(c => renderRow(c)).join('') + LOCKED.map(c => renderRow(c, true)).join('');
+
+  /* ── See more / fewer toggle ──────────────────────── */
+  const toggle = document.getElementById('see-toggle');
+  const advanced = document.getElementById('advanced');
+  let expanded = true;
+  toggle.addEventListener('click', () => {
+    expanded = !expanded;
+    advanced.style.display = expanded ? '' : 'none';
+    toggle.querySelector('span:first-child').textContent = expanded ? 'See fewer' : 'See more';
+  });
+
+  /* ── Platform button toggle ───────────────────────── */
+  document.querySelectorAll('.platform-btn').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+  });
+
+  /* ── Row check toggle ─────────────────────────────── */
+  document.querySelectorAll('.check').forEach(c => {
+    c.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const checked = c.style.background === 'var(--primary)';
+      if (checked) {
+        c.style.background = '';
+        c.style.borderColor = '';
+      } else {
+        c.style.background = 'var(--primary)';
+        c.style.borderColor = 'var(--primary)';
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
