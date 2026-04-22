@@ -63,7 +63,7 @@ export function filterStateToSearchParams(state: FilterState): URLSearchParams {
 
   if (state.q && state.q !== '') params.set('q', state.q);
   if (state.searchMode !== 'ai') params.set('searchMode', state.searchMode);
-  if (state.type !== 'creators') params.set('type', state.type);
+  if (state.type !== 'any') params.set('type', state.type);
   if (state.searchOn !== 'instagram') params.set('searchOn', state.searchOn);
 
   const locations = encodeStringArray(state.locations);

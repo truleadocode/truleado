@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPin, Users, Clock, Activity, User, Languages } from 'lucide-react';
+import { MapPin, Users, Clock, Activity, User, Languages, Briefcase } from 'lucide-react';
 import { MultiSelectPopover } from '../filter-controls/multi-select-popover';
 import {
   RangePopover,
@@ -20,8 +20,12 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
   const locationsLookup = useDictionaryLookup('locations', state.searchOn);
   const languagesLookup = useDictionaryLookup('languages');
 
+  // Twitch doesn't support the IC `type` filter. Hide the Type pill when
+  // searching Twitch; mapper-side it's a no-op either way.
+  const showTypeFilter = state.searchOn !== 'twitch';
+
   return (
-    <div className="mt-2.5 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
+    <div className="mt-2.5 grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-7">
       <MultiSelectPopover
         label="Location"
         value={state.locations}
@@ -84,6 +88,21 @@ export function QuickFilterRow({ state, patch }: QuickFilterRowProps) {
         fetchOptions={languagesLookup}
         icon={<Languages className="h-3.5 w-3.5" />}
       />
+
+      {showTypeFilter ? (
+        <EnumSelectPopover
+          label="Type"
+          defaultValue="any"
+          options={[
+            { value: 'any', label: 'Any' },
+            { value: 'business', label: 'Business' },
+            { value: 'creator', label: 'Creator' },
+          ]}
+          value={state.type}
+          onChange={(v) => patch('type', v ?? 'any')}
+          icon={<Briefcase className="h-3.5 w-3.5" />}
+        />
+      ) : null}
     </div>
   );
 }

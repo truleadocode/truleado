@@ -48,7 +48,9 @@ export const filterSchema = z.object({
   // Primary row
   q: z.string().optional(),
   searchMode: z.enum(['ai', 'keywords', 'visual']).default('ai'),
-  type: z.enum(['creators', 'brands', 'hashtags']).default('creators'),
+  // Creator/business account type filter (IC `type` filter field on IG/YT/TT/Twitter).
+  // Not supported on Twitch.
+  type: z.enum(['any', 'business', 'creator']).default('any'),
   searchOn: z.enum(searchPlatforms).default('instagram'),
 
   // Quick filter row

@@ -53,6 +53,25 @@ describe('toIcDiscoveryArgs — primary row routing', () => {
   });
 });
 
+describe('toIcDiscoveryArgs — type (business/creator)', () => {
+  it('"any" is NOT sent (dropped under platformFilters)', () => {
+    const { filters } = toIcDiscoveryArgs(defaultFilterState);
+    expect(filters.platformFilters).toBeUndefined();
+  });
+
+  it('"business" flows into platformFilters.type', () => {
+    const { filters } = toIcDiscoveryArgs(override({ type: 'business' }));
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.type).toBe('business');
+  });
+
+  it('"creator" flows into platformFilters.type', () => {
+    const { filters } = toIcDiscoveryArgs(override({ type: 'creator' }));
+    const pf = filters.platformFilters as Record<string, unknown>;
+    expect(pf.type).toBe('creator');
+  });
+});
+
 describe('toIcDiscoveryArgs — quick row', () => {
   it('locations and languages map to their canonical keys', () => {
     const { filters } = toIcDiscoveryArgs(

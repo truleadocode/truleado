@@ -12,8 +12,8 @@
  *   - `searchMode='ai'` routes the query to the top-level `aiSearch` field
  *     (only valid for 3–150 chars). `searchMode='keywords'` routes into
  *     `platformFilters.keywords_in_bio`. `visual` mode is not submitted.
- *   - `type='creators'` is the only supported type; non-default values are
- *     dropped (IC doesn't search brands/hashtags).
+ *   - `type` is the IC `type` filter field (business / creator). `any`
+ *     is dropped so IC treats the search as unconstrained.
  *
  * The output matches IC's `DiscoveryFilterInput` shape
  * (`src/lib/influencers-club/filters.ts`). Anything not in the canonical
@@ -111,6 +111,7 @@ export function toIcDiscoveryArgs(state: FilterState): IcDiscoveryArgs {
   }
 
   // Quick filter row
+  if (state.type !== 'any') platformFilters.type = state.type;
   if (state.locations.length > 0) out.locations = state.locations;
   if (state.languages.length > 0) out.profileLanguages = state.languages;
   const followers = toIcRange(state.followers);
