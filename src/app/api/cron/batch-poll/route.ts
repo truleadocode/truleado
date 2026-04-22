@@ -20,7 +20,8 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logActivity } from '@/lib/audit';
-import { refundCredits } from '@/lib/discovery/token-deduction';
+// refundCredits is referenced indirectly via reconcileAndRefund below;
+// no direct import is needed now that the legacy test re-export was removed.
 import {
   getBatchStatus,
   getBatchDownloadUrl,
@@ -309,5 +310,3 @@ async function reconcileAndRefund(
   }).catch(() => {});
 }
 
-// Re-export for tests that want a no-op to silence lint.
-export { refundCredits as __refundCreditsForTest };
