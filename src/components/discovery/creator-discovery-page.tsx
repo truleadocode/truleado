@@ -13,6 +13,8 @@ import { FloatingActionBar } from './results-card/floating-action-bar';
 import { AddToRosterDialog } from './dialogs/add-to-roster-dialog';
 import { CompareOverlapDialog } from './dialogs/compare-overlap-dialog';
 import { BatchEnrichmentDialog } from './dialogs/batch-enrichment-dialog';
+import { EnrichmentHistoryDrawer } from './dialogs/enrichment-history-drawer';
+import { TokenBalanceBanner } from './filter-card/token-balance-banner';
 import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator, type SavedSearch } from './hooks';
 import { useFilterState } from './state/url-state';
 import { toIcDiscoveryArgs } from './state/filter-mapper';
@@ -43,6 +45,7 @@ export function CreatorDiscoveryPage() {
   const [rosterDialogOpen, setRosterDialogOpen] = useState(false);
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
   const [batchDialogOpen, setBatchDialogOpen] = useState(false);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
 
   const { searchOn, filters } = useMemo(() => toIcDiscoveryArgs(state), [state]);
   const agencyId = currentAgency?.id;
@@ -219,6 +222,9 @@ export function CreatorDiscoveryPage() {
         <p className="mt-1 text-sm text-tru-slate-500">
           Search 300M+ creators across Instagram, YouTube, TikTok, Twitter, and Twitch.
         </p>
+        <div className="mt-3">
+          <TokenBalanceBanner agencyId={agencyId} />
+        </div>
       </div>
 
       <FilterCard
@@ -253,9 +259,7 @@ export function CreatorDiscoveryPage() {
         onReset={handleReset}
         onForceRefresh={handleForceRefresh}
         onBatchEnrich={() => setBatchDialogOpen(true)}
-        onOpenHistory={() =>
-          toast({ title: 'Enrichment history', description: 'Coming in Phase F9.' })
-        }
+        onOpenHistory={() => setHistoryDrawerOpen(true)}
       />
 
       <SaveFiltersDialog
@@ -295,6 +299,11 @@ export function CreatorDiscoveryPage() {
       <BatchEnrichmentDialog
         open={batchDialogOpen}
         onOpenChange={setBatchDialogOpen}
+        agencyId={agencyId}
+      />
+      <EnrichmentHistoryDrawer
+        open={historyDrawerOpen}
+        onOpenChange={setHistoryDrawerOpen}
         agencyId={agencyId}
       />
 
