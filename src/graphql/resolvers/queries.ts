@@ -41,6 +41,10 @@ import {
   discoveryEstimateCost,
   discoveryDictionary,
 } from './queries/discovery';
+import {
+  creatorProfile,
+  creatorEnrichmentHistory,
+} from './queries/enrichment';
 
 export const queryResolvers = {
   /**
@@ -1636,6 +1640,12 @@ export const queryResolvers = {
   discoveryPricing,
   discoveryEstimateCost,
   discoveryDictionary,
+
+  // -----------------------------------------------
+  // Enrichment Queries (Phase C)
+  // -----------------------------------------------
+  creatorProfile,
+  creatorEnrichmentHistory,
 
   // -----------------------------------------------
   // Client Detail Queries

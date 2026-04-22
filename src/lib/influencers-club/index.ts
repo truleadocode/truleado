@@ -62,3 +62,23 @@ export {
   requireIcCredits,
 } from './credit-preflight';
 export type { AgencyPreflightResult } from './credit-preflight';
+
+// Phase C additions — enrichment + image mirror + normalizers
+export {
+  enrichHandleRaw,
+  enrichHandleFull,
+  enrichByEmail,
+  fetchConnectedSocials,
+} from './enrichment';
+export type { EnrichHandleArgs } from './enrichment';
+export {
+  mirrorCreatorPicture,
+  mirrorAndPersist,
+} from './image-mirror';
+export type { MirrorPictureArgs, MirrorPictureResult } from './image-mirror';
+export {
+  normalizeDiscoveryAccount,
+  normalizeDiscoveryResponse,
+  normalizeFullEnrichmentToProfile,
+} from './normalize';
+export type { NormalizedFullEnrichment } from './normalize';

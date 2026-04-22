@@ -97,6 +97,11 @@ import {
   updateDiscoverySearch,
 } from './discovery';
 import {
+  enrichCreator,
+  enrichCreatorByEmail,
+  findConnectedSocials,
+} from './enrichment';
+import {
   createProjectNote,
   updateProjectNote,
   deleteProjectNote,
@@ -244,6 +249,11 @@ export const mutationResolvers = {
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
+
+  // Enrichment (Phase C)
+  enrichCreator,
+  enrichCreatorByEmail,
+  findConnectedSocials,
 
   // Project Notes
   createProjectNote,

@@ -1731,6 +1731,26 @@ export const typeDefs = gql`
     discoveryDictionary(type: String!, query: String, platform: DiscoveryPlatform): JSON
 
     # ---------------------------------------------
+    # Enrichment (Phase C) — global creator profile cache
+    # ---------------------------------------------
+
+    # Look up a cached creator profile by platform + handle (username).
+    # Returns the global row; any agency user can read. Does NOT call IC or
+    # deduct credits. Use enrichCreator mutation to refresh/force-enrich.
+    creatorProfile(platform: DiscoveryPlatform!, handle: String!): CreatorProfile
+
+    # Paginated log of enrichments paid for by this agency, across all modes.
+    # cache_hit=true rows are those where Truleado served cached data but
+    # still charged the agency (margin model).
+    creatorEnrichmentHistory(
+      agencyId: ID!
+      mode: EnrichmentMode
+      platform: DiscoveryPlatform
+      limit: Int
+      offset: Int
+    ): [CreatorEnrichment!]!
+
+    # ---------------------------------------------
     # Creator Portal Queries
     # ---------------------------------------------
 
@@ -2413,8 +2433,33 @@ export const typeDefs = gql`
 
     # discoveryUnlock and discoveryExport removed in migration to Influencers.club.
     # IC has no "hidden result" concept — discovery already returns visible
-    # (but minimal) profiles. To get full profile data, call enrichCreator
-    # (Phase C). Batch exports are replaced by createEnrichmentBatchJob (Phase D).
+    # (but minimal) profiles. Use enrichCreator below for full profile data,
+    # or createEnrichmentBatchJob (Phase D) for bulk enrichment.
+
+    # Enrich a single creator (raw | full | full_with_audience).
+    # If a fresh cached profile exists (TTL: raw 30d / full 14d / full+audience 30d)
+    # and its mode >= requested, the agency is charged full credits but no IC
+    # call is made (margin-on-cache-hit model). forceRefresh bypasses the cache.
+    enrichCreator(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handle: String!
+      mode: EnrichmentMode!
+      forceRefresh: Boolean
+      emailRequired: String
+    ): CreatorEnrichment!
+
+    # Enrich by email address. IC returns only the strongest-platform account
+    # (highest followers). Costs 0.05 IC / 2 Truleado credits.
+    enrichCreatorByEmail(agencyId: ID!, email: String!): CreatorEnrichment!
+
+    # Cross-platform identity resolution. Returns all verified accounts for
+    # a given creator handle. Costs 0.50 IC / 15 Truleado credits.
+    findConnectedSocials(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handle: String!
+    ): [CreatorIdentity!]!
 
     # Import influencers to creator database (token-gated)
     discoveryImportToCreators(

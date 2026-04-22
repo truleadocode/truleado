@@ -93,9 +93,12 @@ export enum Permission {
 
   // Discovery permissions
   DISCOVERY_SEARCH = 'discovery_search',
-  DISCOVERY_UNLOCK = 'discovery_unlock',
-  DISCOVERY_EXPORT = 'discovery_export',
+  DISCOVERY_UNLOCK = 'discovery_unlock', // legacy (OnSocial) — retained for read-only UI during migration
+  DISCOVERY_EXPORT = 'discovery_export', // legacy (OnSocial) — same
   DISCOVERY_IMPORT = 'discovery_import',
+  DISCOVERY_ENRICH = 'discovery_enrich', // Phase C — IC enrichment (raw/full/email/connected_socials)
+  DISCOVERY_BATCH = 'discovery_batch',   // Phase D — batch enrichment jobs
+  DISCOVERY_OVERLAP = 'discovery_overlap', // Phase E — audience overlap reports
 }
 
 /**
