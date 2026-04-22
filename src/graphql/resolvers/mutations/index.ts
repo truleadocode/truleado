@@ -107,6 +107,11 @@ import {
   resumeEnrichmentBatchJob,
 } from './batch';
 import {
+  fetchCreatorPosts,
+  fetchPostDetailsResolver,
+} from './content';
+import { computeAudienceOverlap } from './audience';
+import {
   createProjectNote,
   updateProjectNote,
   deleteProjectNote,
@@ -264,6 +269,11 @@ export const mutationResolvers = {
   createEnrichmentBatchJob,
   cancelEnrichmentBatchJob,
   resumeEnrichmentBatchJob,
+
+  // Content + audience overlap (Phase E)
+  fetchCreatorPosts,
+  fetchPostDetails: fetchPostDetailsResolver,
+  computeAudienceOverlap,
 
   // Project Notes
   createProjectNote,

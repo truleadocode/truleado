@@ -1766,6 +1766,18 @@ export const typeDefs = gql`
     enrichmentBatchJob(id: ID!): EnrichmentBatchJob
 
     # ---------------------------------------------
+    # Audience Overlap (Phase E)
+    # ---------------------------------------------
+
+    # Cached overlap reports for an agency, most recent first.
+    audienceOverlapReports(
+      agencyId: ID!
+      platform: DiscoveryPlatform
+      limit: Int
+      offset: Int
+    ): [AudienceOverlapReport!]!
+
+    # ---------------------------------------------
     # Creator Portal Queries
     # ---------------------------------------------
 
@@ -2498,6 +2510,39 @@ export const typeDefs = gql`
     # Resume a batch paused due to IC credit exhaustion (after Truleado
     # tops up the IC account). Calls POST /enrichment/batch/{id}/resume/.
     resumeEnrichmentBatchJob(id: ID!): EnrichmentBatchJob!
+
+    # Fetch a creator's recent posts (Instagram / TikTok / YouTube only).
+    # Costs 0.03 IC / 1 Truleado credit per page. Results are upserted into
+    # the global creator_posts cache. Pagination is cursor-based via
+    # paginationToken returned in the response JSON.
+    fetchCreatorPosts(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handle: String!
+      count: Int
+      paginationToken: String
+    ): JSON!
+
+    # Fetch post-level details (data | comments | transcript | audio).
+    # Note: audio is NOT supported on YouTube. Costs 0.03 IC / 1 Truleado
+    # credit per request.
+    fetchPostDetails(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      postId: String!
+      contentType: String!
+      paginationToken: String
+    ): JSON!
+
+    # Compute audience overlap for 2..10 creators on the same platform.
+    # Flat 1 IC / 20 Truleado credit cost. Cached per agency on
+    # md5(sorted lowercase handles). forceRefresh bypasses.
+    computeAudienceOverlap(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handles: [String!]!
+      forceRefresh: Boolean
+    ): AudienceOverlapReport!
 
     # Import influencers to creator database (token-gated)
     discoveryImportToCreators(

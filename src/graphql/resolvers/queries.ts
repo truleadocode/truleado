@@ -49,6 +49,7 @@ import {
   enrichmentBatchJobs,
   enrichmentBatchJob,
 } from './queries/batch';
+import { audienceOverlapReports } from './queries/audience';
 
 export const queryResolvers = {
   /**
@@ -1656,6 +1657,11 @@ export const queryResolvers = {
   // -----------------------------------------------
   enrichmentBatchJobs,
   enrichmentBatchJob,
+
+  // -----------------------------------------------
+  // Audience Overlap Queries (Phase E)
+  // -----------------------------------------------
+  audienceOverlapReports,
 
   // -----------------------------------------------
   // Client Detail Queries

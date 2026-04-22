@@ -101,3 +101,13 @@ export {
   TERMINAL_STATUSES,
 } from './batch-helpers';
 // BatchJobStatus is defined in ./domain and already exported above (Phase A).
+
+// Phase E additions — content + audience overlap
+export { fetchPosts, fetchPostDetails, POST_COUNT_LIMITS } from './content';
+export type { FetchPostsArgs, FetchPostDetailsArgs } from './content';
+export {
+  audienceOverlap,
+  computeHandlesHash,
+  normalizeHandlesForHash,
+} from './audience';
+export type { AudienceOverlapArgs } from './audience';
