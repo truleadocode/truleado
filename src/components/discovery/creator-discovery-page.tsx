@@ -12,6 +12,7 @@ import { CreatorDetailSheet } from './creator-detail-sheet';
 import { FloatingActionBar } from './results-card/floating-action-bar';
 import { AddToRosterDialog } from './dialogs/add-to-roster-dialog';
 import { CompareOverlapDialog } from './dialogs/compare-overlap-dialog';
+import { BatchEnrichmentDialog } from './dialogs/batch-enrichment-dialog';
 import { useDiscoverySearch, useRefreshDiscoverySearch, type DiscoveryCreator, type SavedSearch } from './hooks';
 import { useFilterState } from './state/url-state';
 import { toIcDiscoveryArgs } from './state/filter-mapper';
@@ -41,6 +42,7 @@ export function CreatorDiscoveryPage() {
   const [detailCreator, setDetailCreator] = useState<DiscoveryCreator | null>(null);
   const [rosterDialogOpen, setRosterDialogOpen] = useState(false);
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const [batchDialogOpen, setBatchDialogOpen] = useState(false);
 
   const { searchOn, filters } = useMemo(() => toIcDiscoveryArgs(state), [state]);
   const agencyId = currentAgency?.id;
@@ -250,6 +252,10 @@ export function CreatorDiscoveryPage() {
         onCopyLink={handleCopyLink}
         onReset={handleReset}
         onForceRefresh={handleForceRefresh}
+        onBatchEnrich={() => setBatchDialogOpen(true)}
+        onOpenHistory={() =>
+          toast({ title: 'Enrichment history', description: 'Coming in Phase F9.' })
+        }
       />
 
       <SaveFiltersDialog
@@ -285,6 +291,11 @@ export function CreatorDiscoveryPage() {
         onOpenChange={setCompareDialogOpen}
         agencyId={agencyId}
         creators={selectedArray}
+      />
+      <BatchEnrichmentDialog
+        open={batchDialogOpen}
+        onOpenChange={setBatchDialogOpen}
+        agencyId={agencyId}
       />
 
       <FloatingActionBar

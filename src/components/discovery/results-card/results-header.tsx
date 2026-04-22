@@ -1,6 +1,6 @@
 'use client';
 
-import { MoreVertical, UserPlus, Loader2 } from 'lucide-react';
+import { MoreVertical, UserPlus, Loader2, FileUp, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -20,6 +20,8 @@ interface ResultsHeaderProps {
   onCopyLink: () => void;
   onReset: () => void;
   onForceRefresh: () => void;
+  onBatchEnrich: () => void;
+  onOpenHistory: () => void;
 }
 
 /**
@@ -34,6 +36,8 @@ export function ResultsHeader({
   onCopyLink,
   onReset,
   onForceRefresh,
+  onBatchEnrich,
+  onOpenHistory,
 }: ResultsHeaderProps) {
   return (
     <header className="flex items-center gap-4 border-b border-tru-border-soft px-[18px] py-3.5">
@@ -72,7 +76,7 @@ export function ResultsHeader({
             <MoreVertical className="h-4 w-4" />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuItem onClick={onSaveView} className="text-sm">
             Save view
           </DropdownMenuItem>
@@ -81,6 +85,13 @@ export function ResultsHeader({
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onForceRefresh} className="text-sm">
             Force refresh
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={onBatchEnrich} className="text-sm">
+            <FileUp className="mr-2 h-3.5 w-3.5" /> Batch enrich (CSV)
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onOpenHistory} className="text-sm">
+            <History className="mr-2 h-3.5 w-3.5" /> Enrichment history
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={onReset} className="text-sm text-tru-slate-600">

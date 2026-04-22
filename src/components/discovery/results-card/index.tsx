@@ -22,6 +22,8 @@ interface ResultsCardProps {
   onCopyLink: () => void;
   onReset: () => void;
   onForceRefresh: () => void;
+  onBatchEnrich: () => void;
+  onOpenHistory: () => void;
 }
 
 export function ResultsCard({
@@ -41,6 +43,8 @@ export function ResultsCard({
   onCopyLink,
   onReset,
   onForceRefresh,
+  onBatchEnrich,
+  onOpenHistory,
 }: ResultsCardProps) {
   return (
     <section
@@ -56,6 +60,8 @@ export function ResultsCard({
         onCopyLink={onCopyLink}
         onReset={onReset}
         onForceRefresh={onForceRefresh}
+        onBatchEnrich={onBatchEnrich}
+        onOpenHistory={onOpenHistory}
       />
 
       {isError ? (
