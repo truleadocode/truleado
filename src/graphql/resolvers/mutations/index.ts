@@ -102,6 +102,11 @@ import {
   findConnectedSocials,
 } from './enrichment';
 import {
+  createEnrichmentBatchJob,
+  cancelEnrichmentBatchJob,
+  resumeEnrichmentBatchJob,
+} from './batch';
+import {
   createProjectNote,
   updateProjectNote,
   deleteProjectNote,
@@ -254,6 +259,11 @@ export const mutationResolvers = {
   enrichCreator,
   enrichCreatorByEmail,
   findConnectedSocials,
+
+  // Batch enrichment (Phase D)
+  createEnrichmentBatchJob,
+  cancelEnrichmentBatchJob,
+  resumeEnrichmentBatchJob,
 
   // Project Notes
   createProjectNote,

@@ -1751,6 +1751,21 @@ export const typeDefs = gql`
     ): [CreatorEnrichment!]!
 
     # ---------------------------------------------
+    # Batch Enrichment (Phase D)
+    # ---------------------------------------------
+
+    # List an agency's batch enrichment jobs (most recent first).
+    enrichmentBatchJobs(
+      agencyId: ID!
+      status: BatchJobStatus
+      limit: Int
+      offset: Int
+    ): [EnrichmentBatchJob!]!
+
+    # Fetch a single batch job by ID (agency-scoped).
+    enrichmentBatchJob(id: ID!): EnrichmentBatchJob
+
+    # ---------------------------------------------
     # Creator Portal Queries
     # ---------------------------------------------
 
@@ -2460,6 +2475,29 @@ export const typeDefs = gql`
       platform: DiscoveryPlatform!
       handle: String!
     ): [CreatorIdentity!]!
+
+    # Submit a batch enrichment job. csvStorageKey points to a file in the
+    # batch-inputs private Supabase bucket (browser-uploaded). Credits are
+    # reserved up-front (total_rows * per-row cost) and reconciled when the
+    # job completes (refund difference).
+    createEnrichmentBatchJob(
+      agencyId: ID!
+      platform: DiscoveryPlatform
+      mode: BatchEnrichmentMode!
+      csvStorageKey: String!
+      includeAudienceData: Boolean
+      emailRequired: String
+      metadata: JSON
+    ): EnrichmentBatchJob!
+
+    # Cancel a batch job. Any non-terminal state -> cancelled. The IC job
+    # itself cannot be cancelled (IC has no such endpoint) — we simply stop
+    # polling and refund reserved credits that weren't yet consumed.
+    cancelEnrichmentBatchJob(id: ID!): EnrichmentBatchJob!
+
+    # Resume a batch paused due to IC credit exhaustion (after Truleado
+    # tops up the IC account). Calls POST /enrichment/batch/{id}/resume/.
+    resumeEnrichmentBatchJob(id: ID!): EnrichmentBatchJob!
 
     # Import influencers to creator database (token-gated)
     discoveryImportToCreators(

@@ -45,6 +45,10 @@ import {
   creatorProfile,
   creatorEnrichmentHistory,
 } from './queries/enrichment';
+import {
+  enrichmentBatchJobs,
+  enrichmentBatchJob,
+} from './queries/batch';
 
 export const queryResolvers = {
   /**
@@ -1646,6 +1650,12 @@ export const queryResolvers = {
   // -----------------------------------------------
   creatorProfile,
   creatorEnrichmentHistory,
+
+  // -----------------------------------------------
+  // Batch Enrichment Queries (Phase D)
+  // -----------------------------------------------
+  enrichmentBatchJobs,
+  enrichmentBatchJob,
 
   // -----------------------------------------------
   // Client Detail Queries

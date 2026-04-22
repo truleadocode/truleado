@@ -82,3 +82,22 @@ export {
   normalizeFullEnrichmentToProfile,
 } from './normalize';
 export type { NormalizedFullEnrichment } from './normalize';
+
+// Phase D additions — batch enrichment + state-machine helpers
+export {
+  createBatch,
+  getBatchStatus,
+  resumeBatch,
+  getBatchDownloadUrl,
+} from './batch';
+export type { BatchCreateArgs } from './batch';
+export {
+  icStatusToJobStatus,
+  canTransition,
+  isTerminal,
+  nextPollTime,
+  backoffPollTime,
+  POLL_ELIGIBLE_STATUSES,
+  TERMINAL_STATUSES,
+} from './batch-helpers';
+// BatchJobStatus is defined in ./domain and already exported above (Phase A).
