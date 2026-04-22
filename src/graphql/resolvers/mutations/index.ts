@@ -111,6 +111,7 @@ import {
   fetchPostDetailsResolver,
 } from './content';
 import { computeAudienceOverlap } from './audience';
+import { importCreatorsToAgency } from './import';
 import {
   createProjectNote,
   updateProjectNote,
@@ -274,6 +275,10 @@ export const mutationResolvers = {
   fetchCreatorPosts,
   fetchPostDetails: fetchPostDetailsResolver,
   computeAudienceOverlap,
+
+  // Import to creators roster (Phase G). The legacy discoveryImportToCreators
+  // above remains until the old UI is cut over; Phase H removes it.
+  importCreatorsToAgency,
 
   // Project Notes
   createProjectNote,

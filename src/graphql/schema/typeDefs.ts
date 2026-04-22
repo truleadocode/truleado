@@ -1221,6 +1221,24 @@ export const typeDefs = gql`
     fullname: String
   }
 
+  # Input for importCreatorsToAgency (Phase G). Prefer creatorProfileId
+  # when available — it means the profile was already paid for and import
+  # doesn't trigger another charge. Supply platform+handle when the caller
+  # only has minimal discovery data and wants us to enrich on their behalf.
+  input CreatorImportInput {
+    # Preferred path: the ID of a global creator_profiles row (e.g. from
+    # discoverySearch's creatorProfileId field).
+    creatorProfileId: ID
+
+    # Fallback: look up / enrich by handle. Required if creatorProfileId is null.
+    platform: DiscoveryPlatform
+    handle: String
+
+    # If no cached profile exists for (platform, handle), call
+    # enrichCreator(RAW) to create one. Defaults to true.
+    enrichIfMissing: Boolean
+  }
+
   # Input for importing influencers to creator database
   input DiscoveryImportInput {
     onsocialUserId: String!
@@ -2543,6 +2561,17 @@ export const typeDefs = gql`
       handles: [String!]!
       forceRefresh: Boolean
     ): AudienceOverlapReport!
+
+    # Import creators from Influencers.club into the agency's creator roster.
+    # Replaces discoveryImportToCreators. Each item either references a
+    # creatorProfileId directly (no charge — profile was already paid for)
+    # or supplies platform + handle; if no cached profile exists and
+    # enrichIfMissing is true (default), the resolver calls enrichCreator(RAW)
+    # which applies the margin-on-cache-hit model.
+    importCreatorsToAgency(
+      agencyId: ID!
+      items: [CreatorImportInput!]!
+    ): [Creator!]!
 
     # Import influencers to creator database (token-gated)
     discoveryImportToCreators(
