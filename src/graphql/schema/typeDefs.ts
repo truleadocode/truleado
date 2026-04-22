@@ -1113,74 +1113,6 @@ export const typeDefs = gql`
     TWITCH
   }
 
-  enum DiscoveryExportType {
-    SHORT
-    FULL
-  }
-
-  enum DiscoveryExportStatus {
-    PENDING
-    PROCESSING
-    COMPLETED
-    FAILED
-  }
-
-  # Search result influencer from OnSocial
-  type DiscoveryInfluencer {
-    userId: String!
-    username: String!
-    fullname: String
-    followers: Int
-    engagementRate: Float
-    engagements: Int
-    avgLikes: Int
-    avgViews: Int
-    isVerified: Boolean
-    picture: String
-    url: String
-    searchResultId: String!
-    isHidden: Boolean!
-    platform: DiscoveryPlatform!
-  }
-
-  # Paginated search results
-  type DiscoverySearchResult {
-    accounts: [DiscoveryInfluencer!]!
-    total: Int!
-  }
-
-  # Record of an unlocked influencer
-  type DiscoveryUnlock {
-    id: ID!
-    platform: String!
-    onsocialUserId: String!
-    searchResultId: String!
-    username: String
-    fullname: String
-    profileData: JSON
-    tokensSpent: Float!
-    unlockedBy: String!
-    unlockedAt: DateTime!
-    expiresAt: DateTime!
-  }
-
-  # Record of an export job
-  type DiscoveryExport {
-    id: ID!
-    platform: String!
-    exportType: DiscoveryExportType!
-    filterSnapshot: JSON
-    totalAccounts: Int!
-    tokensSpent: Float!
-    onsocialExportId: String
-    status: DiscoveryExportStatus!
-    downloadUrl: String
-    errorMessage: String
-    exportedBy: String!
-    createdAt: DateTime!
-    completedAt: DateTime
-  }
-
   # Saved search configuration
   type SavedSearch {
     id: ID!
@@ -1213,14 +1145,6 @@ export const typeDefs = gql`
     sufficientBalance: Boolean!
   }
 
-  # Input for unlocking search results (local, no OnSocial API call)
-  input DiscoveryUnlockInput {
-    onsocialUserId: String!
-    searchResultId: String!
-    username: String!
-    fullname: String
-  }
-
   # Input for importCreatorsToAgency (Phase G). Prefer creatorProfileId
   # when available — it means the profile was already paid for and import
   # doesn't trigger another charge. Supply platform+handle when the caller
@@ -1237,22 +1161,6 @@ export const typeDefs = gql`
     # If no cached profile exists for (platform, handle), call
     # enrichCreator(RAW) to create one. Defaults to true.
     enrichIfMissing: Boolean
-  }
-
-  # Input for importing influencers to creator database
-  input DiscoveryImportInput {
-    onsocialUserId: String!
-    username: String!
-    fullname: String
-    platform: DiscoveryPlatform!
-    email: String
-    phone: String
-    profilePicture: String
-    searchResultId: String
-    followers: Int
-    engagementRate: Float
-    avgLikes: Int
-    contactLinks: JSON
   }
 
   # =============================================================================
@@ -1729,12 +1637,6 @@ export const typeDefs = gql`
       limit: Int
       forceRefresh: Boolean
     ): CreatorSearchResult!
-
-    # Get unlock history for an agency
-    discoveryUnlocks(agencyId: ID!, platform: DiscoveryPlatform, limit: Int, offset: Int): [DiscoveryUnlock!]!
-
-    # Get export history for an agency
-    discoveryExports(agencyId: ID!, limit: Int, offset: Int): [DiscoveryExport!]!
 
     # Get saved search configurations for an agency
     savedSearches(agencyId: ID!): [SavedSearch!]!
@@ -2563,21 +2465,14 @@ export const typeDefs = gql`
     ): AudienceOverlapReport!
 
     # Import creators from Influencers.club into the agency's creator roster.
-    # Replaces discoveryImportToCreators. Each item either references a
-    # creatorProfileId directly (no charge — profile was already paid for)
-    # or supplies platform + handle; if no cached profile exists and
-    # enrichIfMissing is true (default), the resolver calls enrichCreator(RAW)
-    # which applies the margin-on-cache-hit model.
+    # Each item either references a creatorProfileId directly (no charge —
+    # profile was already paid for) or supplies platform + handle; if no
+    # cached profile exists and enrichIfMissing is true (default), the
+    # resolver calls enrichCreator(RAW) which applies the margin-on-cache-hit
+    # model.
     importCreatorsToAgency(
       agencyId: ID!
       items: [CreatorImportInput!]!
-    ): [Creator!]!
-
-    # Import influencers to creator database (token-gated)
-    discoveryImportToCreators(
-      agencyId: ID!
-      influencers: [DiscoveryImportInput!]!
-      withContact: Boolean
     ): [Creator!]!
 
     # Save a search configuration

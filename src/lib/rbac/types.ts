@@ -91,14 +91,12 @@ export enum Permission {
   // Activity log permissions
   VIEW_ACTIVITY_LOGS = 'view_activity_logs',
 
-  // Discovery permissions
+  // Discovery permissions (Influencers.club)
   DISCOVERY_SEARCH = 'discovery_search',
-  DISCOVERY_UNLOCK = 'discovery_unlock', // legacy (OnSocial) — retained for read-only UI during migration
-  DISCOVERY_EXPORT = 'discovery_export', // legacy (OnSocial) — same
   DISCOVERY_IMPORT = 'discovery_import',
-  DISCOVERY_ENRICH = 'discovery_enrich', // Phase C — IC enrichment (raw/full/email/connected_socials)
-  DISCOVERY_BATCH = 'discovery_batch',   // Phase D — batch enrichment jobs
-  DISCOVERY_OVERLAP = 'discovery_overlap', // Phase E — audience overlap reports
+  DISCOVERY_ENRICH = 'discovery_enrich',
+  DISCOVERY_BATCH = 'discovery_batch',
+  DISCOVERY_OVERLAP = 'discovery_overlap',
 }
 
 /**

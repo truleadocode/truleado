@@ -34,8 +34,6 @@ import {
 import {
   discoverySearch,
   similarCreators,
-  discoveryUnlocks,
-  discoveryExports,
   savedSearches,
   discoveryPricing,
   discoveryEstimateCost,
@@ -1639,8 +1637,6 @@ export const queryResolvers = {
   // -----------------------------------------------
   discoverySearch,
   similarCreators,
-  discoveryUnlocks,
-  discoveryExports,
   savedSearches,
   discoveryPricing,
   discoveryEstimateCost,
