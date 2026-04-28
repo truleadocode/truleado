@@ -41,6 +41,7 @@ import {
 } from './queries/discovery';
 import {
   creatorProfile,
+  creatorIdByProfileId,
   creatorEnrichmentHistory,
 } from './queries/enrichment';
 import {
@@ -1646,6 +1647,7 @@ export const queryResolvers = {
   // Enrichment Queries (Phase C)
   // -----------------------------------------------
   creatorProfile,
+  creatorIdByProfileId,
   creatorEnrichmentHistory,
 
   // -----------------------------------------------

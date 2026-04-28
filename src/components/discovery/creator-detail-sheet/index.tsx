@@ -1,7 +1,10 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
+import { TrendingUp } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
-import { useCreatorProfile, type DiscoveryCreator } from '../hooks';
+import { useToast } from '@/hooks/use-toast';
+import { useCreatorProfile, useEnrichCreator, type DiscoveryCreator } from '../hooks';
 import { Header } from './sections/header';
 import { ProfileInfo } from './sections/profile-info';
 import { PostsGrid } from './sections/posts-grid';
@@ -11,6 +14,7 @@ import { AudienceSection } from './sections/audience-section';
 import { SimilarAccordion } from './sections/similar-accordion';
 import { ConnectedAccordion } from './sections/connected-accordion';
 import { EnrichCta } from './sections/enrich-cta';
+import { Section } from './sections/section';
 
 interface CreatorDetailSheetProps {
   agencyId: string;
@@ -20,24 +24,58 @@ interface CreatorDetailSheetProps {
 }
 
 /**
- * Single scrolling sidebar (replaces the previous 5-tab layout). Sections
- * are stacked top-to-bottom in a deliberate reading order:
- *   1. Header                        — instant, from the search row
- *   2. Profile info                  — RAW enrichment data
- *   3. Recent posts                  — fetchCreatorPosts payload
- *   4. Approximated analytics        — client-side from posts
- *   5. Follower-growth (locked)      — unlocked by Full enrichment
- *   6. Audience demographics         — unlocked by Full+Audience
- *   7. Enrich CTA                    — single action that flips locks
- *   8. Similar / Connected (collapsed accordions)
+ * Single scrolling sidebar (replaces the previous 5-tab layout).
  *
- * Phase B keeps the existing 3-tier enrich UI inside `<EnrichCta>`. Auto-load
- * (Phase C), the analytics computation (D), and the single-CTA wiring (E)
- * land in subsequent commits.
+ * On open, two cheap-and-cached calls fire automatically:
+ *   - `enrichCreator(RAW)` if no enrichment exists for this creator (1 cr)
+ *   - `fetchCreatorPosts` first page (1 cr)
+ *
+ * Both go through the per-agency 30-day dedupe layer in Phase A — repeating
+ * an open inside the window costs the agency 0 credits, and a different
+ * agency pays our margin while still skipping the IC call.
  */
 export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: CreatorDetailSheetProps) {
+  const { toast } = useToast();
   const profileQuery = useCreatorProfile(creator?.platform, creator?.username);
   const profile = profileQuery.data ?? null;
+  const enrich = useEnrichCreator();
+
+  // Guard against re-firing RAW for the same creator within one session.
+  const autoEnrichedFor = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!creator || !open) return;
+    if (profileQuery.isLoading) return;
+
+    const key = `${creator.platform.toLowerCase()}::${creator.username.toLowerCase()}`;
+    if (autoEnrichedFor.current.has(key)) return;
+
+    const needsRaw = profile === null || profile.enrichmentMode === null;
+    if (!needsRaw) return;
+
+    autoEnrichedFor.current.add(key);
+    enrich.mutate(
+      { agencyId, platform: creator.platform, handle: creator.username, mode: 'RAW' },
+      {
+        onSuccess: (result) => {
+          if (result.cacheHit && result.creditsSpent === 0) {
+            toast({ title: 'Loaded from cache', description: 'No credits charged.' });
+          }
+        },
+        onError: () => {
+          // Allow a retry on the next open if this fails.
+          autoEnrichedFor.current.delete(key);
+        },
+      }
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creator?.providerUserId, open, profileQuery.isLoading, profile?.enrichmentMode]);
+
+  // Reset the guard when the sheet closes so the next open of the same
+  // creator (potentially after a cache TTL change) will re-evaluate.
+  useEffect(() => {
+    if (!open) autoEnrichedFor.current.clear();
+  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -46,16 +84,23 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
           <>
             <Header creator={creator} mirroredAvatar={profile?.profilePictureUrl ?? null} />
 
-            <ProfileInfo profile={profile} isLoading={profileQuery.isLoading} />
+            <ProfileInfo
+              profile={profile}
+              isLoading={profileQuery.isLoading || (enrich.isPending && profile === null)}
+            />
 
             <PostsGrid agencyId={agencyId} creator={creator} />
 
-            <ApproximatedAnalytics />
+            <ApproximatedAnalytics agencyId={agencyId} creator={creator} />
 
-            <LockedBlock
-              title="Follower growth"
-              description="12-month subscribers / followers trend."
-            />
+            {profile?.enrichmentMode === 'FULL' || profile?.enrichmentMode === 'FULL_WITH_AUDIENCE' ? (
+              <FollowerGrowthAvailable />
+            ) : (
+              <LockedBlock
+                title="Follower growth"
+                description="12-month subscribers / followers trend."
+              />
+            )}
 
             <AudienceSection profile={profile} />
 
@@ -68,5 +113,24 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
         ) : null}
       </SheetContent>
     </Sheet>
+  );
+}
+
+/**
+ * Stub shown once a creator is FULL or FULL_WITH_AUDIENCE enriched. Pointing
+ * to the Creator DB page where the actual chart will land in a later phase
+ * keeps the locked → unlocked transition visible without committing to the
+ * chart UI yet.
+ */
+function FollowerGrowthAvailable() {
+  return (
+    <Section title="Follower growth">
+      <div className="flex items-center gap-3 rounded-md border border-tru-border-soft bg-tru-slate-50 p-4 text-sm text-tru-slate-700">
+        <TrendingUp className="h-4 w-4 shrink-0 text-tru-success" />
+        <span>
+          12-month growth data is available — view it on the creator&apos;s Roster page.
+        </span>
+      </div>
+    </Section>
   );
 }

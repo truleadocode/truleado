@@ -1772,6 +1772,12 @@ export const queries = {
     }
   `,
 
+  creatorIdByProfileId: `
+    query CreatorIdByProfileId($agencyId: ID!, $creatorProfileId: ID!) {
+      creatorIdByProfileId(agencyId: $agencyId, creatorProfileId: $creatorProfileId)
+    }
+  `,
+
   creatorEnrichmentHistory: `
     query CreatorEnrichmentHistory(
       $agencyId: ID!, $mode: EnrichmentMode, $platform: DiscoveryPlatform,

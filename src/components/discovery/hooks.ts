@@ -347,6 +347,28 @@ export interface CreatorEnrichment {
   profile: CreatorProfile | null;
 }
 
+/**
+ * Resolves the agency's roster `creators` row id from a global creator
+ * profile. Returns null when the creator hasn't been imported yet.
+ */
+export function useCreatorIdByProfileId(
+  agencyId: string | undefined,
+  creatorProfileId: string | null | undefined
+) {
+  return useQuery<string | null>({
+    queryKey: ['creatorIdByProfileId', agencyId, creatorProfileId],
+    enabled: Boolean(agencyId && creatorProfileId),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const data = await graphqlRequest<{ creatorIdByProfileId: string | null }>(
+        queries.creatorIdByProfileId,
+        { agencyId, creatorProfileId }
+      );
+      return data.creatorIdByProfileId;
+    },
+  });
+}
+
 export function useCreatorProfile(platform: string | undefined, handle: string | undefined) {
   return useQuery({
     queryKey: ['creatorProfile', platform, handle],
@@ -431,23 +453,57 @@ export function useFindConnectedSocials() {
   });
 }
 
-export function useFetchCreatorPosts() {
-  return useMutation({
-    mutationFn: async (input: {
-      agencyId: string;
-      platform: string;
-      handle: string;
-      count?: number;
-      paginationToken?: string;
-    }) => {
-      const data = await graphqlRequest<{ fetchCreatorPosts: unknown }>(
+/**
+ * Resolver-side envelope of fetchCreatorPosts, plus the IC payload it wraps.
+ * The `cacheHit` and `creditsSpent` fields drive the "Loaded from cache" toast.
+ */
+export interface CreatorPostsResponse {
+  cacheHit: boolean;
+  creditsSpent: number;
+  credits_cost?: number;
+  result?: {
+    num_results?: number;
+    more_available?: boolean;
+    next_token?: string | null;
+    items?: Array<Record<string, unknown>>;
+  };
+}
+
+const CREATOR_POSTS_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Auto-loaded first page of a creator's posts. Backed by a React Query cache
+ * keyed on (agencyId, platform, handle) so reopening the same creator within
+ * the 30-day server-side TTL never refetches. Pagination ("load more") is a
+ * separate concern that the sidebar no longer surfaces — the preview shows
+ * only the latest page (12 IG / 30 TT-YT).
+ */
+export function useFetchCreatorPosts(input: {
+  agencyId: string | undefined;
+  platform: string | undefined;
+  handle: string | undefined;
+  enabled?: boolean;
+  count?: number;
+}) {
+  const platformLower = input.platform?.toLowerCase();
+  const supported =
+    platformLower === 'instagram' || platformLower === 'tiktok' || platformLower === 'youtube';
+  return useQuery<CreatorPostsResponse>({
+    queryKey: ['creatorPosts', input.agencyId, input.platform, input.handle],
+    enabled:
+      (input.enabled ?? true) &&
+      supported &&
+      Boolean(input.agencyId && input.platform && input.handle),
+    staleTime: CREATOR_POSTS_TTL_MS,
+    queryFn: async () => {
+      const data = await graphqlRequest<{ fetchCreatorPosts: CreatorPostsResponse }>(
         mutations.fetchCreatorPosts,
         {
           agencyId: input.agencyId,
-          platform: input.platform.toUpperCase(),
-          handle: input.handle,
+          platform: input.platform!.toUpperCase(),
+          handle: input.handle!,
           count: input.count ?? null,
-          paginationToken: input.paginationToken ?? null,
+          paginationToken: null,
         }
       );
       return data.fetchCreatorPosts;

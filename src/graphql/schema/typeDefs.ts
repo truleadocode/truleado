@@ -1659,6 +1659,12 @@ export const typeDefs = gql`
     # deduct credits. Use enrichCreator mutation to refresh/force-enrich.
     creatorProfile(platform: DiscoveryPlatform!, handle: String!): CreatorProfile
 
+    # Resolve the current agency's roster creators row id from a global
+    # creator_profile_id. Returns null when this agency has not imported
+    # the creator yet — the caller can use that to switch the detail-sheet
+    # CTA between "Enrich" and "View in Creator DB".
+    creatorIdByProfileId(agencyId: ID!, creatorProfileId: ID!): ID
+
     # Paginated log of enrichments paid for by this agency, across all modes.
     # cache_hit=true rows are those where Truleado served cached data but
     # still charged the agency (margin model).

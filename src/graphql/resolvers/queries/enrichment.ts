@@ -81,6 +81,29 @@ export async function creatorProfile(
 }
 
 /**
+ * Resolve the current agency's roster `creators` row id from a global
+ * creator_profile_id. Used by the discovery detail sheet to deep-link
+ * already-imported creators to /dashboard/creators/[id].
+ */
+export async function creatorIdByProfileId(
+  _: unknown,
+  args: { agencyId: string; creatorProfileId: string },
+  ctx: GraphQLContext
+) {
+  const user = requireAuth(ctx);
+  if (!hasAgencyPermission(user, args.agencyId, Permission.DISCOVERY_ENRICH)) {
+    throw forbiddenError('You do not have permission to look up agency creators');
+  }
+  const { data } = await supabaseAdmin
+    .from('creators')
+    .select('id')
+    .eq('agency_id', args.agencyId)
+    .eq('creator_profile_id', args.creatorProfileId)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/**
  * Per-agency enrichment ledger. cache_hit=true rows indicate the agency paid
  * full credits but no IC call was made (margin model).
  */
