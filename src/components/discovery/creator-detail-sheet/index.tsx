@@ -62,20 +62,14 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
             toast({ title: 'Loaded from cache', description: 'No credits charged.' });
           }
         },
-        onError: () => {
-          // Allow a retry on the next open if this fails.
-          autoEnrichedFor.current.delete(key);
-        },
+        // Keep the guard set on error — re-firing on every sheet open would
+        // hammer IC for a creator that doesn't exist (404) or for which the
+        // request consistently fails. A genuine retry happens via the manual
+        // Enrich CTA at the bottom of the sheet.
       }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creator?.providerUserId, open, profileQuery.isLoading, profile?.enrichmentMode]);
-
-  // Reset the guard when the sheet closes so the next open of the same
-  // creator (potentially after a cache TTL change) will re-evaluate.
-  useEffect(() => {
-    if (!open) autoEnrichedFor.current.clear();
-  }, [open]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

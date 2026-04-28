@@ -1,13 +1,30 @@
 import { NextResponse } from "next/server";
 
-// Basic SSRF protection: only allow known image hosts we expect from Instagram scraping.
-// Instagram/Facebook CDNs use region-specific subdomains (e.g. instagram.flas1-1.fna.fbcdn.net),
-// so we use tight regex allowlists rather than enumerating every possibility.
+// SSRF protection: tight regex allowlist of CDNs we proxy profile pictures
+// and post thumbnails from. Each platform uses region-specific subdomains so
+// regexes are friendlier than enumerating individual hosts.
 const ALLOWED_HOST_PATTERNS: RegExp[] = [
+  // Instagram / Facebook
   /^instagram\.fna\.fbcdn\.net$/i,
   /^instagram\.[a-z0-9-]+\.fna\.fbcdn\.net$/i,
   /^scontent\.cdninstagram\.com$/i,
   /^scontent[a-z0-9.-]*\.cdninstagram\.com$/i,
+  // YouTube (channel avatars, video thumbnails)
+  /^yt3\.googleusercontent\.com$/i,
+  /^yt3\.ggpht\.com$/i,
+  /^lh3\.googleusercontent\.com$/i,
+  /^i\.ytimg\.com$/i,
+  // TikTok (regional p-sign-* subdomains)
+  /^p[0-9]+-sign[a-z0-9-]*\.tiktokcdn(-us)?\.com$/i,
+  /^p[0-9]+-pu-sign[a-z0-9-]*\.tiktokcdn(-us)?\.com$/i,
+  /^p[0-9]+\.tiktokcdn\.com$/i,
+  // Twitter / X
+  /^pbs\.twimg\.com$/i,
+  /^abs\.twimg\.com$/i,
+  // Twitch
+  /^static-cdn\.jtvnw\.net$/i,
+  // Influencers.club's own picture CDN (24h-expiring temp URLs)
+  /^[a-z0-9]+\.cloudfront\.net$/i,
 ];
 
 function isAllowedUrl(rawUrl: string) {
