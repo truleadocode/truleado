@@ -7,15 +7,15 @@ import {
   useFindConnectedSocials,
   type ConnectedIdentity,
   type DiscoveryCreator,
-} from '../hooks';
-import { avatarColorFor, formatCount, initialsFor } from '../primitives/tokens';
+} from '../../hooks';
+import { avatarColorFor, formatCount, initialsFor } from '../../primitives/tokens';
 
-interface ConnectedTabProps {
+interface ConnectedAccordionProps {
   agencyId: string;
   creator: DiscoveryCreator;
 }
 
-export function ConnectedTab({ agencyId, creator }: ConnectedTabProps) {
+export function ConnectedAccordion({ agencyId, creator }: ConnectedAccordionProps) {
   const { toast } = useToast();
   const findConnected = useFindConnectedSocials();
 
@@ -39,45 +39,49 @@ export function ConnectedTab({ agencyId, creator }: ConnectedTabProps) {
     );
   };
 
-  if (!findConnected.data && !findConnected.isPending && !findConnected.isError) {
-    return (
-      <div className="rounded-md border border-tru-border-soft bg-tru-slate-50 p-6 text-center text-sm">
-        <p className="text-tru-slate-600">
-          Identifying every social platform this creator has accounts on costs 15 credits.
-        </p>
-        <Button onClick={run} className="mt-4 gap-2">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          Find connected accounts
-        </Button>
+  return (
+    <details className="group border-b border-tru-slate-100 px-6 py-3 last:border-b-0">
+      <summary className="flex cursor-pointer items-baseline justify-between gap-2 list-none [&::-webkit-details-marker]:hidden">
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-tru-slate-500 group-hover:text-tru-blue-600">
+          Connected accounts
+        </h3>
+        <span className="text-[11px] text-tru-slate-500">15 credits</span>
+      </summary>
+      <div className="pt-3">
+        {!findConnected.data && !findConnected.isPending && !findConnected.isError ? (
+          <div className="rounded-md border border-tru-border-soft bg-tru-slate-50 p-4 text-sm">
+            <p className="text-tru-slate-600">
+              Identifying every social platform this creator has accounts on costs 15 credits.
+            </p>
+            <Button onClick={run} className="mt-3 gap-2" size="sm">
+              <ShieldCheck className="h-3.5 w-3.5" />
+              Find connected accounts
+            </Button>
+          </div>
+        ) : findConnected.isPending ? (
+          <div className="flex items-center gap-2 text-xs text-tru-slate-500">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up connected accounts…
+          </div>
+        ) : findConnected.isError ? (
+          <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            Lookup failed: {String(findConnected.error)}
+          </div>
+        ) : (
+          <IdentityList identities={findConnected.data ?? []} />
+        )}
       </div>
-    );
-  }
+    </details>
+  );
+}
 
-  if (findConnected.isPending) {
-    return (
-      <div className="flex items-center gap-2 text-xs text-tru-slate-500">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Looking up connected accounts…
-      </div>
-    );
-  }
-
-  if (findConnected.isError) {
-    return (
-      <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-        Lookup failed: {String(findConnected.error)}
-      </div>
-    );
-  }
-
-  const identities: ConnectedIdentity[] = findConnected.data ?? [];
+function IdentityList({ identities }: { identities: ConnectedIdentity[] }) {
   if (identities.length === 0) {
     return (
-      <div className="rounded-md border border-tru-border-soft p-6 text-center text-sm text-tru-slate-500">
+      <div className="rounded-md border border-tru-border-soft p-4 text-center text-xs text-tru-slate-500">
         No other verified accounts were linked for this creator.
       </div>
     );
   }
-
   return (
     <ul className="divide-y divide-tru-border-soft">
       {identities.map((id) => {

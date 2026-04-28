@@ -9,14 +9,13 @@ import {
   useImportCreatorsToAgency,
   type CreatorProfile,
   type DiscoveryCreator,
-} from '../hooks';
-import { formatCount, formatPercent } from '../primitives/tokens';
+} from '../../hooks';
+import { Section } from './section';
 
-interface OverviewTabProps {
+interface EnrichCtaProps {
   agencyId: string;
   creator: DiscoveryCreator;
   profile: CreatorProfile | null;
-  isLoading: boolean;
 }
 
 // Truleado credit prices seeded in migration 00056.
@@ -26,7 +25,12 @@ const COST: Record<'RAW' | 'FULL' | 'FULL_WITH_AUDIENCE', number> = {
   FULL_WITH_AUDIENCE: 25,
 };
 
-export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewTabProps) {
+/**
+ * Phase B: keep the current 3-tier enrich UI inside its own section so the
+ * sheet's behavior is unchanged. Phase E replaces this with a single
+ * Full+Audience confirm modal that also imports to the roster.
+ */
+export function EnrichCta({ agencyId, creator, profile }: EnrichCtaProps) {
   const { toast } = useToast();
   const enrich = useEnrichCreator();
   const importToRoster = useImportCreatorsToAgency();
@@ -92,61 +96,41 @@ export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewT
   const hasAudience = enrichmentLevel === 'FULL_WITH_AUDIENCE';
 
   return (
-    <div className="space-y-6">
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-xs text-tru-slate-500">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading cached profile…
-        </div>
-      ) : profile ? (
-        <ProfileSummary profile={profile} />
-      ) : (
-        <div className="rounded-md border border-dashed border-tru-slate-300 bg-tru-slate-50 p-4 text-sm text-tru-slate-600">
-          We don&apos;t have this creator&apos;s full profile yet. Enrich to pull it in.
-        </div>
-      )}
+    <Section title="Enrich">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <EnrichButton
+          label="Raw"
+          description="Basic profile & verification"
+          cost={COST.RAW}
+          alreadyHave={!!hasRaw}
+          pending={pendingMode === 'RAW'}
+          onClick={() => runEnrich('RAW')}
+          icon={<Zap className="h-3.5 w-3.5" />}
+        />
+        <EnrichButton
+          label="Full"
+          description="Email, niche, post history"
+          cost={COST.FULL}
+          alreadyHave={!!hasFull}
+          pending={pendingMode === 'FULL'}
+          onClick={() => runEnrich('FULL')}
+          icon={<Sparkles className="h-3.5 w-3.5" />}
+        />
+        <EnrichButton
+          label="Full + Audience"
+          description="Everything above + demographics"
+          cost={COST.FULL_WITH_AUDIENCE}
+          alreadyHave={!!hasAudience}
+          pending={pendingMode === 'FULL_WITH_AUDIENCE'}
+          onClick={() => runEnrich('FULL_WITH_AUDIENCE')}
+          icon={<Sparkles className="h-3.5 w-3.5" />}
+        />
+      </div>
+      <p className="mt-2 text-[11px] text-tru-slate-500">
+        Cached profiles charge their full credit cost — every agency pays for fresh data once.
+      </p>
 
-      <section>
-        <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">
-          Enrich
-        </h3>
-        <div className="grid gap-2 sm:grid-cols-3">
-          <EnrichButton
-            mode="RAW"
-            label="Raw"
-            description="Basic profile & verification"
-            cost={COST.RAW}
-            alreadyHave={!!hasRaw}
-            pending={pendingMode === 'RAW'}
-            onClick={() => runEnrich('RAW')}
-            icon={<Zap className="h-3.5 w-3.5" />}
-          />
-          <EnrichButton
-            mode="FULL"
-            label="Full"
-            description="Email, niche, post history"
-            cost={COST.FULL}
-            alreadyHave={!!hasFull}
-            pending={pendingMode === 'FULL'}
-            onClick={() => runEnrich('FULL')}
-            icon={<Sparkles className="h-3.5 w-3.5" />}
-          />
-          <EnrichButton
-            mode="FULL_WITH_AUDIENCE"
-            label="Full + Audience"
-            description="Everything above + demographics"
-            cost={COST.FULL_WITH_AUDIENCE}
-            alreadyHave={!!hasAudience}
-            pending={pendingMode === 'FULL_WITH_AUDIENCE'}
-            onClick={() => runEnrich('FULL_WITH_AUDIENCE')}
-            icon={<Sparkles className="h-3.5 w-3.5" />}
-          />
-        </div>
-        <p className="mt-2 text-[11px] text-tru-slate-500">
-          Cached profiles charge their full credit cost — every agency pays for fresh data once.
-        </p>
-      </section>
-
-      <section className="border-t border-tru-slate-200 pt-4">
+      <div className="mt-5 border-t border-tru-slate-200 pt-4">
         <Button
           onClick={runImport}
           disabled={importToRoster.isPending}
@@ -166,72 +150,12 @@ export function OverviewTab({ agencyId, creator, profile, isLoading }: OverviewT
           Adds this creator to your agency&apos;s roster. If no cached profile exists a RAW
           enrichment runs first (1 credit).
         </p>
-      </section>
-    </div>
-  );
-}
-
-function ProfileSummary({ profile }: { profile: CreatorProfile }) {
-  return (
-    <section className="space-y-3">
-      <h3 className="text-[11px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">
-        Profile
-      </h3>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-        <Stat label="Followers" value={formatCount(profile.followers)} />
-        <Stat label="Engagement rate" value={formatPercent(profile.engagementPercent)} />
-        <Stat label="Location" value={profile.location ?? '—'} />
-        <Stat label="Language" value={profile.language ?? '—'} />
-        <Stat label="Niche" value={profile.nichePrimary ?? '—'} />
-        <Stat
-          label="Email"
-          value={
-            profile.email ? (
-              <a href={`mailto:${profile.email}`} className="text-tru-blue-600 hover:underline">
-                {profile.email}
-              </a>
-            ) : (
-              '—'
-            )
-          }
-        />
-        {profile.isVerified ? (
-          <Stat
-            label="Verified"
-            value={
-              <span className="inline-flex items-center gap-1 text-tru-success">
-                <CheckCircle2 className="h-3.5 w-3.5" /> Yes
-              </span>
-            }
-          />
-        ) : null}
-        {profile.lastEnrichedAt ? (
-          <Stat
-            label="Last enriched"
-            value={new Date(profile.lastEnrichedAt).toLocaleDateString()}
-          />
-        ) : null}
-      </dl>
-      {profile.biography ? (
-        <div className="rounded-md border border-tru-border-soft bg-tru-slate-50 p-3 text-sm text-tru-slate-700">
-          {profile.biography}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <>
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-tru-slate-400">{label}</dt>
-      <dd className="text-sm text-tru-slate-900">{value}</dd>
-    </>
+      </div>
+    </Section>
   );
 }
 
 interface EnrichButtonProps {
-  mode: 'RAW' | 'FULL' | 'FULL_WITH_AUDIENCE';
   label: string;
   description: string;
   cost: number;
@@ -241,8 +165,7 @@ interface EnrichButtonProps {
   icon: React.ReactNode;
 }
 
-function EnrichButton({ mode, label, description, cost, alreadyHave, pending, onClick, icon }: EnrichButtonProps) {
-  void mode;
+function EnrichButton({ label, description, cost, alreadyHave, pending, onClick, icon }: EnrichButtonProps) {
   return (
     <button
       type="button"

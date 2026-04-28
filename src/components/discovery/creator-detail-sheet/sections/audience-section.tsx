@@ -1,44 +1,48 @@
 'use client';
 
-import type { CreatorProfile } from '../hooks';
+import type { CreatorProfile } from '../../hooks';
+import { Section } from './section';
+import { LockedBlock } from './locked-block';
 
-interface AudienceTabProps {
+interface AudienceSectionProps {
   profile: CreatorProfile | null;
 }
 
 /**
- * Reads the audience demographics from the cached creator profile's
- * rawData (populated only when FULL_WITH_AUDIENCE was run). Renders a
- * simple breakdown of top N values for each demographic bucket — a more
- * polished visualisation is a post-F10 nice-to-have.
+ * Audience demographics — only renders when the profile has been enriched
+ * with FULL_WITH_AUDIENCE. Otherwise the parent swaps in a LockedBlock.
  */
-export function AudienceTab({ profile }: AudienceTabProps) {
+export function AudienceSection({ profile }: AudienceSectionProps) {
   if (!profile || profile.enrichmentMode !== 'FULL_WITH_AUDIENCE') {
     return (
-      <div className="rounded-md border border-dashed border-tru-slate-300 bg-tru-slate-50 p-6 text-center text-sm text-tru-slate-600">
-        Audience demographics aren&apos;t cached yet. Use <span className="font-semibold">Enrich → Full + Audience</span>{' '}
-        on the Overview tab to pull them (25 credits).
-      </div>
+      <LockedBlock
+        title="Audience demographics"
+        description="Geo, languages, ages, gender, interests."
+      />
     );
   }
 
   const audience = readAudience(profile.rawData);
   if (!audience) {
     return (
-      <div className="rounded-md border border-tru-border-soft p-6 text-center text-sm text-tru-slate-500">
-        No audience demographics present in the stored profile.
-      </div>
+      <Section title="Audience demographics">
+        <div className="rounded-md border border-tru-border-soft p-6 text-center text-sm text-tru-slate-500">
+          No audience demographics present in the stored profile.
+        </div>
+      </Section>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <AudienceBlock title="Geo" entries={audience.geo} />
-      <AudienceBlock title="Languages" entries={audience.languages} />
-      <AudienceBlock title="Age" entries={audience.ages} />
-      <AudienceBlock title="Gender" entries={audience.genders} />
-      <AudienceBlock title="Interests" entries={audience.interests} />
-    </div>
+    <Section title="Audience demographics">
+      <div className="space-y-5">
+        <AudienceBlock title="Geo" entries={audience.geo} />
+        <AudienceBlock title="Languages" entries={audience.languages} />
+        <AudienceBlock title="Age" entries={audience.ages} />
+        <AudienceBlock title="Gender" entries={audience.genders} />
+        <AudienceBlock title="Interests" entries={audience.interests} />
+      </div>
+    </Section>
   );
 }
 
@@ -91,8 +95,10 @@ function AudienceBlock({
   const max = Math.max(...rows.map(([, v]) => v));
 
   return (
-    <section>
-      <h3 className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">{title}</h3>
+    <div>
+      <h4 className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">
+        {title}
+      </h4>
       <ul className="space-y-1.5">
         {rows.map(([name, value]) => {
           const pct = value > 1 ? value : value * 100;
@@ -111,6 +117,6 @@ function AudienceBlock({
           );
         })}
       </ul>
-    </section>
+    </div>
   );
 }
