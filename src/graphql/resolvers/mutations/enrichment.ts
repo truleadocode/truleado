@@ -26,9 +26,12 @@ import {
   type DiscoveryPlatform,
 } from '@/lib/influencers-club';
 import {
+  ENRICHMENT_TTL_DAYS,
+  findPriorAgencyEnrichment,
   isProfileFreshFor,
   normalizeHandleForLookup,
   type EnrichmentModeDb,
+  type PriorEnrichmentLedgerRow,
 } from '@/lib/influencers-club/enrichment-helpers';
 
 // ---------------------------------------------------------------------------
@@ -178,6 +181,68 @@ export async function enrichCreator(
   if (!args.forceRefresh) {
     const cached = await findCachedProfileByHandle(platform, args.handle);
     if (cached && isProfileFreshFor(cached, dbMode)) {
+      // Per-agency dedupe: if this agency already paid for an equivalent or
+      // higher-tier enrichment of this creator within the mode's TTL, return
+      // the cached profile without charging again.
+      const ttlDays = ENRICHMENT_TTL_DAYS[dbMode];
+      const sinceIso = new Date(Date.now() - ttlDays * 24 * 60 * 60 * 1000).toISOString();
+      const { data: priorRows } = await supabaseAdmin
+        .from('creator_enrichments')
+        .select('id, enrichment_mode, created_at')
+        .eq('agency_id', args.agencyId)
+        .eq('creator_profile_id', cached.id)
+        .gte('created_at', sinceIso)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const priorMatch = findPriorAgencyEnrichment(
+        ((priorRows as PriorEnrichmentLedgerRow[] | null) ?? []),
+        dbMode
+      );
+      if (priorMatch) {
+        const ledger = await recordEnrichmentLedger({
+          agencyId: args.agencyId,
+          creatorProfileId: cached.id,
+          platform,
+          handle: args.handle,
+          mode: dbMode,
+          creditsSpent: 0,
+          cacheHit: true,
+          icCreditsCost: 0,
+          userId: user.id,
+        });
+        logActivity({
+          agencyId: args.agencyId,
+          actorId: user.id,
+          actorType: 'user',
+          entityType: 'creator_enrichment',
+          entityId: ledger.id,
+          action: 'enrich_agency_dedupe',
+          metadata: {
+            platform,
+            handle: args.handle,
+            mode: dbMode,
+            creditsSpent: 0,
+            cachedProfileId: cached.id,
+            dedupedFromLedgerId: priorMatch.id,
+            priorMode: priorMatch.enrichment_mode,
+          },
+        }).catch(() => {});
+        return {
+          id: ledger.id,
+          agencyId: ledger.agency_id,
+          creatorProfileId: ledger.creator_profile_id,
+          platform: platform.toUpperCase(),
+          handle: ledger.handle,
+          mode: args.mode,
+          creditsSpent: 0,
+          cacheHit: true,
+          icCreditsCost: 0,
+          triggeredBy: ledger.triggered_by,
+          createdAt: ledger.created_at,
+          profile: toGraphQLProfile(cached),
+        };
+      }
+
       await deductCredits(args.agencyId, cost.totalInternalCost);
       const ledger = await recordEnrichmentLedger({
         agencyId: args.agencyId,
