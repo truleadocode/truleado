@@ -120,6 +120,28 @@ async function findCachedProfileByHandle(
   return rows[0];
 }
 
+/**
+ * For YouTube enrichment calls to IC, prefer the YouTube channel ID
+ * (`provider_user_id` on a youtube_official cached profile) over a
+ * `@custom_url` handle. IC's YouTube enrichment is reliable on channel
+ * IDs but frequently 404s on custom URLs even for legitimate creators.
+ *
+ * Falls through to the original handle when no youtube_official cached
+ * row exists or the platform isn't YouTube — never the cause of an
+ * additional 404 on its own.
+ */
+async function resolveYoutubeChannelIdIfPossible(
+  platform: string,
+  handle: string
+): Promise<string> {
+  if (platform.toLowerCase() !== 'youtube') return handle;
+  const cached = await findCachedProfileByHandle('youtube', handle);
+  if (cached?.provider === 'youtube_official' && cached.provider_user_id) {
+    return cached.provider_user_id;
+  }
+  return handle;
+}
+
 function toGraphQLProfile(row: CreatorProfileRow) {
   return {
     id: row.id,
@@ -354,9 +376,14 @@ export async function enrichCreator(
         (raw.result as Record<string, unknown>).profile_picture as string | undefined;
     } else {
       const includeAudience = args.mode === 'FULL_WITH_AUDIENCE';
+      // YouTube specifically: IC's enrichment is brittle on @custom_url
+      // handles (frequent 404s) but reliable on the channel ID. If we
+      // already have a youtube_official cached profile for this handle,
+      // pass its provider_user_id (the channel ID) to IC instead.
+      const icHandle = await resolveYoutubeChannelIdIfPossible(platform, args.handle);
       const { raw, profile, pictureUrl: pic, audienceBlocks: blocks } = await enrichHandleFull({
         platform,
-        handle: args.handle,
+        handle: icHandle,
         includeAudience,
         emailRequired: (args.emailRequired as 'must_have' | 'preferred' | undefined) ?? undefined,
       });

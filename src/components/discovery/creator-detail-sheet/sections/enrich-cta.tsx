@@ -111,7 +111,7 @@ export function EnrichCta({ agencyId, creator, profile }: EnrichCtaProps) {
         onError: (err) => {
           toast({
             title: 'Enrichment failed',
-            description: err instanceof Error ? err.message : 'Unknown error',
+            description: humaniseEnrichError(err),
             variant: 'destructive',
           });
           setConfirmOpen(false);
@@ -119,6 +119,26 @@ export function EnrichCta({ agencyId, creator, profile }: EnrichCtaProps) {
       }
     );
   };
+
+  /**
+   * Surface a friendlier message for known IC failure shapes. The
+   * resolver always refunds credits on error, so the copy here can
+   * focus on the next step rather than reassurance about charges.
+   */
+  function humaniseEnrichError(err: unknown): string {
+    const raw = err instanceof Error ? err.message : String(err ?? '');
+    const lower = raw.toLowerCase();
+    if (lower.includes('not found') || lower.includes('no data')) {
+      return "Our enrichment provider doesn't have this creator yet. No credits charged.";
+    }
+    if (lower.includes('rate limit')) {
+      return 'Provider is rate-limited right now. Try again in a minute. No credits charged.';
+    }
+    if (lower.includes('timeout') || lower.includes('timed out')) {
+      return 'Provider timed out — please retry. No credits charged.';
+    }
+    return raw || 'Unknown error';
+  }
 
   const pending = enrich.isPending || importToRoster.isPending;
 
