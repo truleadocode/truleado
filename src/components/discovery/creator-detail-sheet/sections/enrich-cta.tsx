@@ -42,10 +42,11 @@ export function EnrichCta({ agencyId, creator, profile }: EnrichCtaProps) {
     enrichmentLevel === 'FULL' || enrichmentLevel === 'FULL_WITH_AUDIENCE';
 
   if (alreadyEnriched && rosterIdQuery.data) {
+    const platformParam = creator.platform.toLowerCase();
     return (
       <Section title="Profile saved">
         <a
-          href={`/dashboard/creators/${rosterIdQuery.data}`}
+          href={`/dashboard/creators/${rosterIdQuery.data}?platform=${platformParam}`}
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center justify-between gap-2 rounded-md border border-tru-border-soft bg-tru-slate-50 px-4 py-3 text-sm text-tru-slate-900 transition-colors hover:border-tru-blue-600 hover:bg-tru-blue-50"

@@ -1,5 +1,7 @@
 'use client';
 
+import { AlertTriangle } from 'lucide-react';
+import { parseAudienceData, TopList, entriesFromMap } from '../../enriched-data';
 import type { CreatorProfile } from '../../hooks';
 import { Section } from './section';
 import { LockedBlock } from './locked-block';
@@ -9,8 +11,11 @@ interface AudienceSectionProps {
 }
 
 /**
- * Audience demographics — only renders when the profile has been enriched
- * with FULL_WITH_AUDIENCE. Otherwise the parent swaps in a LockedBlock.
+ * Audience demographics. IG / YT / TT only — Twitter / Twitch never
+ * populate audience data. Pre-FULL+AUDIENCE swaps to LockedBlock.
+ *
+ * Uses the shared `parseAudienceData` parser + `TopList` primitive
+ * (refactored from the inline AudienceBlock that used to live here).
  */
 export function AudienceSection({ profile }: AudienceSectionProps) {
   if (!profile || profile.enrichmentMode !== 'FULL_WITH_AUDIENCE') {
@@ -22,8 +27,19 @@ export function AudienceSection({ profile }: AudienceSectionProps) {
     );
   }
 
-  const audience = readAudience(profile.rawData);
-  if (!audience) {
+  const platform = profile.platform.toLowerCase();
+  const audience = parseAudienceData(profile.rawData, platform);
+
+  // No followers-block data → empty state. We still surface the error
+  // flags so the user knows commenters/likers were attempted.
+  const hasAnyData =
+    audience.geo ||
+    audience.languages ||
+    audience.ages ||
+    audience.genders ||
+    audience.interests;
+
+  if (!hasAnyData) {
     return (
       <Section title="Audience demographics">
         <div className="rounded-md border border-tru-border-soft p-6 text-center text-sm text-tru-slate-500">
@@ -36,87 +52,70 @@ export function AudienceSection({ profile }: AudienceSectionProps) {
   return (
     <Section title="Audience demographics">
       <div className="space-y-5">
-        <AudienceBlock title="Geo" entries={audience.geo} />
-        <AudienceBlock title="Languages" entries={audience.languages} />
-        <AudienceBlock title="Age" entries={audience.ages} />
-        <AudienceBlock title="Gender" entries={audience.genders} />
-        <AudienceBlock title="Interests" entries={audience.interests} />
+        {audience.credibility !== null ? (
+          <div className="rounded-md border border-tru-border-soft bg-tru-slate-50 p-3 text-[12px]">
+            <span className="font-semibold text-tru-slate-700">Credibility </span>
+            <span className="tabular-nums text-tru-slate-900">
+              {(audience.credibility * 100).toFixed(0)}%
+            </span>
+            {audience.credibilityClass ? (
+              <span className="ml-2 rounded-full bg-tru-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-tru-slate-600">
+                {audience.credibilityClass}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        <TopList
+          title="Geo (countries)"
+          entries={entriesFromMap(audience.geo)}
+          formatValue={pct}
+        />
+        <TopList
+          title="Gender"
+          entries={entriesFromMap(audience.genders)}
+          formatValue={pct}
+          max={4}
+        />
+        <TopList
+          title="Age"
+          entries={entriesFromMap(audience.ages)}
+          formatValue={pct}
+        />
+        <TopList
+          title="Languages"
+          entries={entriesFromMap(audience.languages)}
+          formatValue={pct}
+        />
+        <TopList
+          title="Interests"
+          entries={entriesFromMap(audience.interests)}
+          formatValue={pct}
+        />
+        <TopList
+          title="Audience type"
+          entries={entriesFromMap(audience.audienceTypes)}
+          formatValue={pct}
+          max={6}
+        />
+
+        {audience.hadCommentersError || audience.hadLikersError ? (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Some audience signals couldn&apos;t be retrieved
+              {audience.hadCommentersError ? ' (commenters)' : ''}
+              {audience.hadLikersError ? ' (likers)' : ''}. Followers
+              demographics shown.
+            </span>
+          </div>
+        ) : null}
       </div>
     </Section>
   );
 }
 
-interface AudienceShape {
-  geo?: Record<string, number>;
-  languages?: Record<string, number>;
-  ages?: Record<string, number>;
-  genders?: Record<string, number>;
-  interests?: Record<string, number>;
-}
-
-function readAudience(rawData: CreatorProfile['rawData']): AudienceShape | null {
-  if (!rawData) return null;
-  const platformKeys = ['instagram', 'youtube', 'tiktok', 'twitter', 'twitch'];
-  for (const key of platformKeys) {
-    const platformBlock = (rawData as Record<string, unknown>)[key];
-    if (platformBlock && typeof platformBlock === 'object') {
-      const audience = (platformBlock as Record<string, unknown>).audience;
-      if (audience && typeof audience === 'object') {
-        const followers = (audience as Record<string, unknown>).audience_followers;
-        if (followers && typeof followers === 'object') {
-          const f = followers as Record<string, Record<string, number> | undefined>;
-          return {
-            geo: f.geo,
-            languages: f.languages,
-            ages: f.ages,
-            genders: f.genders,
-            interests: f.interests,
-          };
-        }
-      }
-    }
-  }
-  return null;
-}
-
-function AudienceBlock({
-  title,
-  entries,
-}: {
-  title: string;
-  entries?: Record<string, number>;
-}) {
-  if (!entries) return null;
-  const rows = Object.entries(entries)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8);
-  if (rows.length === 0) return null;
-
-  const max = Math.max(...rows.map(([, v]) => v));
-
-  return (
-    <div>
-      <h4 className="mb-2 text-[10.5px] font-bold uppercase tracking-[0.08em] text-tru-slate-400">
-        {title}
-      </h4>
-      <ul className="space-y-1.5">
-        {rows.map(([name, value]) => {
-          const pct = value > 1 ? value : value * 100;
-          const barPct = (pct / (max > 1 ? max : max * 100)) * 100;
-          return (
-            <li key={name} className="flex items-center gap-3 text-sm">
-              <span className="w-32 truncate text-tru-slate-700">{name}</span>
-              <div className="flex-1 overflow-hidden rounded-full bg-tru-slate-100">
-                <div
-                  className="h-2 rounded-full bg-tru-blue-600"
-                  style={{ width: `${Math.max(barPct, 2)}%` }}
-                />
-              </div>
-              <span className="w-12 text-right tabular-nums text-tru-slate-600">{pct.toFixed(1)}%</span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+function pct(v: number): string {
+  // IC returns weights in 0..1; render as percentage.
+  return `${(v * 100).toFixed(1)}%`;
 }

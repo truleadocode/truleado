@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { TrendingUp } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { useCreatorProfile, useEnrichCreator, type DiscoveryCreator } from '../hooks';
@@ -14,7 +13,7 @@ import { AudienceSection } from './sections/audience-section';
 import { SimilarAccordion } from './sections/similar-accordion';
 import { ConnectedAccordion } from './sections/connected-accordion';
 import { EnrichCta } from './sections/enrich-cta';
-import { Section } from './sections/section';
+import { EnrichedShell } from './enriched-shell';
 
 interface CreatorDetailSheetProps {
   agencyId: string;
@@ -71,60 +70,45 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creator?.providerUserId, open, profileQuery.isLoading, profile?.enrichmentMode]);
 
+  const isEnriched =
+    profile !== null &&
+    (profile.enrichmentMode === 'FULL' || profile.enrichmentMode === 'FULL_WITH_AUDIENCE');
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-full max-w-2xl overflow-y-auto p-0 sm:max-w-2xl">
         {creator ? (
-          <>
-            <Header creator={creator} mirroredAvatar={profile?.profilePictureUrl ?? null} />
+          isEnriched && profile ? (
+            <EnrichedShell agencyId={agencyId} creator={creator} profile={profile} />
+          ) : (
+            <>
+              <Header creator={creator} mirroredAvatar={profile?.profilePictureUrl ?? null} />
 
-            <ProfileInfo
-              profile={profile}
-              isLoading={profileQuery.isLoading || (enrich.isPending && profile === null)}
-            />
+              <ProfileInfo
+                profile={profile}
+                isLoading={profileQuery.isLoading || (enrich.isPending && profile === null)}
+              />
 
-            <PostsGrid agencyId={agencyId} creator={creator} />
+              <PostsGrid agencyId={agencyId} creator={creator} />
 
-            <ApproximatedAnalytics agencyId={agencyId} creator={creator} />
+              <ApproximatedAnalytics agencyId={agencyId} creator={creator} />
 
-            {profile?.enrichmentMode === 'FULL' || profile?.enrichmentMode === 'FULL_WITH_AUDIENCE' ? (
-              <FollowerGrowthAvailable />
-            ) : (
               <LockedBlock
                 title="Follower growth"
                 description="12-month subscribers / followers trend."
               />
-            )}
 
-            <AudienceSection profile={profile} />
+              <AudienceSection profile={profile} />
 
-            <EnrichCta agencyId={agencyId} creator={creator} profile={profile} />
+              <EnrichCta agencyId={agencyId} creator={creator} profile={profile} />
 
-            <SimilarAccordion agencyId={agencyId} creator={creator} />
+              <SimilarAccordion agencyId={agencyId} creator={creator} />
 
-            <ConnectedAccordion agencyId={agencyId} creator={creator} />
-          </>
+              <ConnectedAccordion agencyId={agencyId} creator={creator} />
+            </>
+          )
         ) : null}
       </SheetContent>
     </Sheet>
-  );
-}
-
-/**
- * Stub shown once a creator is FULL or FULL_WITH_AUDIENCE enriched. Pointing
- * to the Creator DB page where the actual chart will land in a later phase
- * keeps the locked → unlocked transition visible without committing to the
- * chart UI yet.
- */
-function FollowerGrowthAvailable() {
-  return (
-    <Section title="Follower growth">
-      <div className="flex items-center gap-3 rounded-md border border-tru-border-soft bg-tru-slate-50 p-4 text-sm text-tru-slate-700">
-        <TrendingUp className="h-4 w-4 shrink-0 text-tru-success" />
-        <span>
-          12-month growth data is available — view it on the creator&apos;s Roster page.
-        </span>
-      </div>
-    </Section>
   );
 }

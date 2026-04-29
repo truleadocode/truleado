@@ -33,3 +33,10 @@ export { SparklineCard } from './primitives/sparkline-card';
 export { BarChart } from './primitives/bar-chart';
 export { KeyValueGrid } from './primitives/key-value-grid';
 export type { KeyValueRow } from './primitives/key-value-grid';
+
+export { OverviewHeader } from './panels/overview-header';
+export { InstagramPanel } from './panels/instagram-panel';
+export { YouTubePanel } from './panels/youtube-panel';
+export { TikTokPanel } from './panels/tiktok-panel';
+export { TwitterPanel } from './panels/twitter-panel';
+export { TwitchPanel } from './panels/twitch-panel';
