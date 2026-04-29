@@ -1,10 +1,10 @@
 /**
  * Influencers.club enrichment endpoints.
  *
- *   POST /public/v1/enrichment/handle/raw     — 0.03 credits
- *   POST /public/v1/enrichment/handle/full    — 1.00 credits
+ *   POST /public/v1/creators/enrich/handle/raw/   — 0.03 credits
+ *   POST /public/v1/creators/enrich/handle/full/  — 1.00 credits
  *       (include_audience_data: true → audience demographics)
- *   POST /public/v1/enrichment/email          — 0.05 credits, returns strongest platform only
+ *   POST /public/v1/creators/enrich/email/        — 0.05 credits, returns strongest platform only
  *   POST /public/v1/creators/socials/         — 0.50 credits, cross-platform identity
  *
  * All wrappers return { normalized, raw } so resolvers can store raw_data
@@ -32,25 +32,25 @@ export interface EnrichHandleArgs {
 }
 
 /**
- * POST /public/v1/enrichment/handle/raw — 0.03 credits. Lightweight existence
- * check + basic fields. Use to verify a handle before a more expensive
- * enrichment, or as the fallback when we just need provider_user_id.
+ * POST /public/v1/creators/enrich/handle/raw/ — 0.03 credits. Lightweight
+ * existence check + basic fields. Use to verify a handle before a more
+ * expensive enrichment, or as the fallback when we just need provider_user_id.
  */
 export async function enrichHandleRaw(args: EnrichHandleArgs): Promise<IcEnrichRawResponse> {
   const body: IcEnrichHandleRequest = {
     platform: toIcPlatform(args.platform),
     handle: args.handle,
   };
-  return icFetch<IcEnrichRawResponse>('/public/v1/enrichment/handle/raw', {
+  return icFetch<IcEnrichRawResponse>('/public/v1/creators/enrich/handle/raw/', {
     method: 'POST',
     body,
   });
 }
 
 /**
- * POST /public/v1/enrichment/handle/full — 1.00 credits (same cost whether
- * include_audience_data is true or false on IC's side; Truleado prices
- * audience as a separate tier in token_pricing_config).
+ * POST /public/v1/creators/enrich/handle/full/ — 1.00 credits (same cost
+ * whether include_audience_data is true or false on IC's side; Truleado
+ * prices audience as a separate tier in token_pricing_config).
  *
  * Returns both the raw IC payload (for raw_data storage) and a normalized
  * CreatorProfile-shaped object for the canonical domain.
@@ -67,7 +67,7 @@ export async function enrichHandleFull(args: EnrichHandleArgs): Promise<{
     include_audience_data: args.includeAudience ?? false,
     email_required: args.emailRequired,
   };
-  const raw = await icFetch<IcEnrichFullResponse>('/public/v1/enrichment/handle/full', {
+  const raw = await icFetch<IcEnrichFullResponse>('/public/v1/creators/enrich/handle/full/', {
     method: 'POST',
     body,
   });
@@ -79,12 +79,12 @@ export async function enrichHandleFull(args: EnrichHandleArgs): Promise<{
 }
 
 /**
- * POST /public/v1/enrichment/email — 0.05 credits. Returns the strongest
- * platform only (creator with highest follower count). Use for contact-first
- * lookups; use handle Full for full cross-platform data.
+ * POST /public/v1/creators/enrich/email/ — 0.05 credits. Returns the
+ * strongest platform only (creator with highest follower count). Use for
+ * contact-first lookups; use handle Full for full cross-platform data.
  */
 export async function enrichByEmail(email: string): Promise<IcEnrichEmailResponse> {
-  return icFetch<IcEnrichEmailResponse>('/public/v1/enrichment/email', {
+  return icFetch<IcEnrichEmailResponse>('/public/v1/creators/enrich/email/', {
     method: 'POST',
     body: { email },
   });
