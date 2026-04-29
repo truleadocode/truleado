@@ -366,14 +366,17 @@ export async function enrichCreator(
     } else if (args.mode === 'RAW') {
       const raw = await enrichHandleRaw({ platform, handle: args.handle });
       icCreditsCost = raw.credits_cost;
-      const exists = (raw.result as Record<string, unknown>).exists;
-      if (exists === false) {
+      // IC RAW response is wrapped: { credits_cost, result: { <platform>: { userid, exists, ... } } }
+      // Drop one level so the upsert reads the platform sub-block directly.
+      const platformBlock =
+        ((raw.result as Record<string, unknown>)?.[platform] as Record<string, unknown>) ?? {};
+      if (platformBlock.exists === false) {
         throw notFoundError(`Creator not found on ${platform}: ${args.handle}`);
       }
-      profileRow = await upsertProfileFromRaw(platform, raw.result, args.agencyId);
+      profileRow = await upsertProfileFromRaw(platform, platformBlock, args.agencyId);
       pictureUrl =
-        (raw.result as Record<string, unknown>).profile_picture_hd as string | undefined ??
-        (raw.result as Record<string, unknown>).profile_picture as string | undefined;
+        (platformBlock.profile_picture_hd as string | undefined) ??
+        (platformBlock.profile_picture as string | undefined);
     } else {
       const includeAudience = args.mode === 'FULL_WITH_AUDIENCE';
       // YouTube specifically: IC's enrichment is brittle on @custom_url

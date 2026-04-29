@@ -9,6 +9,7 @@ import {
   formatCount,
   formatPercent,
   initialsFor,
+  proxiedImageSrc,
 } from '../primitives/tokens';
 
 interface CreatorRowProps {
@@ -126,7 +127,7 @@ function Avatar({ creator }: { creator: DiscoveryCreator }) {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={creator.pictureUrl}
+          src={proxiedImageSrc(creator.pictureUrl)}
           alt=""
           className="h-full w-full object-cover"
           referrerPolicy="no-referrer"

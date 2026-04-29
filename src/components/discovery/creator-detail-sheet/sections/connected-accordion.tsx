@@ -8,7 +8,7 @@ import {
   type ConnectedIdentity,
   type DiscoveryCreator,
 } from '../../hooks';
-import { avatarColorFor, formatCount, initialsFor } from '../../primitives/tokens';
+import { avatarColorFor, formatCount, initialsFor, proxiedImageSrc } from '../../primitives/tokens';
 
 interface ConnectedAccordionProps {
   agencyId: string;
@@ -91,7 +91,7 @@ function IdentityList({ identities }: { identities: ConnectedIdentity[] }) {
           <li key={id.id} className="flex items-center gap-3 py-3">
             {picture ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={picture} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+              <img src={proxiedImageSrc(picture)} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               <div
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"

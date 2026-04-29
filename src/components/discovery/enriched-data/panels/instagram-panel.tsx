@@ -2,7 +2,7 @@
 
 import { CheckCircle2, Hash, ShoppingBag, ExternalLink, Verified } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { formatCount, formatPercent } from '../../primitives/tokens';
+import { formatCount, formatPercent, proxiedImageSrc } from '../../primitives/tokens';
 import type { InstagramEnrichment } from '../parsers/types';
 import { StatBox } from '../primitives/stat-box';
 import { TopList } from '../primitives/top-list';
@@ -62,7 +62,7 @@ export function InstagramPanel({ data }: InstagramPanelProps) {
                 {tag.pictureUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={tag.pictureUrl}
+                    src={proxiedImageSrc(tag.pictureUrl)}
                     alt=""
                     className="h-7 w-7 rounded-full object-cover"
                     referrerPolicy="no-referrer"

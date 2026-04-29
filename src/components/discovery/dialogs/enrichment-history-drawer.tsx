@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/sheet';
 import { graphqlRequest, queries } from '@/lib/graphql/client';
 import type { CreatorEnrichment } from '../hooks';
-import { avatarColorFor, formatCount, initialsFor } from '../primitives/tokens';
+import { avatarColorFor, formatCount, initialsFor, proxiedImageSrc } from '../primitives/tokens';
 
 interface EnrichmentHistoryDrawerProps {
   open: boolean;
@@ -100,7 +100,7 @@ function EnrichmentRow({ row }: { row: CreatorEnrichment }) {
     <li className="flex items-start gap-3 py-3">
       {picture ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={picture} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
+        <img src={proxiedImageSrc(picture)} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
       ) : (
         <div
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"

@@ -41,6 +41,26 @@ function extFromContentType(contentType: string | null): string {
   return 'jpg';
 }
 
+/**
+ * Pick a sensible image extension. Prefer the URL's extension when the
+ * content-type is generic (binary/octet-stream from CloudFront), else
+ * derive from the content-type, else default to jpg.
+ */
+function extFromUrlOrContentType(url: string, contentType: string | null): string {
+  const isGeneric =
+    contentType === 'binary/octet-stream' || contentType === 'application/octet-stream';
+  if (isGeneric || !contentType) {
+    try {
+      const path = new URL(url).pathname.toLowerCase();
+      const m = path.match(/\.(png|webp|gif|jpe?g)(?:$|\?)/);
+      if (m) return m[1] === 'jpeg' ? 'jpg' : m[1];
+    } catch {
+      /* fall through */
+    }
+  }
+  return extFromContentType(contentType);
+}
+
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -66,7 +86,16 @@ export async function mirrorCreatorPicture(
     }
 
     const contentType = response.headers.get('content-type');
-    if (contentType && !contentType.startsWith('image/')) {
+    // CloudFront and some IC CDNs serve image bytes with a generic
+    // `binary/octet-stream` or `application/octet-stream` content-type.
+    // Accept those — we trust the caller to have given us an image URL,
+    // and downstream we treat the body as bytes regardless.
+    if (
+      contentType &&
+      !contentType.startsWith('image/') &&
+      contentType !== 'binary/octet-stream' &&
+      contentType !== 'application/octet-stream'
+    ) {
       console.warn('[ic/image-mirror] rejected non-image content-type:', contentType);
       return null;
     }
@@ -81,13 +110,18 @@ export async function mirrorCreatorPicture(
       return null;
     }
 
-    const ext = extFromContentType(contentType);
+    // For CloudFront's binary/octet-stream we derive the extension from
+    // the URL itself; other paths use extFromContentType. Either way, we
+    // re-set the storage object's Content-Type to image/<ext> so the
+    // Supabase public URL serves the file as a renderable image.
+    const ext = extFromUrlOrContentType(args.pictureUrl, contentType);
     const storagePath = `profiles/${args.provider}/${args.platform}/${args.providerUserId}.${ext}`;
+    const storageContentType = `image/${ext}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(storagePath, arrayBuffer, {
-        contentType: contentType ?? `image/${ext}`,
+        contentType: storageContentType,
         upsert: true,
       });
     if (uploadError) {

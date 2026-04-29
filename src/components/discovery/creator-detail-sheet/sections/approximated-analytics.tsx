@@ -2,7 +2,7 @@
 
 import { Heart, MessageCircle, TrendingUp } from 'lucide-react';
 import { useFetchCreatorPosts, type DiscoveryCreator } from '../../hooks';
-import { formatCount, formatPercent, sparklinePath } from '../../primitives/tokens';
+import { formatCount, formatPercent, proxiedImageSrc, sparklinePath } from '../../primitives/tokens';
 import { Section } from './section';
 import { summarisePostsAnalytics } from './analytics-helpers';
 import type { ICPost } from './posts-grid';
@@ -124,7 +124,7 @@ function TopPosts({
                 {thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={thumb}
+                    src={proxiedImageSrc(thumb)}
                     alt=""
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"

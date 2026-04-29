@@ -75,3 +75,23 @@ export function growthDirection(delta: number | null | undefined): GrowthDirecti
   if (delta < -0.1) return 'down';
   return 'flat';
 }
+
+/**
+ * Route external CDN image URLs through /api/image-proxy so the browser
+ * loads them same-origin (avoids CORP/COEP rejections on IG/TT/YT/etc.
+ * CDNs). Same-origin URLs (Supabase Storage, our own domain) are
+ * returned unchanged.
+ *
+ * Empty / invalid inputs are returned as-is so callers can pipe values
+ * straight through without null-checks.
+ */
+export function proxiedImageSrc(url: string | null | undefined): string {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    if (u.hostname.endsWith('supabase.co')) return url;
+    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+  } catch {
+    return url;
+  }
+}

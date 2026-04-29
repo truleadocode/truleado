@@ -2,7 +2,7 @@
 
 import { CheckCircle2, ExternalLink, Gamepad2, ShoppingBag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { formatCount } from '../../primitives/tokens';
+import { formatCount, proxiedImageSrc } from '../../primitives/tokens';
 import type { TwitchEnrichment } from '../parsers/types';
 import { StatBox } from '../primitives/stat-box';
 
@@ -59,7 +59,7 @@ export function TwitchPanel({ data }: TwitchPanelProps) {
                 {p.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
-                    src={p.imageUrl}
+                    src={proxiedImageSrc(p.imageUrl)}
                     alt=""
                     className="h-12 w-12 shrink-0 rounded object-cover"
                     referrerPolicy="no-referrer"

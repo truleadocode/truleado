@@ -2,7 +2,7 @@
 
 import { Heart, MessageCircle, Eye } from 'lucide-react';
 import { useFetchCreatorPosts, type DiscoveryCreator } from '../../hooks';
-import { formatCount } from '../../primitives/tokens';
+import { formatCount, proxiedImageSrc } from '../../primitives/tokens';
 import { Section } from './section';
 
 interface PostsGridProps {
@@ -97,7 +97,7 @@ function PostsTiles({ items }: { items: ICPost[] }) {
               {thumb ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={thumb}
+                  src={proxiedImageSrc(thumb)}
                   alt=""
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
@@ -136,3 +136,4 @@ function SkeletonTiles() {
     </div>
   );
 }
+

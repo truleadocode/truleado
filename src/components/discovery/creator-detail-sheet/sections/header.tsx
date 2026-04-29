@@ -3,7 +3,7 @@
 import { ExternalLink } from 'lucide-react';
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import type { DiscoveryCreator } from '../../hooks';
-import { avatarColorFor, formatCount, initialsFor } from '../../primitives/tokens';
+import { avatarColorFor, formatCount, initialsFor, proxiedImageSrc } from '../../primitives/tokens';
 
 interface HeaderProps {
   creator: DiscoveryCreator;
@@ -50,7 +50,7 @@ function Avatar({ creator, mirrored }: { creator: DiscoveryCreator; mirrored: st
     return (
       <div className="h-16 w-16 shrink-0 overflow-hidden rounded-full shadow-[inset_0_0_0_2px_#fff]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+        <img src={proxiedImageSrc(src)} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
       </div>
     );
   }

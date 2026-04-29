@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useSimilarCreators, type DiscoveryCreator } from '../../hooks';
-import { avatarColorFor, formatCount, initialsFor } from '../../primitives/tokens';
+import { avatarColorFor, formatCount, initialsFor, proxiedImageSrc } from '../../primitives/tokens';
 
 interface SimilarAccordionProps {
   agencyId: string;
@@ -78,7 +78,7 @@ function SimilarList({
           {a.pictureUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={a.pictureUrl}
+              src={proxiedImageSrc(a.pictureUrl)}
               alt=""
               className="h-10 w-10 shrink-0 rounded-full object-cover"
               referrerPolicy="no-referrer"
