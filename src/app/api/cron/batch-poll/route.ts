@@ -1,7 +1,15 @@
 /**
- * Vercel Cron: poll Influencers.club batch jobs.
+ * Vercel Cron: poll Influencers.club batch jobs. **WIP — not auto-scheduled.**
  *
- * Runs every minute (see vercel.json). On each tick:
+ * Vercel Hobby tier caps cron schedules at daily, but this poller needs
+ * minute-level cadence to surface batch results within a few minutes.
+ * Until we either (a) upgrade to Pro, or (b) move scheduling to Supabase
+ * pg_cron / GitHub Actions / Upstash QStash, the `crons` block in
+ * `vercel.json` is intentionally empty. The handler still works when
+ * called manually with the CRON_SECRET bearer token, and the batch UI
+ * isn't wired up yet so nothing in production currently depends on it.
+ *
+ * Behaviour when triggered:
  *   1. SELECT up to 50 jobs where next_poll_at <= now() AND status in a
  *      polling state, ordered by next_poll_at ASC.
  *   2. For each, call GET /enrichment/batch/{id}/status/ and transition.
