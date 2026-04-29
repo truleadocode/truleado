@@ -74,9 +74,16 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
     profile !== null &&
     (profile.enrichmentMode === 'FULL' || profile.enrichmentMode === 'FULL_WITH_AUDIENCE');
 
+  // Sheet grows to ~5xl on enrichment so the polished two-column layout
+  // (meta column + tabbed content) fits comfortably. Pre-enrich sticks
+  // with the narrow sidebar — the data simply doesn't justify the canvas.
+  const sheetWidthClass = isEnriched
+    ? 'w-full max-w-full overflow-hidden p-0 sm:max-w-5xl'
+    : 'w-full max-w-2xl overflow-y-auto p-0 sm:max-w-2xl';
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full max-w-2xl overflow-y-auto p-0 sm:max-w-2xl">
+      <SheetContent side="right" className={sheetWidthClass}>
         {creator ? (
           isEnriched && profile ? (
             <EnrichedShell agencyId={agencyId} creator={creator} profile={profile} />

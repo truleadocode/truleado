@@ -1,32 +1,25 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ExternalLink, Loader2, UserPlus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { ExternalLink } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import {
+  buildStandardStatList,
+  MetaColumn,
+  parseTopLevelCommon,
+} from '../enriched-data';
+import {
   parseInstagramEnrichment,
-  parseYouTubeEnrichment,
   parseTikTokEnrichment,
   parseTwitterEnrichment,
-  parseTwitchEnrichment,
-  parseTopLevelCommon,
-  OverviewHeader,
-  InstagramPanel,
-  YouTubePanel,
-  TikTokPanel,
-  TwitterPanel,
-  TwitchPanel,
 } from '../enriched-data';
 import type { CreatorProfile, DiscoveryCreator } from '../hooks';
 import { useCreatorIdByProfileId, useImportCreatorsToAgency } from '../hooks';
-import { Header } from './sections/header';
-import { ProfileInfo } from './sections/profile-info';
+import { safeDict, safeNumber, safeString } from '../enriched-data/parsers/safe';
+import { AnalyticsTab } from './sections/analytics-tab';
 import { PostsGrid } from './sections/posts-grid';
-import { AudienceSection } from './sections/audience-section';
 import { SimilarAccordion } from './sections/similar-accordion';
-import { ConnectedAccordion } from './sections/connected-accordion';
 
 interface EnrichedShellProps {
   agencyId: string;
@@ -36,31 +29,31 @@ interface EnrichedShellProps {
 }
 
 /**
- * Post-enrich layout. Replaces the legacy single-scroll sections with
- * sticky-top tabs (Overview / Audience / Posts / Platform) inside the
- * same `max-w-2xl` Sheet.
+ * Polished post-enrich layout matching IC's profile view. Two-column
+ * structure inside a ~5xl Sheet: meta column on the left, tabbed
+ * content on the right (Analytics / Posts / Similar Accounts).
  *
- * Pre-enrich state is unchanged — `index.tsx` keeps the legacy shell
- * when `enrichmentMode === null`. Once the user pays for FULL or
- * FULL+AUDIENCE, the data deserves richer rendering — and that's what
- * this component delivers.
+ * The Sheet width itself is set on `<SheetContent>` in the parent
+ * `index.tsx` based on enrichmentMode.
  */
 export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps) {
   const { toast } = useToast();
   const platform = creator.platform.toLowerCase();
-  const showAudienceTab =
-    profile.enrichmentMode === 'FULL_WITH_AUDIENCE' &&
-    (platform === 'instagram' || platform === 'youtube' || platform === 'tiktok');
+  const [tab, setTab] = useState<'analytics' | 'posts' | 'similar'>('analytics');
 
-  const [tab, setTab] = useState<'overview' | 'audience' | 'posts' | 'platform'>('overview');
-
-  // Memoise parsed shape — sidebar may re-render on each query refresh.
   const common = useMemo(() => parseTopLevelCommon(profile.rawData), [profile.rawData]);
+
+  // Per-platform stat extraction for the left column StatList.
+  const stats = useMemo(
+    () => buildStatsForPlatform(profile, platform),
+    [profile, platform]
+  );
 
   const rosterIdQuery = useCreatorIdByProfileId(agencyId, profile.id ?? null);
   const importToRoster = useImportCreatorsToAgency();
+  const alreadyInRoster = !!rosterIdQuery.data;
 
-  const handleImport = () => {
+  const handleAddToRoster = () => {
     importToRoster.mutate(
       {
         agencyId,
@@ -92,125 +85,160 @@ export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps
   };
 
   return (
-    <>
-      <Header creator={creator} mirroredAvatar={profile.profilePictureUrl ?? null} />
+    <div className="flex h-full">
+      <MetaColumn
+        displayName={profile.fullName ?? creator.username}
+        handle={creator.username}
+        pictureUrl={profile.profilePictureUrl ?? null}
+        providerUserId={profile.providerUserId ?? creator.providerUserId}
+        common={common}
+        currentPlatform={platform}
+        currentFollowers={profile.followers}
+        currentEngagementPercent={profile.engagementPercent}
+        biography={profile.biography ?? extractBio(profile.rawData, platform)}
+        stats={stats}
+        onAddToRoster={handleAddToRoster}
+        rosterPending={importToRoster.isPending}
+        alreadyInRoster={alreadyInRoster}
+      />
 
-      <OverviewHeader common={common} lastEnrichedAt={profile.lastEnrichedAt} />
-
-      <Tabs
-        value={tab}
-        onValueChange={(v) => setTab(v as typeof tab)}
-        className="flex flex-col"
-      >
-        <TabsList
-          className="sticky top-0 z-10 w-full justify-start gap-1 rounded-none border-b border-tru-slate-200 bg-white/95 px-6 backdrop-blur-sm"
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as typeof tab)}
+          className="flex flex-1 flex-col overflow-hidden"
         >
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {showAudienceTab ? <TabsTrigger value="audience">Audience</TabsTrigger> : null}
-          <TabsTrigger value="posts">Posts</TabsTrigger>
-          <TabsTrigger value="platform">{platformLabel(platform)}</TabsTrigger>
-        </TabsList>
+          <TabsList className="sticky top-0 z-10 w-full justify-start gap-1 rounded-none border-b border-tru-slate-200 bg-white/95 px-6 backdrop-blur-sm">
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="posts">Posts</TabsTrigger>
+            <TabsTrigger value="similar">Similar Accounts</TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="overview" className="mt-0">
-          <ProfileInfo profile={profile} isLoading={false} />
-          <SimilarAccordion agencyId={agencyId} creator={creator} />
-          <ConnectedAccordion agencyId={agencyId} creator={creator} />
-        </TabsContent>
+          <div className="flex-1 overflow-y-auto">
+            <TabsContent value="analytics" className="mt-0">
+              <AnalyticsTab creator={creator} profile={profile} />
+            </TabsContent>
 
-        {showAudienceTab ? (
-          <TabsContent value="audience" className="mt-0">
-            <AudienceSection profile={profile} />
-          </TabsContent>
-        ) : null}
+            <TabsContent value="posts" className="mt-0">
+              <PostsGrid agencyId={agencyId} creator={creator} />
+            </TabsContent>
 
-        <TabsContent value="posts" className="mt-0">
-          <PostsGrid agencyId={agencyId} creator={creator} />
-        </TabsContent>
-
-        <TabsContent value="platform" className="mt-0">
-          <PlatformTab platform={platform} profile={profile} />
-        </TabsContent>
-      </Tabs>
-
-      {/* Footer: deep-link if already in roster, else add-to-roster CTA. */}
-      <div className="border-t border-tru-slate-100 bg-tru-slate-50 px-6 py-3">
-        {rosterIdQuery.data ? (
-          <a
-            href={`/dashboard/creators/${rosterIdQuery.data}?platform=${platform}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center justify-between gap-2 text-sm font-semibold text-tru-blue-600 hover:underline"
-          >
-            <span>View full profile in Creator DB</span>
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        ) : (
-          <div>
-            <Button
-              onClick={handleImport}
-              disabled={importToRoster.isPending}
-              className="w-full gap-2 bg-tru-blue-600 text-white hover:bg-tru-blue-700"
-            >
-              {importToRoster.isPending ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Adding to roster…
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" /> Add to Creator Roster
-                </>
-              )}
-            </Button>
-            <p className="mt-2 text-[11px] text-tru-slate-500">
-              This profile is already enriched in our cache. Adding it to your roster is free.
-            </p>
+            <TabsContent value="similar" className="mt-0">
+              <SimilarAccordion agencyId={agencyId} creator={creator} />
+            </TabsContent>
           </div>
-        )}
+        </Tabs>
+
+        {/* Footer: deep-link if already in roster. The Add CTA lives in MetaColumn. */}
+        {alreadyInRoster ? (
+          <div className="border-t border-tru-slate-100 bg-tru-slate-50 px-6 py-3">
+            <a
+              href={`/dashboard/creators/${rosterIdQuery.data}?platform=${platform}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between gap-2 text-sm font-semibold text-tru-blue-600 hover:underline"
+            >
+              <span>View full profile in Creator DB</span>
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
-function platformLabel(platform: string): string {
-  switch (platform) {
-    case 'instagram':
-      return 'Instagram';
-    case 'youtube':
-      return 'YouTube';
-    case 'tiktok':
-      return 'TikTok';
-    case 'twitter':
-      return 'Twitter / X';
-    case 'twitch':
-      return 'Twitch';
-    default:
-      return 'Platform';
-  }
+function extractBio(rawData: unknown, platform: string): string | null {
+  const block = safeDict(deepGet(rawData, [platform]));
+  if (!block) return null;
+  return (
+    safeString(block.biography) ??
+    safeString(block.description) ??
+    null
+  );
 }
 
-function PlatformTab({
-  platform,
-  profile,
-}: {
-  platform: string;
-  profile: CreatorProfile;
-}) {
-  switch (platform) {
-    case 'instagram':
-      return <InstagramPanel data={parseInstagramEnrichment(profile.rawData)} />;
-    case 'youtube':
-      return <YouTubePanel data={parseYouTubeEnrichment(profile.rawData)} />;
-    case 'tiktok':
-      return <TikTokPanel data={parseTikTokEnrichment(profile.rawData)} />;
-    case 'twitter':
-      return <TwitterPanel data={parseTwitterEnrichment(profile.rawData)} />;
-    case 'twitch':
-      return <TwitchPanel data={parseTwitchEnrichment(profile.rawData)} />;
-    default:
-      return (
-        <div className="px-6 py-8 text-center text-sm text-tru-slate-500">
-          Platform-specific data not available.
-        </div>
-      );
+function buildStatsForPlatform(profile: CreatorProfile, platform: string) {
+  // Common base from the profile row.
+  const followers = profile.followers;
+  const er = profile.engagementPercent;
+
+  // Per-platform extras live in raw_data — read via the parsers.
+  if (platform === 'instagram') {
+    const ig = parseInstagramEnrichment(profile.rawData);
+    const reelsAvgLikes = safeNumber(safeDict(ig.reels)?.avg_likes);
+    return buildStandardStatList({
+      followers,
+      engagementPercent: er,
+      numberOfPosts: ig.mediaCount,
+      postsPerMonth: postsPerMonthFromPosts(ig.posts),
+      averageViews: null, // IG photo posts don't expose view counts
+      averageReelLikes: reelsAvgLikes,
+      averageLikes: ig.avgLikes,
+      averageComments: ig.avgComments,
+    });
   }
+  if (platform === 'tiktok') {
+    const tt = parseTikTokEnrichment(profile.rawData);
+    return buildStandardStatList({
+      followers,
+      engagementPercent: er,
+      numberOfPosts: tt.videoCount,
+      postsPerMonth: tt.postingFrequencyRecentMonths,
+      averageViews: tt.averages.plays,
+      averageReelLikes: null,
+      averageLikes: tt.averages.likes,
+      averageComments: tt.averages.comments,
+    });
+  }
+  if (platform === 'twitter') {
+    const tw = parseTwitterEnrichment(profile.rawData);
+    return buildStandardStatList({
+      followers,
+      engagementPercent: er,
+      numberOfPosts: tw.tweetsCount,
+      postsPerMonth: postsPerMonthFromPosts(tw.posts),
+      averageViews: tw.averages.views,
+      averageReelLikes: null,
+      averageLikes: tw.averages.likes,
+      averageComments: tw.averages.replies,
+    });
+  }
+  // YouTube + Twitch fall through to a minimal version.
+  return buildStandardStatList({
+    followers,
+    engagementPercent: er,
+    numberOfPosts: null,
+    postsPerMonth: null,
+    averageViews: null,
+    averageReelLikes: null,
+    averageLikes: null,
+    averageComments: null,
+  });
+}
+
+/** Approximate posts-per-month from a posts array's published_at distribution. */
+function postsPerMonthFromPosts(
+  posts: Array<{ publishedAt: string | null }>
+): number | null {
+  const dates = posts
+    .map((p) => (p.publishedAt ? new Date(p.publishedAt).getTime() : null))
+    .filter((d): d is number => d !== null);
+  if (dates.length < 2) return null;
+  const span = Math.max(...dates) - Math.min(...dates);
+  const months = span / (30 * 24 * 60 * 60 * 1000);
+  if (months < 0.5) return null;
+  return dates.length / months;
+}
+
+function deepGet(root: unknown, path: string[]): unknown {
+  let cur: unknown = root;
+  for (const seg of path) {
+    if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+      cur = (cur as Record<string, unknown>)[seg];
+    } else {
+      return undefined;
+    }
+  }
+  return cur;
 }

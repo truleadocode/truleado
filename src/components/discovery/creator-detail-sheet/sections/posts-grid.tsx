@@ -1,6 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Heart, MessageCircle, Eye, PlayCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useFetchCreatorPosts, type DiscoveryCreator } from '../../hooks';
 import { formatCount, proxiedImageSrc } from '../../primitives/tokens';
 import { Section } from './section';
@@ -44,9 +47,12 @@ function isImageUrl(url: string | undefined): boolean {
 
 const SUPPORTED = new Set(['instagram', 'tiktok', 'youtube']);
 
+type PostsFilter = 'all' | 'reels';
+
 export function PostsGrid({ agencyId, creator }: PostsGridProps) {
   const platform = creator.platform.toLowerCase();
   const supportsPosts = SUPPORTED.has(platform);
+  const [filter, setFilter] = useState<PostsFilter>('all');
 
   const postsQuery = useFetchCreatorPosts({
     agencyId,
@@ -58,7 +64,7 @@ export function PostsGrid({ agencyId, creator }: PostsGridProps) {
 
   if (!supportsPosts) {
     return (
-      <Section title="Recent posts">
+      <Section title="Latest Creator Posts">
         <div className="rounded-md border border-dashed border-tru-slate-300 bg-tru-slate-50 p-6 text-center text-sm text-tru-slate-500">
           Recent-posts data is only available on Instagram, TikTok, and YouTube.
         </div>
@@ -67,18 +73,28 @@ export function PostsGrid({ agencyId, creator }: PostsGridProps) {
   }
 
   const cacheHit = postsQuery.data?.cacheHit;
-  const items = (postsQuery.data?.result?.items ?? []) as ICPost[];
+  const allItems = (postsQuery.data?.result?.items ?? []) as ICPost[];
+  const items = filter === 'reels' ? allItems.filter((p) => p.media_type === 2) : allItems;
+
+  // Hide the toggle for platforms that don't have a meaningful Reels split
+  // (TikTok is all video, YouTube uses the long/shorts split via panels).
+  const showToggle = platform === 'instagram';
 
   return (
     <Section
-      title="Recent posts"
+      title="Latest Creator Posts"
       description="Latest posts (1 credit per page; free if cached for this agency in the last 30 days)."
       rightSlot={
-        cacheHit !== undefined ? (
-          <span className="rounded-full bg-tru-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-wider text-tru-slate-600">
-            {cacheHit ? 'Cached' : 'Fresh'}
-          </span>
-        ) : null
+        <div className="flex items-center gap-2">
+          {cacheHit !== undefined ? (
+            <span className="rounded-full bg-tru-slate-100 px-2 py-0.5 text-[10px] uppercase tracking-wider text-tru-slate-600">
+              {cacheHit ? 'Cached' : 'Fresh'}
+            </span>
+          ) : null}
+          {showToggle ? (
+            <PostsReelsToggle value={filter} onChange={setFilter} />
+          ) : null}
+        </div>
       }
     >
       {postsQuery.isLoading ? (
@@ -167,6 +183,49 @@ function SkeletonTiles() {
           className="aspect-square animate-pulse rounded-md bg-tru-slate-100"
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * IC's Posts/Reels segmented toggle. Filters the IC posts payload by
+ * `media_type === 2` for Reels.
+ */
+function PostsReelsToggle({
+  value,
+  onChange,
+}: {
+  value: PostsFilter;
+  onChange: (next: PostsFilter) => void;
+}) {
+  return (
+    <div className="inline-flex overflow-hidden rounded-md border border-tru-slate-200 bg-white">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(
+          'h-7 rounded-none border-0 px-3 text-[12px]',
+          value === 'all' ? 'bg-tru-blue-600 text-white hover:bg-tru-blue-700 hover:text-white' : 'text-tru-slate-600'
+        )}
+        onClick={() => onChange('all')}
+      >
+        Posts
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(
+          'h-7 rounded-none border-0 border-l border-tru-slate-200 px-3 text-[12px]',
+          value === 'reels'
+            ? 'bg-tru-blue-600 text-white hover:bg-tru-blue-700 hover:text-white'
+            : 'text-tru-slate-600'
+        )}
+        onClick={() => onChange('reels')}
+      >
+        Reels
+      </Button>
     </div>
   );
 }
