@@ -1,234 +1,410 @@
 /**
- * Discovery Module Query Resolvers
+ * Creator Discovery Query Resolvers (Influencers.club).
  *
- * Queries for the Creator Discovery module (search, unlocks, exports, pricing).
- * All queries enforce agency isolation and permission checks.
+ * - discoverySearch / similarCreators: IC-backed, per-agency cached, credit-metered.
+ * - discoveryUnlocks / discoveryExports: DEPRECATED legacy reads (OnSocial era)
+ *   kept around so the old frontend doesn't immediately crash during migration.
+ *   Underlying tables are read-only — writes blocked by triggers in 00056.
+ * - savedSearches, discoveryPricing, discoveryEstimateCost, discoveryDictionary:
+ *   unchanged semantics; pricing defaults to 'influencers_club' instead of 'onsocial'.
  */
 
 import { GraphQLContext } from '../../context';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { requireAuth, hasAgencyPermission, Permission } from '@/lib/rbac';
 import { forbiddenError } from '../../errors';
-import { searchInfluencers } from '@/lib/onsocial';
-import { getDictionary } from '@/lib/onsocial/dict';
 import { getActionPrice } from '@/lib/discovery/pricing';
+import { deductCredits } from '@/lib/discovery/token-deduction';
+import {
+  validateDiscoveryFilter,
+  searchDiscovery,
+  findSimilarCreators,
+  computeFiltersHash,
+  readDiscoveryCache,
+  writeDiscoveryCache,
+  recordCacheHit,
+  getDictionary as icGetDictionary,
+  type DiscoveryFilterInput,
+  type IcDictionaryType,
+  type IcDiscoveryPlatform,
+} from '@/lib/influencers-club';
+import { calculateDiscoveryPageCost, calculateSimilarCreatorsPageCost } from '@/lib/discovery/pricing';
+import { logActivity } from '@/lib/audit';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function platformToDomain(p: string): IcDiscoveryPlatform {
+  return p.toLowerCase() as IcDiscoveryPlatform;
+}
+
+function buildFilterInput(
+  platform: string,
+  filters: Record<string, unknown> | null | undefined
+): DiscoveryFilterInput {
+  const raw = (filters ?? {}) as Record<string, unknown>;
+  const input: DiscoveryFilterInput = {
+    platform: platformToDomain(platform),
+    ...raw,
+  };
+  return validateDiscoveryFilter(input);
+}
 
 /**
- * Search for influencers via OnSocial.
- * FREE — no token cost. OnSocial returns ~3 visible + ~27 hidden results
- * (auto_unhide=0). Hidden results lack profile data. After an agency unlocks
- * results via the unhide API, the revealed profile data is stored in
- * discovery_unlocks — we cross-reference here to fill it in.
+ * Shape of CreatorSearchResult returned from both discoverySearch and similarCreators.
  */
+interface CreatorSearchResultOutput {
+  accounts: Array<{
+    providerUserId: string;
+    username: string;
+    fullName: string | null;
+    followers: number | null;
+    engagementPercent: number | null;
+    pictureUrl: string | null;
+    platform: string;
+    creatorProfileId: string | null;
+  }>;
+  total: number;
+  cached: boolean;
+  cachedAt: string | null;
+  expiresAt: string | null;
+  creditsSpent: number;
+  creditsSavedOnHit: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// discoverySearch — IC + per-agency query cache
+// ---------------------------------------------------------------------------
+
 export async function discoverySearch(
   _: unknown,
   args: {
     agencyId: string;
     platform: string;
-    filters: Record<string, unknown>;
-    sort?: { field: string; direction?: string };
-    skip?: number;
-    limit?: number;
+    filters?: Record<string, unknown> | null;
+    page?: number | null;
+    limit?: number | null;
+    forceRefresh?: boolean | null;
   },
   ctx: GraphQLContext
-) {
+): Promise<CreatorSearchResultOutput> {
   const user = requireAuth(ctx);
 
   if (!hasAgencyPermission(user, args.agencyId, Permission.DISCOVERY_SEARCH)) {
     throw forbiddenError('You do not have permission to search for creators');
   }
 
-  // Platform comes as UPPERCASE enum ("INSTAGRAM") but OnSocial API needs lowercase
-  const platform = args.platform.toLowerCase() as 'instagram' | 'youtube' | 'tiktok';
-  const sort = args.sort || { field: 'followers', direction: 'desc' };
+  const filterInput = buildFilterInput(args.platform, args.filters ?? {});
+  const page = Math.max(args.page ?? 1, 1);
+  const limit = Math.min(Math.max(args.limit ?? 30, 1), 50);
+  const platform = filterInput.platform;
 
-  const result = await searchInfluencers({
+  const filtersHash = computeFiltersHash({
     platform,
-    filters: args.filters || {},
-    sort: { field: sort.field as Parameters<typeof searchInfluencers>[0]['sort']['field'], direction: (sort.direction as 'desc') || 'desc' },
-    skip: args.skip ?? 0,
-    limit: args.limit ?? 30,
+    filters: args.filters ?? {},
+    page,
+    limit,
   });
 
-  // Map all accounts — include hidden results.
-  // Hidden results (hidden_result=true) come from OnSocial without user_id/identity,
-  // so we use search_result_id as fallback. Frontend shows them as locked.
-  const accounts = result.accounts
-    .map((a) => {
-      const profile = a.account.user_profile;
-      const hidden = a.account.hidden_result === true;
-
-      // Hidden results may lack user_id — use search_result_id as fallback
-      const userId = profile.user_id || a.account.search_result_id || '';
-      if (!userId) return null;
+  // --- Cache lookup ---
+  if (!args.forceRefresh) {
+    const cached = await readDiscoveryCache({
+      agencyId: args.agencyId,
+      platform,
+      filtersHash,
+      page,
+    });
+    if (cached) {
+      // Estimate savings: number of accounts * per-account internal cost.
+      const perAccountPrice = await getActionPrice('influencers_club', 'discovery_page', args.agencyId);
+      const saved = Math.ceil(perAccountPrice.internalCost * cached.accounts.length);
+      // Fire-and-forget telemetry.
+      recordCacheHit({ rowId: cached.id, creditsSavedDelta: saved }).catch(() => {});
 
       return {
-        userId,
-        username: profile.username || '',
-        fullname: profile.fullname ?? null,
-        followers: profile.followers ?? 0,
-        engagementRate: profile.engagement_rate ?? null,
-        engagements: profile.engagements ?? null,
-        avgLikes: profile.avg_likes ?? null,
-        avgViews: profile.avg_views ?? null,
-        isVerified: profile.is_verified ?? false,
-        picture: hidden ? null : (profile.picture || null),
-        url: hidden ? null : (profile.url || null),
-        searchResultId: a.account.search_result_id ?? '',
-        isHidden: hidden,
-        platform: args.platform,
+        accounts: cached.accounts.map((a) => ({
+          providerUserId: a.providerUserId,
+          username: a.username,
+          fullName: a.fullName ?? null,
+          followers: a.followers ?? null,
+          engagementPercent: a.engagementPercent ?? null,
+          pictureUrl: a.pictureUrl ?? null,
+          platform: a.platform.toUpperCase(),
+          creatorProfileId: null, // populated in Phase C when profile cache is linked
+        })),
+        total: cached.total,
+        cached: true,
+        cachedAt: cached.cachedAt,
+        expiresAt: cached.expiresAt,
+        creditsSpent: 0,
+        creditsSavedOnHit: saved,
       };
-    })
-    .filter((a): a is Exclude<typeof a, null> => a !== null);
-
-  // Cross-reference hidden results with previously unlocked data.
-  // When an agency has unlocked results, the revealed profile data is
-  // stored in discovery_unlocks — merge it back so the frontend can display it.
-  const hiddenSrIds = accounts
-    .filter((a) => a.isHidden && a.searchResultId)
-    .map((a) => a.searchResultId);
-
-  if (hiddenSrIds.length > 0) {
-    const { data: unlockRows } = await supabaseAdmin
-      .from('discovery_unlocks')
-      .select('search_result_id, onsocial_user_id, username, fullname, profile_data')
-      .eq('agency_id', args.agencyId)
-      .in('search_result_id', hiddenSrIds);
-
-    const unlocks = (unlockRows ?? []) as Record<string, unknown>[];
-
-    if (unlocks.length > 0) {
-      const unlockMap = new Map(
-        unlocks.map((u) => [u.search_result_id as string, u])
-      );
-
-      for (const account of accounts) {
-        if (!account.isHidden) continue;
-        const unlock = unlockMap.get(account.searchResultId);
-        if (!unlock) continue;
-
-        const pd = unlock.profile_data as Record<string, unknown> | null;
-        account.userId = (unlock.onsocial_user_id as string) || account.userId;
-        account.username = (unlock.username as string) || account.username;
-        account.fullname = (unlock.fullname as string) || account.fullname;
-        account.picture = (pd?.picture as string) || null;
-        account.url = (pd?.url as string) || null;
-        account.isHidden = false; // No longer hidden — agency has paid to reveal
-      }
     }
   }
 
-  return { accounts, total: result.total };
+  // --- Cache miss: fetch from IC ---
+  const { normalized } = await searchDiscovery({
+    input: filterInput,
+    page,
+    limit,
+  });
+
+  // Compute cost + deduct. discovery_page is priced per-creator-returned.
+  const cost = await calculateDiscoveryPageCost(args.agencyId, normalized.accounts.length);
+
+  if (cost.totalInternalCost > 0) {
+    await deductCredits(args.agencyId, cost.totalInternalCost);
+  }
+
+  // Enrich with creator_profile_id where we already have a global cache row.
+  const creatorProfileIds = await lookupCreatorProfileIds(
+    platform,
+    normalized.accounts.map((a) => a.providerUserId)
+  );
+
+  // --- Write-back to cache ---
+  await writeDiscoveryCache({
+    agencyId: args.agencyId,
+    platform,
+    filtersHash,
+    filtersSnapshot: { platform, filters: args.filters ?? {}, page, limit },
+    page,
+    limit,
+    total: normalized.total,
+    accounts: normalized.accounts,
+    creditsSpentOnFetch: cost.totalInternalCost,
+    createdBy: user.id,
+  });
+
+  // --- Audit ---
+  logActivity({
+    agencyId: args.agencyId,
+    actorId: user.id,
+    actorType: 'user',
+    entityType: 'ic_call',
+    entityId: filtersHash,
+    action: 'discovery_search',
+    metadata: {
+      platform,
+      page,
+      limit,
+      accounts: normalized.accounts.length,
+      total: normalized.total,
+      creditsSpent: cost.totalInternalCost,
+      cacheHit: false,
+    },
+  }).catch(() => {});
+
+  return {
+    accounts: normalized.accounts.map((a) => ({
+      providerUserId: a.providerUserId,
+      username: a.username,
+      fullName: a.fullName ?? null,
+      followers: a.followers ?? null,
+      engagementPercent: a.engagementPercent ?? null,
+      pictureUrl: a.pictureUrl ?? null,
+      platform: a.platform.toUpperCase(),
+      creatorProfileId: creatorProfileIds.get(a.providerUserId) ?? null,
+    })),
+    total: normalized.total,
+    cached: false,
+    cachedAt: null,
+    expiresAt: null,
+    creditsSpent: cost.totalInternalCost,
+    creditsSavedOnHit: null,
+  };
 }
 
-/**
- * Get discovery unlocks for an agency.
- */
-export async function discoveryUnlocks(
+// ---------------------------------------------------------------------------
+// similarCreators — IC /creators/similar/ wrapped with cache + credits
+// ---------------------------------------------------------------------------
+
+export async function similarCreators(
   _: unknown,
   args: {
     agencyId: string;
-    platform?: string;
-    limit?: number;
-    offset?: number;
+    platform: string;
+    referenceKey: string;
+    referenceValue: string;
+    filters?: Record<string, unknown> | null;
+    page?: number | null;
+    limit?: number | null;
+    forceRefresh?: boolean | null;
   },
   ctx: GraphQLContext
-) {
-  requireAuth(ctx);
+): Promise<CreatorSearchResultOutput> {
+  const user = requireAuth(ctx);
 
-  let query = supabaseAdmin
-    .from('discovery_unlocks')
-    .select('*')
-    .eq('agency_id', args.agencyId)
-    .order('unlocked_at', { ascending: false });
-
-  if (args.platform) {
-    query = query.eq('platform', args.platform.toLowerCase());
+  if (!hasAgencyPermission(user, args.agencyId, Permission.DISCOVERY_SEARCH)) {
+    throw forbiddenError('You do not have permission to search for creators');
   }
 
-  if (args.limit) {
-    query = query.limit(args.limit);
+  if (!['url', 'username', 'id'].includes(args.referenceKey)) {
+    throw new Error(`Invalid referenceKey: ${args.referenceKey}. Must be url|username|id.`);
   }
 
-  if (args.offset) {
-    query = query.range(args.offset, args.offset + (args.limit || 50) - 1);
+  const filterInput = args.filters
+    ? buildFilterInput(args.platform, args.filters)
+    : buildFilterInput(args.platform, {});
+  const page = Math.max(args.page ?? 1, 1);
+  const limit = Math.min(Math.max(args.limit ?? 30, 1), 50);
+  const platform = filterInput.platform;
+
+  // Similar uses same cache table but hashes include reference identifiers.
+  const filtersHash = computeFiltersHash({
+    platform,
+    filters: {
+      ...(args.filters ?? {}),
+      __similar: { key: args.referenceKey, value: args.referenceValue },
+    },
+    page,
+    limit,
+  });
+
+  if (!args.forceRefresh) {
+    const cached = await readDiscoveryCache({
+      agencyId: args.agencyId,
+      platform,
+      filtersHash,
+      page,
+    });
+    if (cached) {
+      const perAccountPrice = await getActionPrice(
+        'influencers_club',
+        'similar_creators_page',
+        args.agencyId
+      );
+      const saved = Math.ceil(perAccountPrice.internalCost * cached.accounts.length);
+      recordCacheHit({ rowId: cached.id, creditsSavedDelta: saved }).catch(() => {});
+
+      return {
+        accounts: cached.accounts.map((a) => ({
+          providerUserId: a.providerUserId,
+          username: a.username,
+          fullName: a.fullName ?? null,
+          followers: a.followers ?? null,
+          engagementPercent: a.engagementPercent ?? null,
+          pictureUrl: a.pictureUrl ?? null,
+          platform: a.platform.toUpperCase(),
+          creatorProfileId: null,
+        })),
+        total: cached.total,
+        cached: true,
+        cachedAt: cached.cachedAt,
+        expiresAt: cached.expiresAt,
+        creditsSpent: 0,
+        creditsSavedOnHit: saved,
+      };
+    }
   }
 
-  const { data, error } = await query;
+  const { normalized } = await findSimilarCreators({
+    platform,
+    referenceKey: args.referenceKey as 'url' | 'username' | 'id',
+    referenceValue: args.referenceValue,
+    filters: args.filters ? filterInput : undefined,
+    page,
+    limit,
+  });
 
-  if (error) {
-    throw new Error('Failed to fetch discovery unlocks');
+  const cost = await calculateSimilarCreatorsPageCost(args.agencyId, normalized.accounts.length);
+  if (cost.totalInternalCost > 0) {
+    await deductCredits(args.agencyId, cost.totalInternalCost);
   }
 
-  return (data || []).map((row: Record<string, unknown>) => ({
-    id: row.id,
-    platform: row.platform,
-    onsocialUserId: row.onsocial_user_id,
-    searchResultId: row.search_result_id,
-    username: row.username,
-    fullname: row.fullname,
-    profileData: row.profile_data,
-    tokensSpent: row.tokens_spent,
-    unlockedBy: row.unlocked_by,
-    unlockedAt: row.unlocked_at,
-    expiresAt: row.expires_at,
-  }));
+  const creatorProfileIds = await lookupCreatorProfileIds(
+    platform,
+    normalized.accounts.map((a) => a.providerUserId)
+  );
+
+  await writeDiscoveryCache({
+    agencyId: args.agencyId,
+    platform,
+    filtersHash,
+    filtersSnapshot: {
+      platform,
+      filters: args.filters ?? {},
+      reference: { key: args.referenceKey, value: args.referenceValue },
+      page,
+      limit,
+    },
+    page,
+    limit,
+    total: normalized.total,
+    accounts: normalized.accounts,
+    creditsSpentOnFetch: cost.totalInternalCost,
+    createdBy: user.id,
+  });
+
+  logActivity({
+    agencyId: args.agencyId,
+    actorId: user.id,
+    actorType: 'user',
+    entityType: 'ic_call',
+    entityId: filtersHash,
+    action: 'similar_creators',
+    metadata: {
+      platform,
+      referenceKey: args.referenceKey,
+      referenceValue: args.referenceValue,
+      page,
+      limit,
+      accounts: normalized.accounts.length,
+      total: normalized.total,
+      creditsSpent: cost.totalInternalCost,
+      cacheHit: false,
+    },
+  }).catch(() => {});
+
+  return {
+    accounts: normalized.accounts.map((a) => ({
+      providerUserId: a.providerUserId,
+      username: a.username,
+      fullName: a.fullName ?? null,
+      followers: a.followers ?? null,
+      engagementPercent: a.engagementPercent ?? null,
+      pictureUrl: a.pictureUrl ?? null,
+      platform: a.platform.toUpperCase(),
+      creatorProfileId: creatorProfileIds.get(a.providerUserId) ?? null,
+    })),
+    total: normalized.total,
+    cached: false,
+    cachedAt: null,
+    expiresAt: null,
+    creditsSpent: cost.totalInternalCost,
+    creditsSavedOnHit: null,
+  };
 }
 
-/**
- * Get discovery exports for an agency.
- */
-export async function discoveryExports(
-  _: unknown,
-  args: {
-    agencyId: string;
-    limit?: number;
-    offset?: number;
-  },
-  ctx: GraphQLContext
-) {
-  requireAuth(ctx);
+// ---------------------------------------------------------------------------
+// Lookup helper — find existing creator_profile_id rows for discovery results
+// ---------------------------------------------------------------------------
 
-  let query = supabaseAdmin
-    .from('discovery_exports')
-    .select('*')
-    .eq('agency_id', args.agencyId)
-    .order('created_at', { ascending: false });
+async function lookupCreatorProfileIds(
+  platform: string,
+  providerUserIds: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (providerUserIds.length === 0) return map;
 
-  if (args.limit) {
-    query = query.limit(args.limit);
+  const { data } = await supabaseAdmin
+    .from('creator_profiles')
+    .select('provider_user_id, id')
+    .eq('provider', 'influencers_club')
+    .eq('platform', platform)
+    .in('provider_user_id', providerUserIds);
+
+  for (const row of data ?? []) {
+    map.set(row.provider_user_id as string, row.id as string);
   }
-
-  if (args.offset) {
-    query = query.range(args.offset, args.offset + (args.limit || 50) - 1);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    throw new Error('Failed to fetch discovery exports');
-  }
-
-  return (data || []).map((row: Record<string, unknown>) => ({
-    id: row.id,
-    platform: row.platform,
-    exportType: row.export_type,
-    filterSnapshot: row.filter_snapshot,
-    totalAccounts: row.total_accounts,
-    tokensSpent: row.tokens_spent,
-    onsocialExportId: row.onsocial_export_id,
-    status: (row.status as string).toUpperCase(),
-    downloadUrl: row.download_url,
-    errorMessage: row.error_message,
-    exportedBy: row.exported_by,
-    createdAt: row.created_at,
-    completedAt: row.completed_at,
-  }));
+  return map;
 }
 
-/**
- * Get saved searches for an agency.
- */
+// ---------------------------------------------------------------------------
+// Unchanged query resolvers
+// ---------------------------------------------------------------------------
+
 export async function savedSearches(
   _: unknown,
   args: { agencyId: string },
@@ -242,9 +418,7 @@ export async function savedSearches(
     .eq('agency_id', args.agencyId)
     .order('created_at', { ascending: false });
 
-  if (error) {
-    throw new Error('Failed to fetch saved searches');
-  }
+  if (error) throw new Error('Failed to fetch saved searches');
 
   return (data || []).map((row: Record<string, unknown>) => ({
     id: row.id,
@@ -260,7 +434,8 @@ export async function savedSearches(
 }
 
 /**
- * Get discovery pricing configuration.
+ * Get discovery pricing configuration. Defaults to 'influencers_club';
+ * pass provider='onsocial' to read legacy rows (now inactive).
  */
 export async function discoveryPricing(
   _: unknown,
@@ -269,9 +444,8 @@ export async function discoveryPricing(
 ) {
   requireAuth(ctx);
 
-  const provider = args.provider || 'onsocial';
+  const provider = args.provider || 'influencers_club';
 
-  // Get agency-specific + global defaults in one query
   const { data, error } = await supabaseAdmin
     .from('token_pricing_config')
     .select('*')
@@ -279,9 +453,7 @@ export async function discoveryPricing(
     .eq('is_active', true)
     .or(`agency_id.eq.${args.agencyId},agency_id.is.null`);
 
-  if (error) {
-    throw new Error('Failed to fetch pricing config');
-  }
+  if (error) throw new Error('Failed to fetch pricing config');
 
   return (data || []).map((row: Record<string, unknown>) => ({
     id: row.id,
@@ -295,7 +467,9 @@ export async function discoveryPricing(
 }
 
 /**
- * Estimate the cost for a discovery action.
+ * Estimate cost for a discovery / enrichment action.
+ * Accepts provider-qualified actions (e.g. 'influencers_club/enrich_full')
+ * OR legacy short-form. Default provider resolves via token_pricing_config.
  */
 export async function discoveryEstimateCost(
   _: unknown,
@@ -304,7 +478,16 @@ export async function discoveryEstimateCost(
 ) {
   requireAuth(ctx);
 
-  const price = await getActionPrice('onsocial', args.action, args.agencyId);
+  // Allow "provider/action" syntax; default to influencers_club otherwise.
+  let provider = 'influencers_club';
+  let action = args.action;
+  if (args.action.includes('/')) {
+    const parts = args.action.split('/');
+    provider = parts[0];
+    action = parts.slice(1).join('/');
+  }
+
+  const price = await getActionPrice(provider, action, args.agencyId);
   const totalCost = price.internalCost * args.count;
 
   const { data: agency, error: agencyError } = await supabaseAdmin
@@ -313,9 +496,7 @@ export async function discoveryEstimateCost(
     .eq('id', args.agencyId)
     .single();
 
-  if (agencyError || !agency) {
-    throw new Error('Failed to fetch agency balance');
-  }
+  if (agencyError || !agency) throw new Error('Failed to fetch agency balance');
 
   const currentBalance = agency.credit_balance ?? 0;
 
@@ -328,7 +509,7 @@ export async function discoveryEstimateCost(
 }
 
 /**
- * Get a dictionary from OnSocial (categories, interests, languages, etc.).
+ * Get a dictionary from Influencers.club (backed by provider_dictionary_cache).
  */
 export async function discoveryDictionary(
   _: unknown,
@@ -338,12 +519,10 @@ export async function discoveryDictionary(
   requireAuth(ctx);
 
   const platform = args.platform
-    ? (args.platform.toLowerCase() as 'instagram' | 'youtube' | 'tiktok')
+    ? (args.platform.toLowerCase() as IcDiscoveryPlatform)
     : undefined;
 
-  return getDictionary(
-    args.type as Parameters<typeof getDictionary>[0],
-    args.query ?? '',
-    platform
-  );
+  return icGetDictionary(args.type as IcDictionaryType, platform, {
+    search: args.query || undefined,
+  });
 }

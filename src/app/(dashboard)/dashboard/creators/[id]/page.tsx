@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   MoreHorizontal,
@@ -12,6 +12,8 @@ import {
   Phone,
   StickyNote,
   ExternalLink,
+  Loader2,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,11 +42,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PlatformIcon } from '@/components/ui/platform-icon'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
-import { useSocialFetch } from '@/hooks/use-social-fetch'
 import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
-import { InstagramTab } from '@/components/creators/instagram-tab'
-import { YouTubeTab } from '@/components/creators/youtube-tab'
 import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
+import { InstagramProfilePage } from '@/components/creator-profile/pages/instagram-profile-page'
+import { YouTubeProfilePage } from '@/components/creator-profile/pages/youtube-profile-page'
+import { TikTokProfilePage } from '@/components/creator-profile/pages/tiktok-profile-page'
+import { TwitterProfilePage } from '@/components/creator-profile/pages/twitter-profile-page'
+import { TwitchProfilePage } from '@/components/creator-profile/pages/twitch-profile-page'
+import { useEnrichCreator } from '@/components/discovery/hooks'
+import { EnrichConfirmDialog } from '@/components/discovery/dialogs/enrich-confirm-dialog'
 import { useAuth } from '@/contexts/auth-context'
 import { useCurrency } from '@/hooks/use-currency'
 
@@ -109,6 +115,8 @@ interface Creator {
   tiktokHandle: string | null
   facebookHandle: string | null
   linkedinHandle: string | null
+  twitterHandle: string | null
+  twitchHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string
@@ -140,24 +148,20 @@ interface SocialProfile {
   lastFetchedAt: string
 }
 
-interface SocialPost {
+type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'twitter' | 'twitch' | 'facebook' | 'linkedin'
+
+interface EnrichedProfile {
   id: string
   platform: string
-  platformPostId: string
-  postType: string | null
-  caption: string | null
-  url: string | null
-  thumbnailUrl: string | null
-  likesCount: number | null
-  commentsCount: number | null
-  viewsCount: number | null
-  publishedAt: string | null
+  username: string
+  rawData: unknown
+  enrichmentMode: string | null
+  lastEnrichedAt: string | null
 }
-
-type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'facebook' | 'linkedin'
 
 export default function CreatorDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const { currentAgency } = useAuth()
   const { format: formatMoney } = useCurrency()
@@ -167,12 +171,14 @@ export default function CreatorDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [enrichedProfiles, setEnrichedProfiles] = useState<EnrichedProfile[]>([])
 
-  // Social data state
+  // Social data state — Dashboard tab consumes profiles for the
+  // cross-platform summary. Per-platform post grids are now fed from the
+  // IC enrichment payload (rawData) by the new <{Platform}ProfilePage>
+  // components, so the legacy `instagramPosts` / `youtubePosts` state and
+  // their Apify post fetches were dropped with PR2.
   const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>([])
-  const [instagramPosts, setInstagramPosts] = useState<SocialPost[]>([])
-  const [youtubePosts, setYoutubePosts] = useState<SocialPost[]>([])
-  const [socialLoading, setSocialLoading] = useState(false)
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false)
@@ -224,49 +230,15 @@ export default function CreatorDetailPage() {
   }
 
   const fetchSocialData = useCallback(async () => {
-    setSocialLoading(true)
     try {
       const profilesData = await graphqlRequest<{
         creatorSocialProfiles: SocialProfile[]
       }>(queries.creatorSocialProfiles, { creatorId })
       setSocialProfiles(profilesData.creatorSocialProfiles || [])
-
-      // Fetch posts for each platform that has a profile
-      const profiles = profilesData.creatorSocialProfiles || []
-      const igProfile = profiles.find((p) => p.platform === 'instagram')
-      const ytProfile = profiles.find((p) => p.platform === 'youtube')
-
-      if (igProfile) {
-        const igData = await graphqlRequest<{
-          creatorSocialPosts: SocialPost[]
-        }>(queries.creatorSocialPosts, {
-          creatorId,
-          platform: 'instagram',
-          limit: 20,
-        })
-        setInstagramPosts(igData.creatorSocialPosts || [])
-      }
-
-      if (ytProfile) {
-        const ytData = await graphqlRequest<{
-          creatorSocialPosts: SocialPost[]
-        }>(queries.creatorSocialPosts, {
-          creatorId,
-          platform: 'youtube',
-          limit: 20,
-        })
-        setYoutubePosts(ytData.creatorSocialPosts || [])
-      }
     } catch {
-      // Social data fetch is best-effort — don't block the page
-    } finally {
-      setSocialLoading(false)
+      // Social data fetch is best-effort — don't block the page.
     }
   }, [creatorId])
-
-  const { triggerFetch, isPollingPlatform } = useSocialFetch(creatorId, {
-    onComplete: fetchSocialData,
-  })
 
   const fetchCreator = useCallback(async () => {
     setLoading(true)
@@ -284,32 +256,52 @@ export default function CreatorDetailPage() {
     }
   }, [creatorId])
 
+  const fetchEnrichedProfiles = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ creatorEnrichedProfiles: EnrichedProfile[] }>(
+        queries.creatorEnrichedProfiles,
+        { creatorId }
+      )
+      setEnrichedProfiles(data.creatorEnrichedProfiles || [])
+    } catch {
+      // Silent — the legacy social-profiles tabs still work without enrichment data.
+      setEnrichedProfiles([])
+    }
+  }, [creatorId])
+
   useEffect(() => {
     fetchCreator()
   }, [fetchCreator])
 
-  // Fetch social data once creator is loaded
+  // Fetch social data + enriched profiles once creator is loaded
   useEffect(() => {
     if (creator) {
       fetchSocialData()
+      fetchEnrichedProfiles()
     }
-  }, [creator, fetchSocialData])
+  }, [creator, fetchSocialData, fetchEnrichedProfiles])
 
-  const handleTriggerFetch = useCallback(
-    async (platform: string, jobType: string) => {
-      try {
-        await triggerFetch(platform, jobType)
-        toast({ title: 'Fetching data', description: `Social data fetch started for ${platform}` })
-      } catch (err) {
-        toast({
-          title: 'Fetch failed',
-          description: err instanceof Error ? err.message : 'Failed to trigger social data fetch',
-          variant: 'destructive',
-        })
-      }
-    },
-    [triggerFetch, toast]
-  )
+  // Honour the ?platform= query param on initial mount (and when handle
+  // info finishes loading). Falls back to dashboard if the requested
+  // platform isn't one this creator has a handle on.
+  useEffect(() => {
+    if (!creator) return
+    const requested = searchParams?.get('platform')?.toLowerCase()
+    if (!requested) return
+    const handleMap: Record<string, string | null> = {
+      instagram: creator.instagramHandle,
+      youtube: creator.youtubeHandle,
+      tiktok: creator.tiktokHandle,
+      twitter: creator.twitterHandle,
+      twitch: creator.twitchHandle,
+      facebook: creator.facebookHandle,
+      linkedin: creator.linkedinHandle,
+    }
+    if (handleMap[requested]) {
+      setActiveTab(requested as Tab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creator?.id, searchParams])
 
   const openEditDialog = () => {
     if (!creator) return
@@ -450,12 +442,23 @@ export default function CreatorDetailPage() {
   const hasInstagram = !!creator.instagramHandle
   const hasYouTube = !!creator.youtubeHandle
   const hasTikTok = !!creator.tiktokHandle
+  const hasTwitter = !!creator.twitterHandle
+  const hasTwitch = !!creator.twitchHandle
   const hasFacebook = !!creator.facebookHandle
   const hasLinkedIn = !!creator.linkedinHandle
-  const hasSocialTabs = hasInstagram || hasYouTube || hasTikTok || hasFacebook || hasLinkedIn
+  const hasSocialTabs =
+    hasInstagram || hasYouTube || hasTikTok || hasTwitter || hasTwitch || hasFacebook || hasLinkedIn
 
   const igProfile = socialProfiles.find((p) => p.platform === 'instagram') || null
   const ytProfile = socialProfiles.find((p) => p.platform === 'youtube') || null
+
+  const enrichedFor = (platform: string): EnrichedProfile | null =>
+    enrichedProfiles.find((p) => p.platform.toLowerCase() === platform) || null
+  const igEnriched = enrichedFor('instagram')
+  const ytEnriched = enrichedFor('youtube')
+  const ttEnriched = enrichedFor('tiktok')
+  const twitterEnriched = enrichedFor('twitter')
+  const twitchEnriched = enrichedFor('twitch')
 
   return (
     <>
@@ -630,11 +633,24 @@ export default function CreatorDetailPage() {
                 YouTube
               </TabsTrigger>
             )}
-            <TabsTrigger value="tiktok" disabled className="opacity-60">
-              <PlatformIcon platform="tiktok" className="mr-2 h-4 w-4" />
-              TikTok
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
-            </TabsTrigger>
+            {hasTikTok && (
+              <TabsTrigger value="tiktok">
+                <PlatformIcon platform="tiktok" className="mr-2 h-4 w-4" />
+                TikTok
+              </TabsTrigger>
+            )}
+            {hasTwitter && (
+              <TabsTrigger value="twitter">
+                <PlatformIcon platform="twitter" className="mr-2 h-4 w-4" />
+                Twitter / X
+              </TabsTrigger>
+            )}
+            {hasTwitch && (
+              <TabsTrigger value="twitch">
+                <PlatformIcon platform="twitch" className="mr-2 h-4 w-4" />
+                Twitch
+              </TabsTrigger>
+            )}
             <TabsTrigger value="facebook" disabled className="opacity-60">
               <PlatformIcon platform="facebook" className="mr-2 h-4 w-4" />
               Facebook
@@ -653,25 +669,82 @@ export default function CreatorDetailPage() {
 
           {hasInstagram && (
             <TabsContent value="instagram">
-              <InstagramTab
-                profile={igProfile}
-                posts={instagramPosts}
-                loading={socialLoading}
-                onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
-                fetching={isPollingPlatform('instagram')}
-              />
+              {igEnriched ? (
+                <InstagramProfilePage
+                  rawData={igEnriched.rawData}
+                  pictureUrl={igProfile?.profilePicUrl ?? null}
+                />
+              ) : (
+                <NoEnrichmentEmpty
+                  handle={creator.instagramHandle}
+                  platform="instagram"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
+              )}
             </TabsContent>
           )}
 
           {hasYouTube && (
             <TabsContent value="youtube">
-              <YouTubeTab
-                profile={ytProfile}
-                posts={youtubePosts}
-                loading={socialLoading}
-                onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
-                fetching={isPollingPlatform('youtube')}
-              />
+              {ytEnriched ? (
+                <YouTubeProfilePage
+                  rawData={ytEnriched.rawData}
+                  pictureUrl={ytProfile?.profilePicUrl ?? null}
+                />
+              ) : (
+                <NoEnrichmentEmpty
+                  handle={creator.youtubeHandle}
+                  platform="youtube"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
+              )}
+            </TabsContent>
+          )}
+
+          {hasTikTok && (
+            <TabsContent value="tiktok">
+              {ttEnriched ? (
+                <TikTokProfilePage rawData={ttEnriched.rawData} />
+              ) : (
+                <NoEnrichmentEmpty
+                  handle={creator.tiktokHandle}
+                  platform="tiktok"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
+              )}
+            </TabsContent>
+          )}
+
+          {hasTwitter && (
+            <TabsContent value="twitter">
+              {twitterEnriched ? (
+                <TwitterProfilePage rawData={twitterEnriched.rawData} />
+              ) : (
+                <NoEnrichmentEmpty
+                  handle={creator.twitterHandle}
+                  platform="twitter"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
+              )}
+            </TabsContent>
+          )}
+
+          {hasTwitch && (
+            <TabsContent value="twitch">
+              {twitchEnriched ? (
+                <TwitchProfilePage rawData={twitchEnriched.rawData} />
+              ) : (
+                <NoEnrichmentEmpty
+                  handle={creator.twitchHandle}
+                  platform="twitch"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
+              )}
             </TabsContent>
           )}
         </Tabs>
@@ -844,5 +917,112 @@ export default function CreatorDetailPage() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function NoEnrichmentEmpty({
+  handle,
+  platform,
+  agencyId,
+  onEnriched,
+}: {
+  handle: string | null
+  platform: string
+  agencyId: string | null
+  /** Refetch enriched profiles in the parent so the new data lands in the tab. */
+  onEnriched: () => Promise<void> | void
+}) {
+  const { toast } = useToast()
+  const enrich = useEnrichCreator()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  // No handle → can't enrich. Tell the user what's missing and stop.
+  if (!handle) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-sm text-muted-foreground">
+          <p>
+            No <span className="font-medium capitalize">{platform}</span> handle on this creator.
+          </p>
+          <p className="mt-1 text-xs">
+            Add the handle via the Edit button above, then enrich.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const runEnrich = () => {
+    if (!agencyId) {
+      toast({
+        title: 'No agency selected',
+        description: 'Pick an agency from the top bar before enriching.',
+        variant: 'destructive',
+      })
+      return
+    }
+    enrich.mutate(
+      { agencyId, platform, handle, mode: 'FULL_WITH_AUDIENCE' },
+      {
+        onSuccess: async (result) => {
+          const message = result.cacheHit
+            ? `Loaded from cache. ${result.creditsSpent} credit${result.creditsSpent === 1 ? '' : 's'} charged.`
+            : 'Enriched. 25 credits charged.'
+          toast({ title: 'Profile enriched', description: message })
+          setConfirmOpen(false)
+          await onEnriched()
+        },
+        onError: (err) => {
+          toast({
+            title: 'Enrichment failed',
+            description: err instanceof Error ? err.message : 'Unknown error',
+            variant: 'destructive',
+          })
+          setConfirmOpen(false)
+        },
+      }
+    )
+  }
+
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <Sparkles className="h-5 w-5 text-primary" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">
+            No <span className="capitalize">{platform}</span> enrichment yet for{' '}
+            <span className="font-mono">@{handle}</span>
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Pull the creator&apos;s full enrichment — follower-growth curve, audience
+            demographics, brand affinity, lookalikes — straight into the Creator DB.
+            Free if your agency enriched this creator in the last 30 days.
+          </p>
+        </div>
+        <Button
+          onClick={() => setConfirmOpen(true)}
+          disabled={enrich.isPending}
+          className="gap-2"
+        >
+          {enrich.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Enriching…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" /> Enrich Profile (25 credits)
+            </>
+          )}
+        </Button>
+        <EnrichConfirmDialog
+          open={confirmOpen}
+          onOpenChange={(o) => !enrich.isPending && setConfirmOpen(o)}
+          onConfirm={runEnrich}
+          pending={enrich.isPending}
+        />
+      </CardContent>
+    </Card>
   )
 }

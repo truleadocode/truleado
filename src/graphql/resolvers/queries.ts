@@ -33,13 +33,23 @@ import {
 } from './queries/creator-portal';
 import {
   discoverySearch,
-  discoveryUnlocks,
-  discoveryExports,
+  similarCreators,
   savedSearches,
   discoveryPricing,
   discoveryEstimateCost,
   discoveryDictionary,
 } from './queries/discovery';
+import {
+  creatorProfile,
+  creatorIdByProfileId,
+  creatorEnrichedProfiles,
+  creatorEnrichmentHistory,
+} from './queries/enrichment';
+import {
+  enrichmentBatchJobs,
+  enrichmentBatchJob,
+} from './queries/batch';
+import { audienceOverlapReports } from './queries/audience';
 
 export const queryResolvers = {
   /**
@@ -1628,12 +1638,30 @@ export const queryResolvers = {
   // Discovery Module Queries
   // -----------------------------------------------
   discoverySearch,
-  discoveryUnlocks,
-  discoveryExports,
+  similarCreators,
   savedSearches,
   discoveryPricing,
   discoveryEstimateCost,
   discoveryDictionary,
+
+  // -----------------------------------------------
+  // Enrichment Queries (Phase C)
+  // -----------------------------------------------
+  creatorProfile,
+  creatorIdByProfileId,
+  creatorEnrichedProfiles,
+  creatorEnrichmentHistory,
+
+  // -----------------------------------------------
+  // Batch Enrichment Queries (Phase D)
+  // -----------------------------------------------
+  enrichmentBatchJobs,
+  enrichmentBatchJob,
+
+  // -----------------------------------------------
+  // Audience Overlap Queries (Phase E)
+  // -----------------------------------------------
+  audienceOverlapReports,
 
   // -----------------------------------------------
   // Client Detail Queries

@@ -63,9 +63,10 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
 
     // Full discovery access
     Permission.DISCOVERY_SEARCH,
-    Permission.DISCOVERY_UNLOCK,
-    Permission.DISCOVERY_EXPORT,
     Permission.DISCOVERY_IMPORT,
+    Permission.DISCOVERY_ENRICH,
+    Permission.DISCOVERY_BATCH,
+    Permission.DISCOVERY_OVERLAP,
   ],
 
   [AgencyRole.ACCOUNT_MANAGER]: [
@@ -116,9 +117,10 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
 
     // Full discovery access
     Permission.DISCOVERY_SEARCH,
-    Permission.DISCOVERY_UNLOCK,
-    Permission.DISCOVERY_EXPORT,
     Permission.DISCOVERY_IMPORT,
+    Permission.DISCOVERY_ENRICH,
+    Permission.DISCOVERY_BATCH,
+    Permission.DISCOVERY_OVERLAP,
   ],
 
   [AgencyRole.OPERATOR]: [
@@ -158,9 +160,10 @@ export const AGENCY_ROLE_PERMISSIONS: Record<AgencyRole, Permission[]> = {
 
     // Full discovery access
     Permission.DISCOVERY_SEARCH,
-    Permission.DISCOVERY_UNLOCK,
-    Permission.DISCOVERY_EXPORT,
     Permission.DISCOVERY_IMPORT,
+    Permission.DISCOVERY_ENRICH,
+    Permission.DISCOVERY_BATCH,
+    Permission.DISCOVERY_OVERLAP,
   ],
 
   [AgencyRole.INTERNAL_APPROVER]: [

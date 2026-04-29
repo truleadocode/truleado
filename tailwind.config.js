@@ -72,6 +72,48 @@ module.exports = {
           800: "hsl(var(--brand-800))",
           900: "hsl(var(--brand-900))",
         },
+        // Influencers.club design tokens (direct hex via CSS vars).
+        // Used by Creator Discovery UI only.
+        tru: {
+          logo:      "var(--tru-logo)",
+          blue:      { 50: "var(--tru-blue-50)", 600: "var(--tru-blue-600)", 700: "var(--tru-blue-700)" },
+          indigo:    { 600: "var(--tru-indigo-600)", 700: "var(--tru-indigo-700)" },
+          violet:    { 600: "var(--tru-violet-600)", 700: "var(--tru-violet-700)" },
+          success:   "var(--tru-success)",
+          warning:   "var(--tru-warning)",
+          danger:    "var(--tru-danger)",
+          slate: {
+            50:  "var(--tru-slate-50)",
+            100: "var(--tru-slate-100)",
+            200: "var(--tru-slate-200)",
+            300: "var(--tru-slate-300)",
+            400: "var(--tru-slate-400)",
+            500: "var(--tru-slate-500)",
+            600: "var(--tru-slate-600)",
+            700: "var(--tru-slate-700)",
+            800: "var(--tru-slate-800)",
+            900: "var(--tru-slate-900)",
+          },
+          "page-bg":     "var(--tru-page-bg)",
+          "border-soft": "var(--tru-border-soft)",
+          "growth-up":   "var(--tru-growth-up)",
+          "growth-down": "var(--tru-growth-down)",
+          "growth-flat": "var(--tru-growth-flat)",
+        },
+        // Creator Profile design tokens (per IC handoff at
+        // product-documentation/influencers.club/creator-profile/styles.css).
+        // Scoped to the per-platform Creator DB pages only — do not leak into
+        // the rest of the dashboard.
+        cp: {
+          bg:        "#fafaf7",
+          surface:   { DEFAULT: "#ffffff", 2: "#f5f5f0" },
+          line:      { DEFAULT: "#e7e5dc", 2: "#d8d6cb" },
+          ink:       { DEFAULT: "#1a1a17", 2: "#45463f", 3: "#777970", 4: "#a3a59c" },
+          accent:    { DEFAULT: "#2f6b3a", 2: "#b1d96a", 3: "#355bff" },
+          warn:      "#d97300",
+          bad:       "#c43050",
+          good:      "#2f6b3a",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -80,6 +122,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        mono: ["var(--font-jetbrains-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "0.75rem" }],

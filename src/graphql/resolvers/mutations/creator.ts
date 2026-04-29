@@ -683,6 +683,8 @@ export async function updateCreator(
     tiktokHandle,
     facebookHandle,
     linkedinHandle,
+    twitterHandle,
+    twitchHandle,
     notes,
     rates,
   }: {
@@ -695,6 +697,8 @@ export async function updateCreator(
     tiktokHandle?: string;
     facebookHandle?: string;
     linkedinHandle?: string;
+    twitterHandle?: string;
+    twitchHandle?: string;
     notes?: string;
     rates?: Array<{
       platform: string;
@@ -744,6 +748,8 @@ export async function updateCreator(
   if (tiktokHandle !== undefined) updates.tiktok_handle = normalizeHandle(tiktokHandle ?? undefined);
   if (facebookHandle !== undefined) updates.facebook_handle = normalizeHandle(facebookHandle ?? undefined);
   if (linkedinHandle !== undefined) updates.linkedin_handle = normalizeHandle(linkedinHandle ?? undefined);
+  if (twitterHandle !== undefined) updates.twitter_handle = normalizeHandle(twitterHandle ?? undefined);
+  if (twitchHandle !== undefined) updates.twitch_handle = normalizeHandle(twitchHandle ?? undefined);
   if (notes !== undefined) updates.notes = normalizeOptional(notes);
 
   let updated = existing;

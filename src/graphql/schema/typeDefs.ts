@@ -608,6 +608,8 @@ export const typeDefs = gql`
     tiktokHandle: String
     facebookHandle: String
     linkedinHandle: String
+    twitterHandle: String
+    twitchHandle: String
     profilePictureUrl: String
     notes: String
     platform: String
@@ -1109,74 +1111,8 @@ export const typeDefs = gql`
     INSTAGRAM
     YOUTUBE
     TIKTOK
-  }
-
-  enum DiscoveryExportType {
-    SHORT
-    FULL
-  }
-
-  enum DiscoveryExportStatus {
-    PENDING
-    PROCESSING
-    COMPLETED
-    FAILED
-  }
-
-  # Search result influencer from OnSocial
-  type DiscoveryInfluencer {
-    userId: String!
-    username: String!
-    fullname: String
-    followers: Int
-    engagementRate: Float
-    engagements: Int
-    avgLikes: Int
-    avgViews: Int
-    isVerified: Boolean
-    picture: String
-    url: String
-    searchResultId: String!
-    isHidden: Boolean!
-    platform: DiscoveryPlatform!
-  }
-
-  # Paginated search results
-  type DiscoverySearchResult {
-    accounts: [DiscoveryInfluencer!]!
-    total: Int!
-  }
-
-  # Record of an unlocked influencer
-  type DiscoveryUnlock {
-    id: ID!
-    platform: String!
-    onsocialUserId: String!
-    searchResultId: String!
-    username: String
-    fullname: String
-    profileData: JSON
-    tokensSpent: Float!
-    unlockedBy: String!
-    unlockedAt: DateTime!
-    expiresAt: DateTime!
-  }
-
-  # Record of an export job
-  type DiscoveryExport {
-    id: ID!
-    platform: String!
-    exportType: DiscoveryExportType!
-    filterSnapshot: JSON
-    totalAccounts: Int!
-    tokensSpent: Float!
-    onsocialExportId: String
-    status: DiscoveryExportStatus!
-    downloadUrl: String
-    errorMessage: String
-    exportedBy: String!
-    createdAt: DateTime!
-    completedAt: DateTime
+    TWITTER
+    TWITCH
   }
 
   # Saved search configuration
@@ -1211,28 +1147,193 @@ export const typeDefs = gql`
     sufficientBalance: Boolean!
   }
 
-  # Input for unlocking search results (local, no OnSocial API call)
-  input DiscoveryUnlockInput {
-    onsocialUserId: String!
-    searchResultId: String!
-    username: String!
-    fullname: String
+  # Input for importCreatorsToAgency (Phase G). Prefer creatorProfileId
+  # when available — it means the profile was already paid for and import
+  # doesn't trigger another charge. Supply platform+handle when the caller
+  # only has minimal discovery data and wants us to enrich on their behalf.
+  input CreatorImportInput {
+    # Preferred path: the ID of a global creator_profiles row (e.g. from
+    # discoverySearch's creatorProfileId field).
+    creatorProfileId: ID
+
+    # Fallback: look up / enrich by handle. Required if creatorProfileId is null.
+    platform: DiscoveryPlatform
+    handle: String
+
+    # If no cached profile exists for (platform, handle), call
+    # enrichCreator(RAW) to create one. Defaults to true.
+    enrichIfMissing: Boolean
   }
 
-  # Input for importing influencers to creator database
-  input DiscoveryImportInput {
-    onsocialUserId: String!
-    username: String!
-    fullname: String
+  # =============================================================================
+  # INFLUENCERS.CLUB CREATOR DISCOVERY (Phase A — additive types)
+  # Queries and mutations are wired in Phase B+. These types exist now so the
+  # schema compiles and resolvers can start returning them incrementally.
+  # =============================================================================
+
+  enum EnrichmentMode {
+    RAW
+    FULL
+    FULL_WITH_AUDIENCE
+    EMAIL
+    CONNECTED_SOCIALS
+  }
+
+  enum BatchEnrichmentMode {
+    RAW
+    FULL
+    BASIC
+  }
+
+  enum BatchJobStatus {
+    SUBMITTED
+    IC_QUEUED
+    IC_PROCESSING
+    IC_PAUSED_CREDITS
+    IC_FINISHED
+    DOWNLOADING
+    IMPORTING
+    COMPLETED
+    FAILED
+    CANCELLED
+  }
+
+  enum IdentityConfidence {
+    VERIFIED
+    PROBABLE
+    POSSIBLE
+  }
+
+  # Global cached creator profile (from creator_profiles table)
+  type CreatorProfile {
+    id: ID!
+    provider: String!
     platform: DiscoveryPlatform!
-    email: String
-    phone: String
-    profilePicture: String
-    searchResultId: String
+    providerUserId: String!
+    username: String!
+    fullName: String
     followers: Int
-    engagementRate: Float
-    avgLikes: Int
-    contactLinks: JSON
+    engagementPercent: Float
+    biography: String
+    nichePrimary: String
+    nicheSecondary: [String!]
+    email: String
+    location: String
+    language: String
+    isVerified: Boolean
+    isBusiness: Boolean
+    isCreator: Boolean
+    profilePictureUrl: String
+    enrichmentMode: EnrichmentMode
+    lastEnrichedAt: DateTime
+    firstSeenAt: DateTime!
+    rawData: JSON
+  }
+
+  # Cross-platform identity link (from creator_identities table)
+  type CreatorIdentity {
+    id: ID!
+    canonicalId: ID!
+    creatorProfileId: ID!
+    platform: DiscoveryPlatform!
+    source: String!
+    confidence: IdentityConfidence!
+    discoveredAt: DateTime!
+    profile: CreatorProfile
+  }
+
+  # Minimal shape returned by discovery search (pictureUrl is temporary 24h)
+  type DiscoveryCreator {
+    providerUserId: String!
+    username: String!
+    fullName: String
+    followers: Int
+    engagementPercent: Float
+    pictureUrl: String
+    platform: DiscoveryPlatform!
+    creatorProfileId: ID
+  }
+
+  # Discovery result with cache metadata and credit accounting
+  type CreatorSearchResult {
+    accounts: [DiscoveryCreator!]!
+    total: Int!
+    cached: Boolean!
+    cachedAt: DateTime
+    expiresAt: DateTime
+    creditsSpent: Int!
+    creditsSavedOnHit: Int
+  }
+
+  # Chargeable-event ledger (replaces DiscoveryUnlock)
+  type CreatorEnrichment {
+    id: ID!
+    agencyId: ID!
+    creatorProfileId: ID
+    platform: DiscoveryPlatform!
+    handle: String!
+    mode: EnrichmentMode!
+    creditsSpent: Int!
+    cacheHit: Boolean!
+    icCreditsCost: Float
+    triggeredBy: ID!
+    createdAt: DateTime!
+    profile: CreatorProfile
+  }
+
+  # Batch enrichment job record with state machine status
+  type EnrichmentBatchJob {
+    id: ID!
+    agencyId: ID!
+    icBatchId: String
+    platform: DiscoveryPlatform
+    mode: BatchEnrichmentMode!
+    includeAudienceData: Boolean!
+    emailRequired: String
+    status: BatchJobStatus!
+    statusMessage: String
+    totalRows: Int!
+    processedRows: Int!
+    successCount: Int!
+    failedCount: Int!
+    creditsHeld: Int!
+    creditsCharged: Int!
+    metadata: JSON
+    submittedBy: ID!
+    createdAt: DateTime!
+    updatedAt: DateTime!
+    completedAt: DateTime
+  }
+
+  # Audience-overlap cached report (up to 10 creators same platform)
+  type AudienceOverlapReport {
+    id: ID!
+    agencyId: ID!
+    platform: DiscoveryPlatform!
+    creatorHandles: [String!]!
+    totalFollowers: Int
+    totalUniqueFollowers: Int
+    details: JSON!
+    creditsSpent: Int!
+    computedBy: ID
+    computedAt: DateTime!
+  }
+
+  # Cached creator post (IG/TT/YT only per IC spec)
+  type CreatorPost {
+    id: ID!
+    creatorProfileId: ID!
+    platform: DiscoveryPlatform!
+    postPk: String!
+    takenAt: DateTime
+    caption: String
+    mediaUrl: String
+    mediaType: Int
+    likes: Int
+    comments: Int
+    views: Int
+    thumbnailUrl: String
+    fetchedAt: DateTime!
   }
 
   input UpdateProjectInput {
@@ -1513,21 +1614,31 @@ export const typeDefs = gql`
     # Creator Discovery Queries
     # ---------------------------------------------
 
-    # Search influencers via OnSocial (FREE — no token cost)
+    # Search creators via Influencers.club.
+    # Priced at ~1 Truleado credit per creator returned (0.01 IC credit).
+    # Results are cached per agency for 1 hour; within-TTL hits return cached
+    # data with cached=true and do NOT charge credits. forceRefresh bypasses.
     discoverySearch(
       agencyId: ID!
       platform: DiscoveryPlatform!
-      filters: JSON!
-      sort: JSON
-      skip: Int
+      filters: JSON
+      page: Int
       limit: Int
-    ): DiscoverySearchResult!
+      forceRefresh: Boolean
+    ): CreatorSearchResult!
 
-    # Get unlock history for an agency
-    discoveryUnlocks(agencyId: ID!, platform: DiscoveryPlatform, limit: Int, offset: Int): [DiscoveryUnlock!]!
-
-    # Get export history for an agency
-    discoveryExports(agencyId: ID!, limit: Int, offset: Int): [DiscoveryExport!]!
+    # Find creators similar to a reference creator (URL, username, or IC user_id).
+    # Same pricing + caching semantics as discoverySearch.
+    similarCreators(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      referenceKey: String!
+      referenceValue: String!
+      filters: JSON
+      page: Int
+      limit: Int
+      forceRefresh: Boolean
+    ): CreatorSearchResult!
 
     # Get saved search configurations for an agency
     savedSearches(agencyId: ID!): [SavedSearch!]!
@@ -1540,6 +1651,65 @@ export const typeDefs = gql`
 
     # Get dictionary data for filter autocomplete
     discoveryDictionary(type: String!, query: String, platform: DiscoveryPlatform): JSON
+
+    # ---------------------------------------------
+    # Enrichment (Phase C) — global creator profile cache
+    # ---------------------------------------------
+
+    # Look up a cached creator profile by platform + handle (username).
+    # Returns the global row; any agency user can read. Does NOT call IC or
+    # deduct credits. Use enrichCreator mutation to refresh/force-enrich.
+    creatorProfile(platform: DiscoveryPlatform!, handle: String!): CreatorProfile
+
+    # Resolve the current agency's roster creators row id from a global
+    # creator_profile_id. Returns null when this agency has not imported
+    # the creator yet — the caller can use that to switch the detail-sheet
+    # CTA between "Enrich" and "View in Creator DB".
+    creatorIdByProfileId(agencyId: ID!, creatorProfileId: ID!): ID
+
+    # Look up enriched creator_profiles rows for every platform a given
+    # roster creator has a handle on. Used to render rich per-platform
+    # panels on /dashboard/creators/[id]. Returns up to 5 rows (one per
+    # platform). Read-only — no IC calls, no credit charges.
+    creatorEnrichedProfiles(creatorId: ID!): [CreatorProfile!]!
+
+    # Paginated log of enrichments paid for by this agency, across all modes.
+    # cache_hit=true rows are those where Truleado served cached data but
+    # still charged the agency (margin model).
+    creatorEnrichmentHistory(
+      agencyId: ID!
+      mode: EnrichmentMode
+      platform: DiscoveryPlatform
+      limit: Int
+      offset: Int
+    ): [CreatorEnrichment!]!
+
+    # ---------------------------------------------
+    # Batch Enrichment (Phase D)
+    # ---------------------------------------------
+
+    # List an agency's batch enrichment jobs (most recent first).
+    enrichmentBatchJobs(
+      agencyId: ID!
+      status: BatchJobStatus
+      limit: Int
+      offset: Int
+    ): [EnrichmentBatchJob!]!
+
+    # Fetch a single batch job by ID (agency-scoped).
+    enrichmentBatchJob(id: ID!): EnrichmentBatchJob
+
+    # ---------------------------------------------
+    # Audience Overlap (Phase E)
+    # ---------------------------------------------
+
+    # Cached overlap reports for an agency, most recent first.
+    audienceOverlapReports(
+      agencyId: ID!
+      platform: DiscoveryPlatform
+      limit: Int
+      offset: Int
+    ): [AudienceOverlapReport!]!
 
     # ---------------------------------------------
     # Creator Portal Queries
@@ -2026,6 +2196,8 @@ export const typeDefs = gql`
       tiktokHandle: String
       facebookHandle: String
       linkedinHandle: String
+      twitterHandle: String
+      twitchHandle: String
       notes: String
       rates: [CreatorRateInput!]
     ): Creator!
@@ -2222,28 +2394,101 @@ export const typeDefs = gql`
     # Creator Discovery Mutations
     # ---------------------------------------------
 
-    # Unlock search results (token-gated, no external API call)
-    discoveryUnlock(
+    # discoveryUnlock and discoveryExport removed in migration to Influencers.club.
+    # IC has no "hidden result" concept — discovery already returns visible
+    # (but minimal) profiles. Use enrichCreator below for full profile data,
+    # or createEnrichmentBatchJob (Phase D) for bulk enrichment.
+
+    # Enrich a single creator (raw | full | full_with_audience).
+    # If a fresh cached profile exists (TTL: raw 30d / full 14d / full+audience 30d)
+    # and its mode >= requested, the agency is charged full credits but no IC
+    # call is made (margin-on-cache-hit model). forceRefresh bypasses the cache.
+    enrichCreator(
       agencyId: ID!
       platform: DiscoveryPlatform!
-      influencers: [DiscoveryUnlockInput!]!
-    ): [DiscoveryUnlock!]!
+      handle: String!
+      mode: EnrichmentMode!
+      forceRefresh: Boolean
+      emailRequired: String
+    ): CreatorEnrichment!
 
-    # Export search results (token-gated)
-    discoveryExport(
+    # Enrich by email address. IC returns only the strongest-platform account
+    # (highest followers). Costs 0.05 IC / 2 Truleado credits.
+    enrichCreatorByEmail(agencyId: ID!, email: String!): CreatorEnrichment!
+
+    # Cross-platform identity resolution. Returns all verified accounts for
+    # a given creator handle. Costs 0.50 IC / 15 Truleado credits.
+    findConnectedSocials(
       agencyId: ID!
       platform: DiscoveryPlatform!
-      filters: JSON!
-      sort: JSON
-      exportType: DiscoveryExportType!
-      limit: Int
-    ): DiscoveryExport!
+      handle: String!
+    ): [CreatorIdentity!]!
 
-    # Import influencers to creator database (token-gated)
-    discoveryImportToCreators(
+    # Submit a batch enrichment job. csvStorageKey points to a file in the
+    # batch-inputs private Supabase bucket (browser-uploaded). Credits are
+    # reserved up-front (total_rows * per-row cost) and reconciled when the
+    # job completes (refund difference).
+    createEnrichmentBatchJob(
       agencyId: ID!
-      influencers: [DiscoveryImportInput!]!
-      withContact: Boolean
+      platform: DiscoveryPlatform
+      mode: BatchEnrichmentMode!
+      csvStorageKey: String!
+      includeAudienceData: Boolean
+      emailRequired: String
+      metadata: JSON
+    ): EnrichmentBatchJob!
+
+    # Cancel a batch job. Any non-terminal state -> cancelled. The IC job
+    # itself cannot be cancelled (IC has no such endpoint) — we simply stop
+    # polling and refund reserved credits that weren't yet consumed.
+    cancelEnrichmentBatchJob(id: ID!): EnrichmentBatchJob!
+
+    # Resume a batch paused due to IC credit exhaustion (after Truleado
+    # tops up the IC account). Calls POST /enrichment/batch/{id}/resume/.
+    resumeEnrichmentBatchJob(id: ID!): EnrichmentBatchJob!
+
+    # Fetch a creator's recent posts (Instagram / TikTok / YouTube only).
+    # Costs 0.03 IC / 1 Truleado credit per page. Results are upserted into
+    # the global creator_posts cache. Pagination is cursor-based via
+    # paginationToken returned in the response JSON.
+    fetchCreatorPosts(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handle: String!
+      count: Int
+      paginationToken: String
+    ): JSON!
+
+    # Fetch post-level details (data | comments | transcript | audio).
+    # Note: audio is NOT supported on YouTube. Costs 0.03 IC / 1 Truleado
+    # credit per request.
+    fetchPostDetails(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      postId: String!
+      contentType: String!
+      paginationToken: String
+    ): JSON!
+
+    # Compute audience overlap for 2..10 creators on the same platform.
+    # Flat 1 IC / 20 Truleado credit cost. Cached per agency on
+    # md5(sorted lowercase handles). forceRefresh bypasses.
+    computeAudienceOverlap(
+      agencyId: ID!
+      platform: DiscoveryPlatform!
+      handles: [String!]!
+      forceRefresh: Boolean
+    ): AudienceOverlapReport!
+
+    # Import creators from Influencers.club into the agency's creator roster.
+    # Each item either references a creatorProfileId directly (no charge —
+    # profile was already paid for) or supplies platform + handle; if no
+    # cached profile exists and enrichIfMissing is true (default), the
+    # resolver calls enrichCreator(RAW) which applies the margin-on-cache-hit
+    # model.
+    importCreatorsToAgency(
+      agencyId: ID!
+      items: [CreatorImportInput!]!
     ): [Creator!]!
 
     # Save a search configuration

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>__TITLE__ — Truleado Creator Profile mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="./shared.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'tru-blue-50':  '#eff6ff',
+            'tru-blue-100': '#dbeafe',
+            'tru-blue-600': '#2563eb',
+            'tru-blue-700': '#1d4ed8',
+            'tru-slate-50': '#f8fafc',
+            'tru-slate-100':'#f1f5f9',
+            'tru-slate-200':'#e2e8f0',
+            'tru-slate-400':'#94a3b8',
+            'tru-slate-500':'#64748b',
+            'tru-slate-600':'#475569',
+            'tru-slate-700':'#334155',
+            'tru-slate-800':'#1e293b',
+            'tru-slate-900':'#0f172a',
+          },
+        },
+      },
+    };
+  </script>
+</head>
+<body class="min-h-screen bg-tru-slate-50 text-tru-slate-900 font-sans">
+
+  <!-- Embedded fixture data — replaced per platform. -->
+  <script type="application/json" id="data">__FIXTURE_JSON__</script>
+  <script>window.__PLATFORM__ = "__PLATFORM_VALUE__";</script>
+
+  <header class="border-b border-tru-slate-200 bg-white">
+    <div class="mx-auto flex max-w-[1400px] items-center gap-4 px-6 py-4" id="topbar">
+      <!-- Filled by JS: avatar · name · handle · platform pill · followers · open-on-platform link -->
+    </div>
+  </header>
+
+  <main class="mx-auto grid max-w-[1400px] grid-cols-[19rem_1fr] gap-0 bg-white">
+    <aside class="border-r border-tru-slate-100 bg-tru-slate-50/40 px-4 py-5 space-y-4" id="meta-col">
+      <!-- Left meta column rendered by JS -->
+    </aside>
+
+    <section class="flex flex-col">
+      <!-- Tabs -->
+      <nav class="sticky top-0 z-10 flex border-b border-tru-slate-200 bg-white px-6">
+        <button data-tab="analytics" class="tab-trigger px-4 py-3 text-sm font-semibold border-b-2 border-tru-blue-600 text-tru-blue-700">Analytics</button>
+        <button data-tab="posts" class="tab-trigger px-4 py-3 text-sm font-semibold text-tru-slate-500 border-b-2 border-transparent hover:text-tru-slate-700">Posts</button>
+        <button data-tab="similar" class="tab-trigger px-4 py-3 text-sm font-semibold text-tru-slate-500 border-b-2 border-transparent hover:text-tru-slate-700">Similar Accounts</button>
+      </nav>
+
+      <div id="tab-analytics" class="tab-panel space-y-4 px-6 py-5"></div>
+      <div id="tab-posts" class="tab-panel hidden space-y-4 px-6 py-5"></div>
+      <div id="tab-similar" class="tab-panel hidden space-y-4 px-6 py-5"></div>
+    </section>
+  </main>
+
+  <script src="./shared.js"></script>
+</body>
+</html>

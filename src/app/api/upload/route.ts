@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate bucket
-    const allowedBuckets = ['campaign-attachments', 'deliverables', 'agency-assets'];
+    const allowedBuckets = ['campaign-attachments', 'deliverables', 'agency-assets', 'batch-inputs'];
     if (!allowedBuckets.includes(bucket)) {
       return NextResponse.json(
         { error: 'Invalid bucket' },

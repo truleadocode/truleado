@@ -91,11 +91,12 @@ export enum Permission {
   // Activity log permissions
   VIEW_ACTIVITY_LOGS = 'view_activity_logs',
 
-  // Discovery permissions
+  // Discovery permissions (Influencers.club)
   DISCOVERY_SEARCH = 'discovery_search',
-  DISCOVERY_UNLOCK = 'discovery_unlock',
-  DISCOVERY_EXPORT = 'discovery_export',
   DISCOVERY_IMPORT = 'discovery_import',
+  DISCOVERY_ENRICH = 'discovery_enrich',
+  DISCOVERY_BATCH = 'discovery_batch',
+  DISCOVERY_OVERLAP = 'discovery_overlap',
 }
 
 /**

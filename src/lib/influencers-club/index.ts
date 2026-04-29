@@ -1,0 +1,117 @@
+/**
+ * Public surface for the Influencers.club integration.
+ *
+ * Resolvers and other callers should import from this file only. Everything
+ * not re-exported here is internal to the module and subject to change
+ * without a GraphQL schema version bump.
+ */
+
+export type {
+  DiscoveryPlatform,
+  ContentPlatform,
+  EnrichmentMode,
+  BatchEnrichmentMode,
+  BatchJobStatus,
+  DiscoveryCreator,
+  DiscoverySearchResult,
+  CreatorProfile,
+  AudienceSnapshot,
+  CreatorIdentityLink,
+  PostSummary,
+  AudienceOverlap,
+} from './domain';
+
+export {
+  IcApiError,
+  IcAuthError,
+  IcNotFoundError,
+  IcValidationError,
+  IcRateLimitError,
+  IcInsufficientCreditsError,
+  IcServerError,
+} from './errors';
+
+export { getCredits } from './account';
+export {
+  getDictionary,
+  refreshDictionary,
+  refreshAllDictionaries,
+  fetchDictionaryFromProvider,
+} from './dictionary';
+export type { IcDictionaryType, IcDiscoveryPlatform } from './types';
+
+// Phase B additions — discovery search + cache + credit pre-flight
+export type { DiscoveryFilterInput } from './filters';
+export {
+  buildIcDiscoveryFilters,
+  validateDiscoveryFilter,
+  toIcPlatform,
+} from './filters';
+export { searchDiscovery, findSimilarCreators } from './discovery';
+export type { DiscoverySearchArgs, SimilarCreatorsArgs } from './discovery';
+export {
+  computeFiltersHash,
+  readDiscoveryCache,
+  writeDiscoveryCache,
+  recordCacheHit,
+} from './cache';
+export type { CacheKeyComponents, CachedDiscoveryRow } from './cache';
+export {
+  previewAgencyCredits,
+  requireAgencyCredits,
+  requireIcCredits,
+} from './credit-preflight';
+export type { AgencyPreflightResult } from './credit-preflight';
+
+// Phase C additions — enrichment + image mirror + normalizers
+export {
+  enrichHandleRaw,
+  enrichHandleFull,
+  enrichByEmail,
+  fetchConnectedSocials,
+} from './enrichment';
+export type { EnrichHandleArgs } from './enrichment';
+export {
+  mirrorCreatorPicture,
+  mirrorAndPersist,
+} from './image-mirror';
+export type { MirrorPictureArgs, MirrorPictureResult } from './image-mirror';
+export {
+  normalizeDiscoveryAccount,
+  normalizeDiscoveryResponse,
+  normalizeFullEnrichmentToProfile,
+} from './normalize';
+export type { NormalizedFullEnrichment } from './normalize';
+
+// Phase D additions — batch enrichment + state-machine helpers
+export {
+  createBatch,
+  getBatchStatus,
+  resumeBatch,
+  getBatchDownloadUrl,
+} from './batch';
+export type { BatchCreateArgs } from './batch';
+export {
+  icStatusToJobStatus,
+  canTransition,
+  isTerminal,
+  nextPollTime,
+  backoffPollTime,
+  POLL_ELIGIBLE_STATUSES,
+  TERMINAL_STATUSES,
+} from './batch-helpers';
+// BatchJobStatus is defined in ./domain and already exported above (Phase A).
+
+// Phase E additions — content + audience overlap
+export { fetchPosts, fetchPostDetails, POST_COUNT_LIMITS } from './content';
+export type { FetchPostsArgs, FetchPostDetailsArgs } from './content';
+export {
+  audienceOverlap,
+  computeHandlesHash,
+  normalizeHandlesForHash,
+} from './audience';
+export type { AudienceOverlapArgs } from './audience';
+
+// Phase D2 additions — batch result import pipeline
+export { importBatchResult, parseBatchCsv, parseBatchRow } from './batch-import';
+export type { BatchImportResult, ParsedBatchRow } from './batch-import';

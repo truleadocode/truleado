@@ -1,0 +1,98 @@
+/* Sample-pages mockup styles. Layered on top of Tailwind CDN. */
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.tab-trigger.active {
+  color: #1d4ed8;
+  border-bottom-color: #2563eb;
+}
+
+/* Card baseline reused across blocks. */
+.tru-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.tru-card-tinted {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.uppercase-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #94a3b8;
+}
+
+/* Posts/Reels segmented toggle. */
+.segmented {
+  display: inline-flex;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.segmented button {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #fff;
+  color: #475569;
+  border: 0;
+  cursor: pointer;
+}
+.segmented button.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+/* Pill chips. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.chip-blue { background: #eff6ff; color: #1d4ed8; }
+.chip-slate { background: #f1f5f9; color: #475569; }
+.chip-emerald { background: #d1fae5; color: #065f46; }
+.chip-amber { background: #fef3c7; color: #92400e; }
+
+/* Small score badge for similar-accounts table. */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  min-width: 44px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+}
+.score-high { background: #d1fae5; color: #065f46; }
+.score-mid { background: #ecfdf5; color: #047857; }
+.score-low { background: #fef3c7; color: #92400e; }
+
+/* Approximated chart caption. */
+.approx-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}

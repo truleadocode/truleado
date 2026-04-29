@@ -91,13 +91,26 @@ import {
   cancelCreatorAgreement,
 } from './finance';
 import {
-  discoveryUnlock,
-  discoveryExport,
-  discoveryImportToCreators,
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
 } from './discovery';
+import {
+  enrichCreator,
+  enrichCreatorByEmail,
+  findConnectedSocials,
+} from './enrichment';
+import {
+  createEnrichmentBatchJob,
+  cancelEnrichmentBatchJob,
+  resumeEnrichmentBatchJob,
+} from './batch';
+import {
+  fetchCreatorPosts,
+  fetchPostDetailsResolver,
+} from './content';
+import { computeAudienceOverlap } from './audience';
+import { importCreatorsToAgency } from './import';
 import {
   createProjectNote,
   updateProjectNote,
@@ -238,13 +251,29 @@ export const mutationResolvers = {
   markAgreementPaid,
   cancelCreatorAgreement,
 
-  // Discovery
-  discoveryUnlock,
-  discoveryExport,
-  discoveryImportToCreators,
+  // Discovery saved searches
   saveDiscoverySearch,
   deleteDiscoverySearch,
   updateDiscoverySearch,
+
+  // Enrichment (Phase C)
+  enrichCreator,
+  enrichCreatorByEmail,
+  findConnectedSocials,
+
+  // Batch enrichment (Phase D)
+  createEnrichmentBatchJob,
+  cancelEnrichmentBatchJob,
+  resumeEnrichmentBatchJob,
+
+  // Content + audience overlap (Phase E)
+  fetchCreatorPosts,
+  fetchPostDetails: fetchPostDetailsResolver,
+  computeAudienceOverlap,
+
+  // Import to creators roster (Phase G). The legacy discoveryImportToCreators
+  // above remains until the old UI is cut over; Phase H removes it.
+  importCreatorsToAgency,
 
   // Project Notes
   createProjectNote,
