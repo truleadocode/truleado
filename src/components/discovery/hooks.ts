@@ -574,7 +574,10 @@ export function useImportCreatorsToAgency() {
     onSuccess: (_rows, input) => {
       // Creator list view will re-fetch next time it mounts.
       client.invalidateQueries({ queryKey: ['creatorProfile'] });
-      void input;
+      // The detail sheet's "View in Creator DB" footer reads the roster
+      // id of the just-imported creator — invalidate so it appears
+      // immediately without a manual reopen.
+      client.invalidateQueries({ queryKey: ['creatorIdByProfileId', input.agencyId] });
     },
   });
 }

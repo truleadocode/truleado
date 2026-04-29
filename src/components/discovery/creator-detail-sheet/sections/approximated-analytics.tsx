@@ -110,8 +110,14 @@ function TopPosts({
       <div className="grid grid-cols-3 gap-2">
         {posts.map((post, i) => {
           const key = post.pk ?? post.media_id ?? String(i);
+          // Skip media_url when it's clearly a video file — IG reels return
+          // .mp4 here and <img> can't render it.
+          const mediaUrlIsImage =
+            !!post.media_url && !/\.(mp4|mov|m4v|webm)(?:$|\?)/i.test(post.media_url);
           const thumb =
-            post.thumbnails?.url ?? post.image_versions?.candidates?.[0]?.url ?? post.media_url;
+            post.thumbnails?.url ??
+            post.image_versions?.candidates?.[0]?.url ??
+            (mediaUrlIsImage ? post.media_url : undefined);
           return (
             <a
               key={key}
@@ -129,7 +135,9 @@ function TopPosts({
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer"
                   />
-                ) : null}
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-tru-slate-100" />
+                )}
               </div>
               <div className="absolute right-1 top-1 rounded-full bg-tru-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
                 {formatPercent(post.er)}

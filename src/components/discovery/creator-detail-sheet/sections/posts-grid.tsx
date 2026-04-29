@@ -1,6 +1,6 @@
 'use client';
 
-import { Heart, MessageCircle, Eye } from 'lucide-react';
+import { Heart, MessageCircle, Eye, PlayCircle } from 'lucide-react';
 import { useFetchCreatorPosts, type DiscoveryCreator } from '../../hooks';
 import { formatCount, proxiedImageSrc } from '../../primitives/tokens';
 import { Section } from './section';
@@ -16,10 +16,30 @@ export interface ICPost {
   url?: string;
   caption?: string;
   media_url?: string;
+  /** IC media_type: 1 = photo, 2 = video / reel, 8 = carousel. */
+  media_type?: number;
   thumbnails?: { url?: string };
   image_versions?: { candidates?: Array<{ url: string; width: number; height: number }> };
   engagement?: { likes?: number; comments?: number; views?: number };
   taken_at?: number;
+}
+
+/**
+ * IC's `media_url` for video posts (Instagram Reels, TikTok videos) points
+ * to an .mp4 file the browser can't render in `<img>`. Returns true when
+ * the URL is safe to drop into an image tag.
+ */
+function isImageUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const path = new URL(url).pathname.toLowerCase();
+    if (/\.(jpe?g|png|webp|gif|avif|heic)(?:$|\?)/.test(path)) return true;
+    if (/\.(mp4|mov|m4v|webm)(?:$|\?)/.test(path)) return false;
+    // Unknown extension — let the browser try.
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const SUPPORTED = new Set(['instagram', 'tiktok', 'youtube']);
@@ -83,25 +103,39 @@ function PostsTiles({ items }: { items: ICPost[] }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {items.map((post, i) => {
         const key = post.pk ?? post.media_id ?? String(i);
-        const thumb =
-          post.thumbnails?.url ?? post.image_versions?.candidates?.[0]?.url ?? post.media_url;
+        // Try thumbnail-style fields first; fall back to media_url only when
+        // it actually points to an image (not a .mp4 video file).
+        const candidate =
+          post.thumbnails?.url ??
+          post.image_versions?.candidates?.[0]?.url ??
+          (isImageUrl(post.media_url) ? post.media_url : undefined);
+        const isVideoPost = post.media_type === 2;
         return (
           <a
             key={key}
             href={post.url ?? '#'}
             target="_blank"
             rel="noopener noreferrer"
-            className="group block overflow-hidden rounded-md border border-tru-slate-200 bg-white transition-shadow hover:shadow-sm"
+            className="group relative block overflow-hidden rounded-md border border-tru-slate-200 bg-white transition-shadow hover:shadow-sm"
           >
             <div className="aspect-square w-full bg-tru-slate-100">
-              {thumb ? (
+              {candidate ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={proxiedImageSrc(thumb)}
+                  src={proxiedImageSrc(candidate)}
                   alt=""
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
                 />
+              ) : isVideoPost ? (
+                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-tru-slate-200 to-tru-slate-100">
+                  <PlayCircle className="h-10 w-10 text-tru-slate-500" />
+                </div>
+              ) : null}
+              {isVideoPost && candidate ? (
+                <div className="pointer-events-none absolute right-1.5 top-1.5 rounded-full bg-black/60 p-1">
+                  <PlayCircle className="h-3.5 w-3.5 text-white" />
+                </div>
               ) : null}
             </div>
             <div className="flex items-center gap-3 px-2 py-1.5 text-[11px] text-tru-slate-500">

@@ -1,8 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, Loader2, UserPlus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import {
   parseInstagramEnrichment,
   parseYouTubeEnrichment,
@@ -18,7 +20,7 @@ import {
   TwitchPanel,
 } from '../enriched-data';
 import type { CreatorProfile, DiscoveryCreator } from '../hooks';
-import { useCreatorIdByProfileId } from '../hooks';
+import { useCreatorIdByProfileId, useImportCreatorsToAgency } from '../hooks';
 import { Header } from './sections/header';
 import { ProfileInfo } from './sections/profile-info';
 import { PostsGrid } from './sections/posts-grid';
@@ -44,6 +46,7 @@ interface EnrichedShellProps {
  * this component delivers.
  */
 export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps) {
+  const { toast } = useToast();
   const platform = creator.platform.toLowerCase();
   const showAudienceTab =
     profile.enrichmentMode === 'FULL_WITH_AUDIENCE' &&
@@ -55,6 +58,38 @@ export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps
   const common = useMemo(() => parseTopLevelCommon(profile.rawData), [profile.rawData]);
 
   const rosterIdQuery = useCreatorIdByProfileId(agencyId, profile.id ?? null);
+  const importToRoster = useImportCreatorsToAgency();
+
+  const handleImport = () => {
+    importToRoster.mutate(
+      {
+        agencyId,
+        items: [
+          {
+            creatorProfileId: profile.id,
+            platform: creator.platform,
+            handle: creator.username,
+            enrichIfMissing: false,
+          },
+        ],
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Added to Creator Roster',
+            description: 'No credits charged — profile already enriched.',
+          });
+        },
+        onError: (err) => {
+          toast({
+            title: 'Roster import failed',
+            description: err instanceof Error ? err.message : 'Unknown error',
+            variant: 'destructive',
+          });
+        },
+      }
+    );
+  };
 
   return (
     <>
@@ -97,9 +132,9 @@ export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps
         </TabsContent>
       </Tabs>
 
-      {/* Footer deep-link */}
-      {rosterIdQuery.data ? (
-        <div className="border-t border-tru-slate-100 bg-tru-slate-50 px-6 py-3">
+      {/* Footer: deep-link if already in roster, else add-to-roster CTA. */}
+      <div className="border-t border-tru-slate-100 bg-tru-slate-50 px-6 py-3">
+        {rosterIdQuery.data ? (
           <a
             href={`/dashboard/creators/${rosterIdQuery.data}?platform=${platform}`}
             target="_blank"
@@ -109,8 +144,29 @@ export function EnrichedShell({ agencyId, creator, profile }: EnrichedShellProps
             <span>View full profile in Creator DB</span>
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
-        </div>
-      ) : null}
+        ) : (
+          <div>
+            <Button
+              onClick={handleImport}
+              disabled={importToRoster.isPending}
+              className="w-full gap-2 bg-tru-blue-600 text-white hover:bg-tru-blue-700"
+            >
+              {importToRoster.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Adding to roster…
+                </>
+              ) : (
+                <>
+                  <UserPlus className="h-4 w-4" /> Add to Creator Roster
+                </>
+              )}
+            </Button>
+            <p className="mt-2 text-[11px] text-tru-slate-500">
+              This profile is already enriched in our cache. Adding it to your roster is free.
+            </p>
+          </div>
+        )}
+      </div>
     </>
   );
 }

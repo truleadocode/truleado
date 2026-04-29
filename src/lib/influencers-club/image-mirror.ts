@@ -116,7 +116,8 @@ export async function mirrorCreatorPicture(
     // Supabase public URL serves the file as a renderable image.
     const ext = extFromUrlOrContentType(args.pictureUrl, contentType);
     const storagePath = `profiles/${args.provider}/${args.platform}/${args.providerUserId}.${ext}`;
-    const storageContentType = `image/${ext}`;
+    // Supabase Storage rejects 'image/jpg' — must be canonical 'image/jpeg'.
+    const storageContentType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
 
     const { error: uploadError } = await supabaseAdmin.storage
       .from(BUCKET)
