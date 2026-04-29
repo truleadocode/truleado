@@ -40,23 +40,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PlatformIcon } from '@/components/ui/platform-icon'
 import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
-import { useSocialFetch } from '@/hooks/use-social-fetch'
 import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
-import { InstagramTab } from '@/components/creators/instagram-tab'
-import { YouTubeTab } from '@/components/creators/youtube-tab'
 import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
 import {
-  parseInstagramEnrichment,
-  parseYouTubeEnrichment,
   parseTikTokEnrichment,
   parseTwitterEnrichment,
   parseTwitchEnrichment,
-  InstagramPanel,
-  YouTubePanel,
   TikTokPanel,
   TwitterPanel,
   TwitchPanel,
 } from '@/components/discovery/enriched-data'
+import { InstagramProfilePage } from '@/components/creator-profile/pages/instagram-profile-page'
+import { YouTubeProfilePage } from '@/components/creator-profile/pages/youtube-profile-page'
 import { useAuth } from '@/contexts/auth-context'
 import { useCurrency } from '@/hooks/use-currency'
 
@@ -154,20 +149,6 @@ interface SocialProfile {
   lastFetchedAt: string
 }
 
-interface SocialPost {
-  id: string
-  platform: string
-  platformPostId: string
-  postType: string | null
-  caption: string | null
-  url: string | null
-  thumbnailUrl: string | null
-  likesCount: number | null
-  commentsCount: number | null
-  viewsCount: number | null
-  publishedAt: string | null
-}
-
 type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'twitter' | 'twitch' | 'facebook' | 'linkedin'
 
 interface EnrichedProfile {
@@ -193,11 +174,12 @@ export default function CreatorDetailPage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
   const [enrichedProfiles, setEnrichedProfiles] = useState<EnrichedProfile[]>([])
 
-  // Social data state
+  // Social data state — Dashboard tab consumes profiles for the
+  // cross-platform summary. Per-platform post grids are now fed from the
+  // IC enrichment payload (rawData) by the new <{Platform}ProfilePage>
+  // components, so the legacy `instagramPosts` / `youtubePosts` state and
+  // their Apify post fetches were dropped with PR2.
   const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>([])
-  const [instagramPosts, setInstagramPosts] = useState<SocialPost[]>([])
-  const [youtubePosts, setYoutubePosts] = useState<SocialPost[]>([])
-  const [socialLoading, setSocialLoading] = useState(false)
 
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false)
@@ -249,49 +231,15 @@ export default function CreatorDetailPage() {
   }
 
   const fetchSocialData = useCallback(async () => {
-    setSocialLoading(true)
     try {
       const profilesData = await graphqlRequest<{
         creatorSocialProfiles: SocialProfile[]
       }>(queries.creatorSocialProfiles, { creatorId })
       setSocialProfiles(profilesData.creatorSocialProfiles || [])
-
-      // Fetch posts for each platform that has a profile
-      const profiles = profilesData.creatorSocialProfiles || []
-      const igProfile = profiles.find((p) => p.platform === 'instagram')
-      const ytProfile = profiles.find((p) => p.platform === 'youtube')
-
-      if (igProfile) {
-        const igData = await graphqlRequest<{
-          creatorSocialPosts: SocialPost[]
-        }>(queries.creatorSocialPosts, {
-          creatorId,
-          platform: 'instagram',
-          limit: 20,
-        })
-        setInstagramPosts(igData.creatorSocialPosts || [])
-      }
-
-      if (ytProfile) {
-        const ytData = await graphqlRequest<{
-          creatorSocialPosts: SocialPost[]
-        }>(queries.creatorSocialPosts, {
-          creatorId,
-          platform: 'youtube',
-          limit: 20,
-        })
-        setYoutubePosts(ytData.creatorSocialPosts || [])
-      }
     } catch {
-      // Social data fetch is best-effort — don't block the page
-    } finally {
-      setSocialLoading(false)
+      // Social data fetch is best-effort — don't block the page.
     }
   }, [creatorId])
-
-  const { triggerFetch, isPollingPlatform } = useSocialFetch(creatorId, {
-    onComplete: fetchSocialData,
-  })
 
   const fetchCreator = useCallback(async () => {
     setLoading(true)
@@ -355,22 +303,6 @@ export default function CreatorDetailPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creator?.id, searchParams])
-
-  const handleTriggerFetch = useCallback(
-    async (platform: string, jobType: string) => {
-      try {
-        await triggerFetch(platform, jobType)
-        toast({ title: 'Fetching data', description: `Social data fetch started for ${platform}` })
-      } catch (err) {
-        toast({
-          title: 'Fetch failed',
-          description: err instanceof Error ? err.message : 'Failed to trigger social data fetch',
-          variant: 'destructive',
-        })
-      }
-    },
-    [triggerFetch, toast]
-  )
 
   const openEditDialog = () => {
     if (!creator) return
@@ -738,41 +670,27 @@ export default function CreatorDetailPage() {
 
           {hasInstagram && (
             <TabsContent value="instagram">
-              <InstagramTab
-                profile={igProfile}
-                posts={instagramPosts}
-                loading={socialLoading}
-                onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
-                fetching={isPollingPlatform('instagram')}
-              />
               {igEnriched ? (
-                <Card className="mt-6">
-                  <CardContent className="p-0">
-                    <EnrichedSubsectionHeader profile={igEnriched} />
-                    <InstagramPanel data={parseInstagramEnrichment(igEnriched.rawData)} />
-                  </CardContent>
-                </Card>
-              ) : null}
+                <InstagramProfilePage
+                  rawData={igEnriched.rawData}
+                  pictureUrl={igProfile?.profilePicUrl ?? null}
+                />
+              ) : (
+                <NoEnrichmentEmpty handle={creator.instagramHandle} platform="instagram" />
+              )}
             </TabsContent>
           )}
 
           {hasYouTube && (
             <TabsContent value="youtube">
-              <YouTubeTab
-                profile={ytProfile}
-                posts={youtubePosts}
-                loading={socialLoading}
-                onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
-                fetching={isPollingPlatform('youtube')}
-              />
               {ytEnriched ? (
-                <Card className="mt-6">
-                  <CardContent className="p-0">
-                    <EnrichedSubsectionHeader profile={ytEnriched} />
-                    <YouTubePanel data={parseYouTubeEnrichment(ytEnriched.rawData)} />
-                  </CardContent>
-                </Card>
-              ) : null}
+                <YouTubeProfilePage
+                  rawData={ytEnriched.rawData}
+                  pictureUrl={ytProfile?.profilePicUrl ?? null}
+                />
+              ) : (
+                <NoEnrichmentEmpty handle={creator.youtubeHandle} platform="youtube" />
+              )}
             </TabsContent>
           )}
 
