@@ -94,7 +94,13 @@ export interface YouTubeEnrichment {
     shorts: number | null;
     recentMonths: number | null;
   };
-  postsPerMonth: Record<string, number> | null;
+  /**
+   * `posts_per_month` is a nested calendar shape: `{[year]: {[monthName]: count}}`
+   * where `monthName` is the lowercase English long month (january, february, …).
+   * Empty months are omitted. We pass it through as-is for the year-month
+   * calendar heatmap to render.
+   */
+  postsPerMonthByYear: Record<string, Record<string, number>> | null;
   shortsPercentage: number | null;
   income: Record<string, unknown> | null;
   videoTopics: string[];
@@ -149,6 +155,14 @@ export interface TikTokEnrichment {
   reachScore: number | null;
   /** Raw IC growth block — keys vary, pass through. */
   followerGrowth: Record<string, unknown> | null;
+  /**
+   * Normalised follower-growth points derived from
+   * `creator_follower_growth.{N}_months_ago`. IC returns percent growth
+   * (signed — negative for decline) over the trailing window, NOT absolute
+   * follower counts. Sorted oldest → newest. Empty when IC didn't return
+   * the block.
+   */
+  followerGrowthSeries: Array<{ monthsAgo: number; growthPercent: number }>;
   region: string | null;
   niches: string[];
   niceSubclasses: string[];
@@ -235,6 +249,36 @@ export interface TwitchEnrichment {
     promotesAffiliateLinks: boolean;
   };
   posts: PostSummary[];
+  /**
+   * Featured Clips shelf items extracted from
+   * `post_data[0].data.channel.videoShelves.edges[].node` where `type === 'TOP_CLIPS'`.
+   * Empty when the GraphQL response didn't include the shelf.
+   */
+  featuredClips: TwitchShelfItem[];
+  /**
+   * Recent Videos / VODs shelf items from the same videoShelves block where
+   * `type === 'RECENT_VIDEOS'` (or similar). Empty when absent.
+   */
+  recentVideos: TwitchShelfItem[];
+  /**
+   * Raw GraphQL response metadata (`post_data[0].extensions`) — request id,
+   * duration, operation name. Used for the "API Metadata" debug section.
+   */
+  apiMetadata: Record<string, unknown> | null;
+}
+
+export interface TwitchShelfItem {
+  id: string | null;
+  slug: string | null;
+  title: string | null;
+  thumbnailUrl: string | null;
+  durationSeconds: number | null;
+  /** Game / category title, when present. */
+  game: string | null;
+  /** ISO timestamp of when the clip / VOD was created. */
+  createdAt: string | null;
+  /** Type discriminator from `__typename` (Clip / Video). */
+  kind: 'clip' | 'video' | null;
 }
 
 /**
@@ -243,20 +287,83 @@ export interface TwitchEnrichment {
  * are independently gated by `success` flags; consumers must handle
  * `null` per block, not per the overall struct.
  */
+export interface AudienceCreator {
+  username: string;
+  fullName: string | null;
+  pictureUrl: string | null;
+  followers: number | null;
+  isVerified: boolean;
+  /** Lookalike score 0..1 (only present on lookalikes). */
+  score?: number | null;
+}
+
+export interface AudienceGeoEntry {
+  /** Country / state / city display name. */
+  name: string;
+  /** Two-letter country code, when applicable. */
+  code: string | null;
+  /** 0..1 weight (share of audience). */
+  weight: number;
+  /** For cities/states only — country meta of the parent. */
+  country: { name: string; code: string | null } | null;
+}
+
+export interface AudienceGenderPerAgeEntry {
+  /** Age bucket: '13-17', '18-24', '25-34', '35-44', '45-64', '65-'. */
+  ageCode: string;
+  /** Share of total audience that's male in this bucket (0..1). */
+  male: number;
+  /** Share of total audience that's female in this bucket (0..1). */
+  female: number;
+}
+
+export interface AudienceCredibilityHistogramBin {
+  /** Lower bound of the bin (0..1). Null on the first bin. */
+  min: number | null;
+  /** Upper bound of the bin (0..1). */
+  max: number;
+  /** Account count in this bin. */
+  total: number;
+  /** True for the bin containing the median. */
+  median?: boolean;
+}
+
 export interface AudienceData {
+  /**
+   * Top countries from `audience_geo.countries` as a `Record<countryName, weight>`.
+   * Maintained for backward-compat with the existing TopList renderer.
+   */
   geo: Record<string, number> | null;
+  /**
+   * Full geo breakdown with codes + parent country meta. Used by the mockup's
+   * country / state / city lists which need the flag emoji.
+   */
+  geoCountries: AudienceGeoEntry[];
+  geoStates: AudienceGeoEntry[];
+  geoCities: AudienceGeoEntry[];
   languages: Record<string, number> | null;
   ages: Record<string, number> | null;
   genders: Record<string, number> | null;
+  /**
+   * `audience_genders_per_age` — required by the AgePyramid chart for
+   * stacked male/female bars per age bucket.
+   */
+  gendersPerAge: AudienceGenderPerAgeEntry[];
   interests: Record<string, number> | null;
   ethnicities: Record<string, number> | null;
   brandAffinity: Record<string, number> | null;
+  /** Brand-affinity full record with the affinity-vs-population multiplier. */
+  brandAffinityScored: Array<{ name: string; weight: number; affinity: number }> | null;
   reachability: Record<string, number> | null;
   audienceTypes: Record<string, number> | null;
   credibility: number | null;
   credibilityClass: string | null;
-  notableUsers: Array<{ username: string; pictureUrl: string | null; followers: number | null }>;
+  /** `audience_credibility_followers_histogram` for the distribution chart. */
+  credibilityHistogram: AudienceCredibilityHistogramBin[];
+  notableUsers: AudienceCreator[];
   notableUsersRatio: number | null;
+  /** Top creators with overlapping audiences (IG only today). */
+  lookalikes: AudienceCreator[];
   hadCommentersError: boolean;
   hadLikersError: boolean;
 }

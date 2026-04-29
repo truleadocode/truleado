@@ -19,6 +19,7 @@ const EMPTY: TikTokEnrichment = {
   savesOverTime: [],
   reachScore: null,
   followerGrowth: null,
+  followerGrowthSeries: [],
   region: null,
   niches: [],
   niceSubclasses: [],
@@ -79,6 +80,7 @@ export function parseTikTokEnrichment(rawData: unknown): TikTokEnrichment {
     savesOverTime: safeNumberArray(block.saves_count_list),
     reachScore: safeNumber(block.reach_score),
     followerGrowth: safeDict(block.creator_follower_growth),
+    followerGrowthSeries: parseFollowerGrowthSeries(block.creator_follower_growth),
     region: safeString(block.region),
     niches: safeStringArray(block.niche_class),
     niceSubclasses: safeStringArray(block.niche_sub_class),
@@ -103,4 +105,26 @@ export function parseTikTokEnrichment(rawData: unknown): TikTokEnrichment {
     },
     mostRecentPostDate: safeString(block.most_recent_post_date),
   };
+}
+
+/**
+ * Convert IC's `creator_follower_growth` dict — keys like `3_months_ago`,
+ * `6_months_ago`, `9_months_ago`, `12_months_ago` — into a chronological
+ * series sorted oldest → newest. The values are SIGNED percent growth (e.g.
+ * `-1.38` = -1.38% over the window), not absolute follower counts.
+ */
+function parseFollowerGrowthSeries(
+  v: unknown
+): Array<{ monthsAgo: number; growthPercent: number }> {
+  const dict = safeDict(v);
+  if (!dict) return [];
+  const out: Array<{ monthsAgo: number; growthPercent: number }> = [];
+  for (const [key, val] of Object.entries(dict)) {
+    const m = key.match(/^(\d+)_months?_ago$/);
+    if (!m) continue;
+    const growthPercent = safeNumber(val);
+    if (growthPercent === null) continue;
+    out.push({ monthsAgo: parseInt(m[1], 10), growthPercent });
+  }
+  return out.sort((a, b) => b.monthsAgo - a.monthsAgo);
 }

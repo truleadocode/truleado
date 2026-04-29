@@ -48,11 +48,17 @@ describe('parseYouTubeEnrichment', () => {
     }
   });
 
-  it('postsPerMonth returns a Record<string, number> when populated', () => {
+  it('postsPerMonthByYear returns the nested {year: {monthName: count}} shape', () => {
     const out = parseYouTubeEnrichment(enrichmentFullSamples.youtube.result);
-    if (out.postsPerMonth) {
-      for (const [, v] of Object.entries(out.postsPerMonth)) {
-        expect(typeof v).toBe('number');
+    expect(out.postsPerMonthByYear).not.toBeNull();
+    if (out.postsPerMonthByYear) {
+      for (const [year, months] of Object.entries(out.postsPerMonthByYear)) {
+        expect(/^\d{4}$/.test(year)).toBe(true);
+        for (const [monthName, count] of Object.entries(months)) {
+          expect(typeof count).toBe('number');
+          // IC uses lowercase English long-form month names.
+          expect(monthName).toBe(monthName.toLowerCase());
+        }
       }
     }
   });

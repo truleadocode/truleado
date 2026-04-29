@@ -51,4 +51,26 @@ describe('parseTwitchEnrichment', () => {
     expect(out.streamsCountLast30).toBeTypeOf('number');
     expect(out.lastStreamed).toBeTypeOf('string');
   });
+
+  it('extracts featured clips from videoShelves with normalised fields', () => {
+    const out = parseTwitchEnrichment(enrichmentFullSamples.twitch.result);
+    expect(out.featuredClips.length).toBeGreaterThan(0);
+    const first = out.featuredClips[0];
+    expect(first.kind).toBe('clip');
+    expect(typeof first.title === 'string' || first.title === null).toBe(true);
+    expect(typeof first.thumbnailUrl === 'string' || first.thumbnailUrl === null).toBe(true);
+    expect(typeof first.durationSeconds === 'number' || first.durationSeconds === null).toBe(true);
+  });
+
+  it('returns apiMetadata from extensions when post_data[0] has it', () => {
+    const out = parseTwitchEnrichment(enrichmentFullSamples.twitch.result);
+    expect(out.apiMetadata).not.toBeNull();
+  });
+
+  it('returns empty shelves when post_data is missing', () => {
+    const out = parseTwitchEnrichment({ twitch: { exists: true } });
+    expect(out.featuredClips).toEqual([]);
+    expect(out.recentVideos).toEqual([]);
+    expect(out.apiMetadata).toBeNull();
+  });
 });

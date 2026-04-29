@@ -12,13 +12,15 @@ interface YouTubePanelProps {
   data: YouTubeEnrichment;
 }
 
+const MONTH_ORDER = [
+  'january','february','march','april','may','june',
+  'july','august','september','october','november','december',
+];
+
 export function YouTubePanel({ data }: YouTubePanelProps) {
-  // Sort posts_per_month chronologically (keys look like "2024-01" or "Jan 2024")
-  const ppmData = data.postsPerMonth
-    ? Object.entries(data.postsPerMonth)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, value]) => ({ key: shortenMonth(key), value }))
-    : [];
+  // Flatten the nested {year: {monthName: count}} into a chronological list
+  // for the inline bar chart. Only the most recent 12 months render here.
+  const ppmData = flattenPostsPerMonth(data.postsPerMonthByYear).slice(-12);
 
   return (
     <div className="space-y-5 px-6 py-5">
@@ -209,13 +211,27 @@ function IncomeBlock({ income }: { income: Record<string, unknown> }) {
   );
 }
 
-function shortenMonth(key: string): string {
-  const m = key.match(/(\d{4})[-_/]?(\d{2})/);
-  if (m) {
-    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parseInt(m[2], 10) - 1];
-    return `${month}'${m[1].slice(2)}`;
+/**
+ * Flatten IC's nested `{year: {monthName: count}}` into a chronological array
+ * for the inline BarChart. Months are lower-case English long names.
+ */
+function flattenPostsPerMonth(
+  byYear: Record<string, Record<string, number>> | null
+): Array<{ key: string; value: number }> {
+  if (!byYear) return [];
+  const out: Array<{ key: string; value: number; sort: number }> = [];
+  for (const [year, months] of Object.entries(byYear)) {
+    for (const [monthName, count] of Object.entries(months)) {
+      const idx = MONTH_ORDER.indexOf(monthName.toLowerCase());
+      if (idx === -1) continue;
+      out.push({
+        key: `${monthName.slice(0, 3).replace(/^./, (c) => c.toUpperCase())}'${year.slice(2)}`,
+        value: count,
+        sort: parseInt(year, 10) * 12 + idx,
+      });
+    }
   }
-  return key;
+  return out.sort((a, b) => a.sort - b.sort).map(({ key, value }) => ({ key, value }));
 }
 
 function humanise(key: string): string {

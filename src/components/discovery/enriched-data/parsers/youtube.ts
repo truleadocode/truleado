@@ -4,7 +4,6 @@ import {
   safeBool,
   safeDict,
   safeNumber,
-  safeNumberMap,
   safeString,
   safeStringArray,
 } from './safe';
@@ -14,7 +13,7 @@ const EMPTY: YouTubeEnrichment = {
   engagement: { overall: null, long: null, shorts: null },
   views: { avg: null, avgLong: null, avgShorts: null, medianLong: null },
   postingFrequency: { overall: null, long: null, shorts: null, recentMonths: null },
-  postsPerMonth: null,
+  postsPerMonthByYear: null,
   shortsPercentage: null,
   income: null,
   videoTopics: [],
@@ -65,7 +64,7 @@ export function parseYouTubeEnrichment(rawData: unknown): YouTubeEnrichment {
       shorts: safeNumber(block.posting_frequency_shorts),
       recentMonths: safeNumber(block.posting_frequency_recent_months),
     },
-    postsPerMonth: safeNumberMap(block.posts_per_month),
+    postsPerMonthByYear: parsePostsPerMonth(block.posts_per_month),
     shortsPercentage: safeNumber(block.shorts_percentage),
     income: safeDict(block.income),
     videoTopics: safeStringArray(block.video_topics),
@@ -92,4 +91,30 @@ export function parseYouTubeEnrichment(rawData: unknown): YouTubeEnrichment {
     lastShortVideoUploadDate: safeString(block.last_short_video_upload_date),
     posts: parsePostSummaries(block.post_data),
   };
+}
+
+/**
+ * Parse `posts_per_month`, IC's nested calendar shape:
+ *   { "2026": { "april": 5, "march": 7, ... }, "2025": {...} }
+ *
+ * The HANDOFF.md notes month keys are lowercase English long names.
+ * Returns null when the block is missing or shaped unexpectedly.
+ */
+function parsePostsPerMonth(
+  v: unknown
+): Record<string, Record<string, number>> | null {
+  const dict = safeDict(v);
+  if (!dict) return null;
+  const out: Record<string, Record<string, number>> = {};
+  for (const [year, months] of Object.entries(dict)) {
+    const inner = safeDict(months);
+    if (!inner) continue;
+    const monthMap: Record<string, number> = {};
+    for (const [monthName, count] of Object.entries(inner)) {
+      const n = safeNumber(count);
+      if (n !== null) monthMap[monthName] = n;
+    }
+    if (Object.keys(monthMap).length > 0) out[year] = monthMap;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }

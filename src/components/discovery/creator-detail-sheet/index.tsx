@@ -1,18 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { Loader2 } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { useCreatorProfile, useEnrichCreator, type DiscoveryCreator } from '../hooks';
-import { Header } from './sections/header';
-import { ProfileInfo } from './sections/profile-info';
-import { PostsGrid } from './sections/posts-grid';
-import { ApproximatedAnalytics } from './sections/approximated-analytics';
-import { LockedBlock } from './sections/locked-block';
-import { AudienceSection } from './sections/audience-section';
-import { SimilarAccordion } from './sections/similar-accordion';
-import { ConnectedAccordion } from './sections/connected-accordion';
-import { EnrichCta } from './sections/enrich-cta';
 import { EnrichedShell } from './enriched-shell';
 
 interface CreatorDetailSheetProps {
@@ -23,15 +15,18 @@ interface CreatorDetailSheetProps {
 }
 
 /**
- * Single scrolling sidebar (replaces the previous 5-tab layout).
+ * Unified profile sidebar. Same polished two-column tabbed layout for both
+ * pre-enrich (RAW) and post-enrich (FULL / FULL_WITH_AUDIENCE) states. The
+ * Audience tab and the footer CTA flip based on `profile.enrichmentMode`.
  *
  * On open, two cheap-and-cached calls fire automatically:
- *   - `enrichCreator(RAW)` if no enrichment exists for this creator (1 cr)
- *   - `fetchCreatorPosts` first page (1 cr)
+ *   - `enrichCreator(RAW)` if no enrichment exists for this creator (1 cr —
+ *     YouTube uses the official Data API and is free)
+ *   - `fetchCreatorPosts` and `similarCreators` are kicked off by the tabs
+ *     themselves on demand
  *
- * Both go through the per-agency 30-day dedupe layer in Phase A — repeating
- * an open inside the window costs the agency 0 credits, and a different
- * agency pays our margin while still skipping the IC call.
+ * All IC calls go through the per-agency 30-day dedupe layer — repeating an
+ * open inside the window costs the agency 0 credits.
  */
 export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: CreatorDetailSheetProps) {
   const { toast } = useToast();
@@ -70,50 +65,34 @@ export function CreatorDetailSheet({ agencyId, creator, open, onOpenChange }: Cr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creator?.providerUserId, open, profileQuery.isLoading, profile?.enrichmentMode]);
 
-  const isEnriched =
-    profile !== null &&
-    (profile.enrichmentMode === 'FULL' || profile.enrichmentMode === 'FULL_WITH_AUDIENCE');
+  // Sheet always uses the wide two-column layout — pre-enrich and post-enrich
+  // share the same shell, so the canvas doesn't need to change with state.
+  const sheetWidthClass =
+    'w-full max-w-full overflow-hidden p-0 sm:max-w-5xl';
 
-  // Sheet grows to ~5xl on enrichment so the polished two-column layout
-  // (meta column + tabbed content) fits comfortably. Pre-enrich sticks
-  // with the narrow sidebar — the data simply doesn't justify the canvas.
-  const sheetWidthClass = isEnriched
-    ? 'w-full max-w-full overflow-hidden p-0 sm:max-w-5xl'
-    : 'w-full max-w-2xl overflow-y-auto p-0 sm:max-w-2xl';
+  // Loading: we have a creator but haven't yet seen RAW data come back.
+  // (profile is null → RAW is in flight from the auto-enrich effect above.)
+  const isInitialLoading =
+    profile === null && (profileQuery.isLoading || enrich.isPending);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className={sheetWidthClass}>
-        {creator ? (
-          isEnriched && profile ? (
-            <EnrichedShell agencyId={agencyId} creator={creator} profile={profile} />
-          ) : (
-            <>
-              <Header creator={creator} mirroredAvatar={profile?.profilePictureUrl ?? null} />
-
-              <ProfileInfo
-                profile={profile}
-                isLoading={profileQuery.isLoading || (enrich.isPending && profile === null)}
-              />
-
-              <PostsGrid agencyId={agencyId} creator={creator} />
-
-              <ApproximatedAnalytics agencyId={agencyId} creator={creator} />
-
-              <LockedBlock
-                title="Follower growth"
-                description="12-month subscribers / followers trend."
-              />
-
-              <AudienceSection profile={profile} />
-
-              <EnrichCta agencyId={agencyId} creator={creator} profile={profile} />
-
-              <SimilarAccordion agencyId={agencyId} creator={creator} />
-
-              <ConnectedAccordion agencyId={agencyId} creator={creator} />
-            </>
-          )
+        {creator && profile ? (
+          <EnrichedShell agencyId={agencyId} creator={creator} profile={profile} />
+        ) : creator && isInitialLoading ? (
+          <div className="flex h-full items-center justify-center">
+            <div className="flex items-center gap-3 text-sm text-tru-slate-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading creator profile…
+            </div>
+          </div>
+        ) : creator ? (
+          <div className="flex h-full items-center justify-center px-12 text-center">
+            <div className="text-sm text-tru-slate-500">
+              We couldn&apos;t load this creator. Try closing and reopening the sidebar.
+            </div>
+          </div>
         ) : null}
       </SheetContent>
     </Sheet>

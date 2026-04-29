@@ -1,6 +1,7 @@
-import type { TwitchEnrichment } from './types';
+import type { TwitchEnrichment, TwitchShelfItem } from './types';
 import { parsePostSummaries, pluckPlatformBlock } from './common';
 import {
+  safeArray,
   safeBool,
   safeDict,
   safeNumber,
@@ -27,6 +28,9 @@ const EMPTY: TwitchEnrichment = {
     promotesAffiliateLinks: false,
   },
   posts: [],
+  featuredClips: [],
+  recentVideos: [],
+  apiMetadata: null,
 };
 
 /**
@@ -64,6 +68,13 @@ export function parseTwitchEnrichment(rawData: unknown): TwitchEnrichment {
     if (s) socialMedia[k] = s;
   }
 
+  // Twitch's `post_data[0]` carries a GraphQL response with shelves of
+  // featured clips and recent VODs + an `extensions` block of metadata.
+  const firstPost = safeDict(safeArray(block.post_data)[0]);
+  const channel = safeDict(safeDict(firstPost?.data)?.channel);
+  const shelves = parseShelves(channel?.videoShelves);
+  const apiMetadata = safeDict(firstPost?.extensions) ?? null;
+
   return {
     exists: safeBool(block.exists) ?? true,
     displayName: safeString(block.displayName) ?? safeString(block.username),
@@ -83,5 +94,68 @@ export function parseTwitchEnrichment(rawData: unknown): TwitchEnrichment {
       promotesAffiliateLinks: safeBool(block.promotes_affiliate_links) ?? false,
     },
     posts: parsePostSummaries(block.post_data),
+    featuredClips: shelves.clips,
+    recentVideos: shelves.videos,
+    apiMetadata,
+  };
+}
+
+interface ShelfBundle {
+  clips: TwitchShelfItem[];
+  videos: TwitchShelfItem[];
+}
+
+/**
+ * Twitch's GraphQL response embeds two shelves:
+ *   - "Featured Clips" (type === 'TOP_CLIPS')
+ *   - "Recent Videos" / VODs (type === 'RECENT_VIDEOS' or similar)
+ *
+ * `videoShelves.edges[].node` carries `{ id, title, type, items[] }`. Items
+ * are heterogeneous (Clip / Video discriminated by `__typename`). We
+ * normalise both into a `TwitchShelfItem` shape.
+ */
+function parseShelves(v: unknown): ShelfBundle {
+  const dict = safeDict(v);
+  if (!dict) return { clips: [], videos: [] };
+  const edges = safeArray(dict.edges);
+  const clips: TwitchShelfItem[] = [];
+  const videos: TwitchShelfItem[] = [];
+  for (const edge of edges) {
+    const node = safeDict(safeDict(edge)?.node);
+    if (!node) continue;
+    const shelfType = safeString(node.type);
+    const items = safeArray(node.items);
+    for (const it of items) {
+      const item = parseShelfItem(safeDict(it));
+      if (!item) continue;
+      if (item.kind === 'clip' || shelfType === 'TOP_CLIPS') clips.push(item);
+      else videos.push(item);
+    }
+  }
+  return { clips, videos };
+}
+
+function parseShelfItem(d: Record<string, unknown> | null): TwitchShelfItem | null {
+  if (!d) return null;
+  const typename = safeString(d.__typename);
+  const kind: 'clip' | 'video' | null =
+    typename === 'Clip' ? 'clip' : typename === 'Video' ? 'video' : null;
+  const game = safeDict(d.game);
+  const id = safeString(d.id);
+  const slug = safeString(d.slug);
+  const title = safeString(d.title);
+  const thumbnailUrl = safeString(d.thumbnailURL) ?? safeString(d.previewThumbnailURL);
+  // Skip rows that have nothing useful — defensive, since the GraphQL
+  // payload occasionally returns null-shaped placeholder edges.
+  if (!id && !slug && !title && !thumbnailUrl) return null;
+  return {
+    id,
+    slug,
+    title,
+    thumbnailUrl,
+    durationSeconds: safeNumber(d.durationSeconds) ?? safeNumber(d.lengthSeconds),
+    game: game ? safeString(game.displayName) ?? safeString(game.name) : null,
+    createdAt: safeString(d.createdAt) ?? safeString(d.publishedAt),
+    kind,
   };
 }

@@ -100,6 +100,20 @@ module.exports = {
           "growth-down": "var(--tru-growth-down)",
           "growth-flat": "var(--tru-growth-flat)",
         },
+        // Creator Profile design tokens (per IC handoff at
+        // product-documentation/influencers.club/creator-profile/styles.css).
+        // Scoped to the per-platform Creator DB pages only — do not leak into
+        // the rest of the dashboard.
+        cp: {
+          bg:        "#fafaf7",
+          surface:   { DEFAULT: "#ffffff", 2: "#f5f5f0" },
+          line:      { DEFAULT: "#e7e5dc", 2: "#d8d6cb" },
+          ink:       { DEFAULT: "#1a1a17", 2: "#45463f", 3: "#777970", 4: "#a3a59c" },
+          accent:    { DEFAULT: "#2f6b3a", 2: "#b1d96a", 3: "#355bff" },
+          warn:      "#d97300",
+          bad:       "#c43050",
+          good:      "#2f6b3a",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -108,6 +122,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+        mono: ["var(--font-jetbrains-mono)", "ui-monospace", "SFMono-Regular", "monospace"],
       },
       fontSize: {
         "2xs": ["0.625rem", { lineHeight: "0.75rem" }],

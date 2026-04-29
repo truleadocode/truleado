@@ -45,4 +45,24 @@ describe('parseTikTokEnrichment', () => {
     const out = parseTikTokEnrichment(enrichmentFullSamples.tiktok.result);
     expect(out.followerGrowth).toBeTypeOf('object');
   });
+
+  it('followerGrowthSeries returns signed percent growth, sorted oldest → newest', () => {
+    const out = parseTikTokEnrichment(enrichmentFullSamples.tiktok.result);
+    expect(out.followerGrowthSeries.length).toBeGreaterThan(0);
+    for (const pt of out.followerGrowthSeries) {
+      expect(pt.monthsAgo).toBeGreaterThan(0);
+      expect(typeof pt.growthPercent).toBe('number');
+    }
+    // Sort order: monthsAgo descending → oldest first.
+    for (let i = 1; i < out.followerGrowthSeries.length; i++) {
+      expect(out.followerGrowthSeries[i - 1].monthsAgo).toBeGreaterThanOrEqual(
+        out.followerGrowthSeries[i].monthsAgo
+      );
+    }
+  });
+
+  it('followerGrowthSeries is empty when creator_follower_growth is absent', () => {
+    const out = parseTikTokEnrichment({ tiktok: { exists: true } });
+    expect(out.followerGrowthSeries).toEqual([]);
+  });
 });

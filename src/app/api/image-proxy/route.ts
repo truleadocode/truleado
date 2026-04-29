@@ -25,6 +25,8 @@ const ALLOWED_HOST_PATTERNS: RegExp[] = [
   /^static-cdn\.jtvnw\.net$/i,
   // Influencers.club's own picture CDN (24h-expiring temp URLs)
   /^[a-z0-9]+\.cloudfront\.net$/i,
+  // Influencers.club audience-block avatars (notable_users, lookalikes)
+  /^img\.onsocial\.ai$/i,
 ];
 
 function isAllowedUrl(rawUrl: string) {

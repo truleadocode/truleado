@@ -1,4 +1,10 @@
-import type { AudienceData } from './types';
+import type {
+  AudienceCreator,
+  AudienceCredibilityHistogramBin,
+  AudienceData,
+  AudienceGenderPerAgeEntry,
+  AudienceGeoEntry,
+} from './types';
 import {
   pluck,
   safeArray,
@@ -11,21 +17,37 @@ import {
 
 const EMPTY_AUDIENCE: AudienceData = {
   geo: null,
+  geoCountries: [],
+  geoStates: [],
+  geoCities: [],
   languages: null,
   ages: null,
   genders: null,
+  gendersPerAge: [],
   interests: null,
   ethnicities: null,
   brandAffinity: null,
+  brandAffinityScored: null,
   reachability: null,
   audienceTypes: null,
   credibility: null,
   credibilityClass: null,
+  credibilityHistogram: [],
   notableUsers: [],
   notableUsersRatio: null,
+  lookalikes: [],
   hadCommentersError: false,
   hadLikersError: false,
 };
+
+interface ParseAudienceDataOptions {
+  /**
+   * Optional sibling source — `audience.audience_credibility_followers_histogram`
+   * lives on the parent `audience` block, not under `audience_followers.data`.
+   * The parent function passes it through.
+   */
+  credibilityHistogram?: unknown;
+}
 
 /**
  * Parse `result.<platform>.audience` into a typed shape. Only IG/YT/TT
@@ -58,24 +80,36 @@ export function parseAudienceData(rawData: unknown, platform: string): AudienceD
   }
 
   // audience_geo is nested: { countries: [...], states: [...], cities: [...] }.
-  // We extract just `countries` for the headline geo breakdown.
   const geoDict = safeDict(data.audience_geo);
-  const geoCountries = geoDict ? geoDict.countries : data.audience_geo;
+  const geoCountriesRaw = geoDict ? geoDict.countries : data.audience_geo;
+
+  // Histogram lives on the parent `audience` block, not under followers.data.
+  const credibilityHistogram = parseCredibilityHistogram(
+    safeDict(audience.audience_credibility_followers_histogram) ??
+      audience.audience_credibility_followers_histogram
+  );
 
   return {
-    geo: parsePercentMap(geoCountries),
+    geo: parsePercentMap(geoCountriesRaw),
+    geoCountries: parseGeoEntries(geoCountriesRaw, false),
+    geoStates: parseGeoEntries(geoDict?.states, false),
+    geoCities: parseGeoEntries(geoDict?.cities, true),
     languages: parsePercentMap(data.audience_languages),
     ages: parsePercentMap(data.audience_ages),
     genders: parsePercentMap(data.audience_genders),
+    gendersPerAge: parseGendersPerAge(data.audience_genders_per_age),
     interests: parsePercentMap(data.audience_interests),
     ethnicities: parsePercentMap(data.audience_ethnicities),
     brandAffinity: parsePercentMap(data.audience_brand_affinity),
+    brandAffinityScored: parseBrandAffinityScored(data.audience_brand_affinity),
     reachability: parsePercentMap(data.audience_reachability),
     audienceTypes: parsePercentMap(data.audience_types),
     credibility: safeNumber(data.audience_credibility),
     credibilityClass: safeString(data.credibility_class),
-    notableUsers: parseNotableUsers(data.notable_users),
+    credibilityHistogram,
+    notableUsers: parseAudienceCreators(data.notable_users),
     notableUsersRatio: safeNumber(data.notable_users_ratio),
+    lookalikes: parseAudienceCreators(data.audience_lookalikes),
     hadCommentersError,
     hadLikersError,
   };
@@ -112,20 +146,102 @@ function parsePercentMap(v: unknown): Record<string, number> | null {
   return Object.keys(out).length > 0 ? out : null;
 }
 
-function parseNotableUsers(
-  v: unknown
-): Array<{ username: string; pictureUrl: string | null; followers: number | null }> {
+function parseAudienceCreators(v: unknown): AudienceCreator[] {
   return safeArray(v)
     .map((row) => {
       const d = safeDict(row);
       if (!d) return null;
       const username = safeString(d.username);
       if (!username) return null;
-      return {
+      const out: AudienceCreator = {
         username,
-        pictureUrl: safeString(d.picture) ?? safeString(d.profile_picture),
+        fullName: safeString(d.fullname) ?? safeString(d.full_name) ?? null,
+        pictureUrl: safeString(d.picture) ?? safeString(d.profile_picture) ?? null,
         followers: safeNumber(d.followers) ?? safeNumber(d.follower_count),
+        isVerified: safeBool(d.is_verified) === true,
       };
+      const score = safeNumber(d.score);
+      if (score !== null) out.score = score;
+      return out;
     })
-    .filter((r): r is { username: string; pictureUrl: string | null; followers: number | null } => r !== null);
+    .filter((r): r is AudienceCreator => r !== null);
+}
+
+function parseGeoEntries(v: unknown, isCity: boolean): AudienceGeoEntry[] {
+  return safeArray(v)
+    .map((row) => {
+      const d = safeDict(row);
+      if (!d) return null;
+      const name = safeString(d.name) ?? safeString(d.code);
+      const weight = safeNumber(d.weight);
+      if (!name || weight === null) return null;
+      // Cities/states nest the parent under `country`; countries don't.
+      let country: { name: string; code: string | null } | null = null;
+      if (isCity) {
+        const c = safeDict(d.country);
+        if (c) {
+          const cName = safeString(c.name);
+          if (cName) country = { name: cName, code: safeString(c.code) };
+        }
+      }
+      const code = safeString(d.code);
+      const out: AudienceGeoEntry = { name, code, weight, country };
+      return out;
+    })
+    .filter((r): r is AudienceGeoEntry => r !== null);
+}
+
+function parseGendersPerAge(v: unknown): AudienceGenderPerAgeEntry[] {
+  return safeArray(v)
+    .map((row) => {
+      const d = safeDict(row);
+      if (!d) return null;
+      const ageCode = safeString(d.code);
+      const male = safeNumber(d.male);
+      const female = safeNumber(d.female);
+      if (!ageCode || male === null || female === null) return null;
+      return { ageCode, male, female };
+    })
+    .filter((r): r is AudienceGenderPerAgeEntry => r !== null);
+}
+
+function parseCredibilityHistogram(v: unknown): AudienceCredibilityHistogramBin[] {
+  // IC sometimes returns this as `{}` (empty object, especially for Twitch
+  // which has no audience block). Guard before treating as array.
+  const arr = safeArray(v);
+  return arr
+    .map((row) => {
+      const d = safeDict(row);
+      if (!d) return null;
+      const max = safeNumber(d.max);
+      const total = safeNumber(d.total);
+      if (max === null || total === null) return null;
+      const out: AudienceCredibilityHistogramBin = {
+        min: safeNumber(d.min),
+        max,
+        total,
+      };
+      if (d.median === true) out.median = true;
+      return out;
+    })
+    .filter((r): r is AudienceCredibilityHistogramBin => r !== null);
+}
+
+function parseBrandAffinityScored(
+  v: unknown
+): Array<{ name: string; weight: number; affinity: number }> | null {
+  const arr = safeArray(v);
+  if (arr.length === 0) return null;
+  const out = arr
+    .map((row) => {
+      const d = safeDict(row);
+      if (!d) return null;
+      const name = safeString(d.name);
+      const weight = safeNumber(d.weight);
+      const affinity = safeNumber(d.affinity);
+      if (!name || weight === null || affinity === null) return null;
+      return { name, weight, affinity };
+    })
+    .filter((r): r is { name: string; weight: number; affinity: number } => r !== null);
+  return out.length > 0 ? out : null;
 }

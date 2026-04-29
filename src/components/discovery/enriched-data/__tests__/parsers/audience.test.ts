@@ -90,4 +90,61 @@ describe('parseAudienceData', () => {
     const out = parseAudienceData(fauxRoot, 'tiktok');
     expect(out.geo).toEqual({ US: 0.42, BR: 0.18 });
   });
+
+  it('extracts geoCountries with code + weight from the IG fixture', () => {
+    const out = parseAudienceData(enrichmentFullSamples.instagram.result, 'instagram');
+    expect(out.geoCountries.length).toBeGreaterThan(0);
+    for (const c of out.geoCountries) {
+      expect(typeof c.name).toBe('string');
+      expect(typeof c.weight).toBe('number');
+    }
+    // Brazil should be in there for @cristiano (largest country share).
+    expect(out.geoCountries.some((c) => c.code === 'BR')).toBe(true);
+  });
+
+  it('extracts geoCities with parent country from the IG fixture', () => {
+    const out = parseAudienceData(enrichmentFullSamples.instagram.result, 'instagram');
+    expect(out.geoCities.length).toBeGreaterThan(0);
+    const saoPaulo = out.geoCities.find((c) => c.name === 'São Paulo');
+    expect(saoPaulo).toBeDefined();
+    expect(saoPaulo?.country?.code).toBe('BR');
+  });
+
+  it('extracts gendersPerAge with male+female per bucket', () => {
+    const out = parseAudienceData(enrichmentFullSamples.instagram.result, 'instagram');
+    expect(out.gendersPerAge.length).toBeGreaterThan(0);
+    for (const row of out.gendersPerAge) {
+      expect(typeof row.ageCode).toBe('string');
+      expect(typeof row.male).toBe('number');
+      expect(typeof row.female).toBe('number');
+    }
+  });
+
+  it('extracts credibilityHistogram bins from the IG fixture', () => {
+    const out = parseAudienceData(enrichmentFullSamples.instagram.result, 'instagram');
+    expect(out.credibilityHistogram.length).toBeGreaterThan(0);
+    for (const bin of out.credibilityHistogram) {
+      expect(typeof bin.max).toBe('number');
+      expect(typeof bin.total).toBe('number');
+    }
+    // At least one bin should be marked as the median.
+    expect(out.credibilityHistogram.some((b) => b.median === true)).toBe(true);
+  });
+
+  it('handles `{}`-shaped credibility histogram (Twitch / no-audience case)', () => {
+    const fauxRoot = {
+      instagram: {
+        audience: {
+          audience_followers: {
+            success: true,
+            data: { audience_geo: { US: 0.5 } },
+          },
+          audience_credibility_followers_histogram: {},
+        },
+      },
+    };
+    expect(() => parseAudienceData(fauxRoot, 'instagram')).not.toThrow();
+    const out = parseAudienceData(fauxRoot, 'instagram');
+    expect(out.credibilityHistogram).toEqual([]);
+  });
 });
