@@ -42,16 +42,11 @@ import { graphqlRequest, queries, mutations } from '@/lib/graphql/client'
 import { useToast } from '@/hooks/use-toast'
 import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
 import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
-import {
-  parseTikTokEnrichment,
-  parseTwitterEnrichment,
-  parseTwitchEnrichment,
-  TikTokPanel,
-  TwitterPanel,
-  TwitchPanel,
-} from '@/components/discovery/enriched-data'
 import { InstagramProfilePage } from '@/components/creator-profile/pages/instagram-profile-page'
 import { YouTubeProfilePage } from '@/components/creator-profile/pages/youtube-profile-page'
+import { TikTokProfilePage } from '@/components/creator-profile/pages/tiktok-profile-page'
+import { TwitterProfilePage } from '@/components/creator-profile/pages/twitter-profile-page'
+import { TwitchProfilePage } from '@/components/creator-profile/pages/twitch-profile-page'
 import { useAuth } from '@/contexts/auth-context'
 import { useCurrency } from '@/hooks/use-currency'
 
@@ -697,12 +692,7 @@ export default function CreatorDetailPage() {
           {hasTikTok && (
             <TabsContent value="tiktok">
               {ttEnriched ? (
-                <Card>
-                  <CardContent className="p-0">
-                    <EnrichedSubsectionHeader profile={ttEnriched} />
-                    <TikTokPanel data={parseTikTokEnrichment(ttEnriched.rawData)} />
-                  </CardContent>
-                </Card>
+                <TikTokProfilePage rawData={ttEnriched.rawData} />
               ) : (
                 <NoEnrichmentEmpty handle={creator.tiktokHandle} platform="tiktok" />
               )}
@@ -712,12 +702,7 @@ export default function CreatorDetailPage() {
           {hasTwitter && (
             <TabsContent value="twitter">
               {twitterEnriched ? (
-                <Card>
-                  <CardContent className="p-0">
-                    <EnrichedSubsectionHeader profile={twitterEnriched} />
-                    <TwitterPanel data={parseTwitterEnrichment(twitterEnriched.rawData)} />
-                  </CardContent>
-                </Card>
+                <TwitterProfilePage rawData={twitterEnriched.rawData} />
               ) : (
                 <NoEnrichmentEmpty handle={creator.twitterHandle} platform="twitter" />
               )}
@@ -727,12 +712,7 @@ export default function CreatorDetailPage() {
           {hasTwitch && (
             <TabsContent value="twitch">
               {twitchEnriched ? (
-                <Card>
-                  <CardContent className="p-0">
-                    <EnrichedSubsectionHeader profile={twitchEnriched} />
-                    <TwitchPanel data={parseTwitchEnrichment(twitchEnriched.rawData)} />
-                  </CardContent>
-                </Card>
+                <TwitchProfilePage rawData={twitchEnriched.rawData} />
               ) : (
                 <NoEnrichmentEmpty handle={creator.twitchHandle} platform="twitch" />
               )}
@@ -908,26 +888,6 @@ export default function CreatorDetailPage() {
         </DialogContent>
       </Dialog>
     </>
-  )
-}
-
-function EnrichedSubsectionHeader({ profile }: { profile: EnrichedProfile }) {
-  return (
-    <div className="flex items-center justify-between border-b border-border px-6 py-3 text-xs text-muted-foreground">
-      <div>
-        <span className="font-semibold uppercase tracking-wider">Rich enrichment</span>
-        {profile.lastEnrichedAt ? (
-          <span className="ml-2">
-            · Last enriched {new Date(profile.lastEnrichedAt).toLocaleDateString()}
-          </span>
-        ) : null}
-      </div>
-      {profile.enrichmentMode ? (
-        <Badge variant="secondary" className="text-[10px]">
-          {profile.enrichmentMode}
-        </Badge>
-      ) : null}
-    </div>
   )
 }
 

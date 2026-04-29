@@ -40,5 +40,12 @@ export { YearMonthCalendar } from './charts/year-month-calendar';
 // Blocks
 export { AudienceBlock } from './blocks/audience-block';
 
+// Per-platform pages
+export { InstagramProfilePage } from './pages/instagram-profile-page';
+export { YouTubeProfilePage } from './pages/youtube-profile-page';
+export { TikTokProfilePage } from './pages/tiktok-profile-page';
+export { TwitterProfilePage } from './pages/twitter-profile-page';
+export { TwitchProfilePage } from './pages/twitch-profile-page';
+
 // Formatters
 export { formatNum, formatPct, formatDate, flagEmoji, fmtDuration } from './format';
