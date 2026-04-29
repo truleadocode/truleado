@@ -12,6 +12,8 @@ import {
   Phone,
   StickyNote,
   ExternalLink,
+  Loader2,
+  Sparkles,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,6 +49,8 @@ import { YouTubeProfilePage } from '@/components/creator-profile/pages/youtube-p
 import { TikTokProfilePage } from '@/components/creator-profile/pages/tiktok-profile-page'
 import { TwitterProfilePage } from '@/components/creator-profile/pages/twitter-profile-page'
 import { TwitchProfilePage } from '@/components/creator-profile/pages/twitch-profile-page'
+import { useEnrichCreator } from '@/components/discovery/hooks'
+import { EnrichConfirmDialog } from '@/components/discovery/dialogs/enrich-confirm-dialog'
 import { useAuth } from '@/contexts/auth-context'
 import { useCurrency } from '@/hooks/use-currency'
 
@@ -671,7 +675,12 @@ export default function CreatorDetailPage() {
                   pictureUrl={igProfile?.profilePicUrl ?? null}
                 />
               ) : (
-                <NoEnrichmentEmpty handle={creator.instagramHandle} platform="instagram" />
+                <NoEnrichmentEmpty
+                  handle={creator.instagramHandle}
+                  platform="instagram"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
               )}
             </TabsContent>
           )}
@@ -684,7 +693,12 @@ export default function CreatorDetailPage() {
                   pictureUrl={ytProfile?.profilePicUrl ?? null}
                 />
               ) : (
-                <NoEnrichmentEmpty handle={creator.youtubeHandle} platform="youtube" />
+                <NoEnrichmentEmpty
+                  handle={creator.youtubeHandle}
+                  platform="youtube"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
               )}
             </TabsContent>
           )}
@@ -694,7 +708,12 @@ export default function CreatorDetailPage() {
               {ttEnriched ? (
                 <TikTokProfilePage rawData={ttEnriched.rawData} />
               ) : (
-                <NoEnrichmentEmpty handle={creator.tiktokHandle} platform="tiktok" />
+                <NoEnrichmentEmpty
+                  handle={creator.tiktokHandle}
+                  platform="tiktok"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
               )}
             </TabsContent>
           )}
@@ -704,7 +723,12 @@ export default function CreatorDetailPage() {
               {twitterEnriched ? (
                 <TwitterProfilePage rawData={twitterEnriched.rawData} />
               ) : (
-                <NoEnrichmentEmpty handle={creator.twitterHandle} platform="twitter" />
+                <NoEnrichmentEmpty
+                  handle={creator.twitterHandle}
+                  platform="twitter"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
               )}
             </TabsContent>
           )}
@@ -714,7 +738,12 @@ export default function CreatorDetailPage() {
               {twitchEnriched ? (
                 <TwitchProfilePage rawData={twitchEnriched.rawData} />
               ) : (
-                <NoEnrichmentEmpty handle={creator.twitchHandle} platform="twitch" />
+                <NoEnrichmentEmpty
+                  handle={creator.twitchHandle}
+                  platform="twitch"
+                  agencyId={currentAgency?.id ?? null}
+                  onEnriched={fetchEnrichedProfiles}
+                />
               )}
             </TabsContent>
           )}
@@ -894,20 +923,105 @@ export default function CreatorDetailPage() {
 function NoEnrichmentEmpty({
   handle,
   platform,
+  agencyId,
+  onEnriched,
 }: {
   handle: string | null
   platform: string
+  agencyId: string | null
+  /** Refetch enriched profiles in the parent so the new data lands in the tab. */
+  onEnriched: () => Promise<void> | void
 }) {
+  const { toast } = useToast()
+  const enrich = useEnrichCreator()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  // No handle → can't enrich. Tell the user what's missing and stop.
+  if (!handle) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center text-sm text-muted-foreground">
+          <p>
+            No <span className="font-medium capitalize">{platform}</span> handle on this creator.
+          </p>
+          <p className="mt-1 text-xs">
+            Add the handle via the Edit button above, then enrich.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const runEnrich = () => {
+    if (!agencyId) {
+      toast({
+        title: 'No agency selected',
+        description: 'Pick an agency from the top bar before enriching.',
+        variant: 'destructive',
+      })
+      return
+    }
+    enrich.mutate(
+      { agencyId, platform, handle, mode: 'FULL_WITH_AUDIENCE' },
+      {
+        onSuccess: async (result) => {
+          const message = result.cacheHit
+            ? `Loaded from cache. ${result.creditsSpent} credit${result.creditsSpent === 1 ? '' : 's'} charged.`
+            : 'Enriched. 25 credits charged.'
+          toast({ title: 'Profile enriched', description: message })
+          setConfirmOpen(false)
+          await onEnriched()
+        },
+        onError: (err) => {
+          toast({
+            title: 'Enrichment failed',
+            description: err instanceof Error ? err.message : 'Unknown error',
+            variant: 'destructive',
+          })
+          setConfirmOpen(false)
+        },
+      }
+    )
+  }
+
   return (
-    <Card>
-      <CardContent className="p-8 text-center text-sm text-muted-foreground">
-        <p>
-          No {platform} enrichment data yet for{' '}
-          <span className="font-medium">@{handle ?? '—'}</span>.
-        </p>
-        <p className="mt-1 text-xs">
-          Enrich this creator from the Discovery sidebar to see rich {platform} data here.
-        </p>
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-4 p-10 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+          <Sparkles className="h-5 w-5 text-primary" />
+        </div>
+        <div className="space-y-1">
+          <p className="text-base font-semibold text-foreground">
+            No <span className="capitalize">{platform}</span> enrichment yet for{' '}
+            <span className="font-mono">@{handle}</span>
+          </p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Pull the creator&apos;s full enrichment — follower-growth curve, audience
+            demographics, brand affinity, lookalikes — straight into the Creator DB.
+            Free if your agency enriched this creator in the last 30 days.
+          </p>
+        </div>
+        <Button
+          onClick={() => setConfirmOpen(true)}
+          disabled={enrich.isPending}
+          className="gap-2"
+        >
+          {enrich.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Enriching…
+            </>
+          ) : (
+            <>
+              <Sparkles className="h-4 w-4" /> Enrich Profile (25 credits)
+            </>
+          )}
+        </Button>
+        <EnrichConfirmDialog
+          open={confirmOpen}
+          onOpenChange={(o) => !enrich.isPending && setConfirmOpen(o)}
+          onConfirm={runEnrich}
+          pending={enrich.isPending}
+        />
       </CardContent>
     </Card>
   )
