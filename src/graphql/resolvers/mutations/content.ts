@@ -32,6 +32,11 @@ import {
   type PriorAgencyFetchRow,
 } from '@/lib/influencers-club/posts-cache-helpers';
 import { normalizeHandleForLookup } from '@/lib/influencers-club/enrichment-helpers';
+import {
+  shouldUseYoutubeOfficial,
+  upsertYoutubePostsFromVideos,
+} from './enrichment-youtube';
+import { fetchYouTubeChannel, type YouTubeVideoData } from '@/lib/social/youtube';
 
 type IcContentPlatformUpper = 'INSTAGRAM' | 'TIKTOK' | 'YOUTUBE';
 
@@ -68,15 +73,23 @@ export async function fetchCreatorPosts(
 
   // Look up the global creator profile once — used for both cache reads and
   // upserts. A null result means we can't cache (no profile to link to) and
-  // must fall back to a live IC call regardless.
+  // must fall back to a live upstream call regardless.
+  //
+  // YouTube creators may live under provider='youtube_official' (Google API
+  // path) or 'influencers_club' (FULL_WITH_AUDIENCE path). For non-YT
+  // platforms only IC has data. We pick the freshest matching row.
   const lookupHandle = normalizeHandleForLookup(args.handle);
-  const { data: profile } = await supabaseAdmin
+  const { data: profileRows } = await supabaseAdmin
     .from('creator_profiles')
-    .select('id')
-    .eq('provider', 'influencers_club')
+    .select('id, provider')
     .eq('platform', platform)
     .ilike('username', lookupHandle)
-    .maybeSingle();
+    .order('last_enriched_at', { ascending: false })
+    .limit(5);
+  const profile = pickPreferredProfile(
+    (profileRows as Array<{ id: string; provider: string }> | null) ?? [],
+    platform
+  );
 
   // Page 2+ always bypasses the cache — pagination tokens are transient and
   // page boundaries don't line up with cached rows.
@@ -143,10 +156,37 @@ export async function fetchCreatorPosts(
     }
   }
 
-  // Cache miss / paginated / no profile — call IC and charge full margin.
+  // Cache miss / paginated / no profile — call upstream and charge full margin.
   const deduction = await deductCredits(args.agencyId, cost.totalInternalCost);
 
   try {
+    // YouTube + first page + Google API key set → bypass IC.
+    if (
+      platform === 'youtube' &&
+      !args.paginationToken &&
+      shouldUseYoutubeOfficial({ platform, mode: 'posts' })
+    ) {
+      const yt = await fetchYouTubePostsPage(args.handle, profile?.id ?? null);
+      logActivity({
+        agencyId: args.agencyId,
+        actorId: user.id,
+        actorType: 'user',
+        entityType: 'creator_posts',
+        entityId: args.handle,
+        action: 'fetch_posts',
+        metadata: {
+          platform,
+          handle: args.handle,
+          count: yt.result.items.length,
+          icCreditsCost: 0,
+          creditsSpent: cost.totalInternalCost,
+          cacheHit: false,
+          provider: 'youtube_official',
+        },
+      }).catch(() => {});
+      return { ...yt, cacheHit: false, creditsSpent: cost.totalInternalCost };
+    }
+
     const raw = await fetchPosts({
       platform,
       handle: args.handle,
@@ -210,6 +250,90 @@ export async function fetchCreatorPosts(
     await refundCredits(args.agencyId, deduction.previousBalance);
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Among multiple cached profile rows for the same (platform, handle), pick
+ * the preferred one for posts lookups. YouTube prefers `youtube_official`
+ * (Google API path); other platforms only have IC rows.
+ */
+function pickPreferredProfile(
+  rows: Array<{ id: string; provider: string }>,
+  platform: string
+): { id: string } | null {
+  if (rows.length === 0) return null;
+  if (platform === 'youtube') {
+    const yt = rows.find((r) => r.provider === 'youtube_official');
+    if (yt) return yt;
+  }
+  return rows[0];
+}
+
+/**
+ * Google-side posts fetch. Uses fetchYouTubeChannel (which bundles channel
+ * metadata + the latest 20 videos), reshapes the videos as an IC-like posts
+ * response, and persists into creator_posts so subsequent calls hit cache.
+ *
+ * No IC credits cost. Truleado margin still charged at the resolver level.
+ */
+async function fetchYouTubePostsPage(
+  handle: string,
+  creatorProfileId: string | null
+): Promise<{
+  credits_cost: number;
+  result: {
+    num_results: number;
+    more_available: boolean;
+    next_token: string | null;
+    status: string;
+    items: Array<Record<string, unknown>>;
+  };
+}> {
+  const cleanHandle = handle.trim().replace(/^@/, '');
+  const { videos } = await fetchYouTubeChannel(cleanHandle);
+
+  if (creatorProfileId) {
+    upsertYoutubePostsFromVideos(creatorProfileId, videos).catch(() => {});
+  }
+
+  return {
+    credits_cost: 0,
+    result: {
+      num_results: videos.length,
+      more_available: false,
+      next_token: null,
+      status: 'youtube_official',
+      items: videos.map(toIcLikePost),
+    },
+  };
+}
+
+/**
+ * Reshape a YouTube video as the IC posts-payload shape so the existing
+ * frontend code path (fields like pk / engagement.likes / taken_at) works
+ * unchanged.
+ */
+function toIcLikePost(v: YouTubeVideoData): Record<string, unknown> {
+  return {
+    pk: v.videoId,
+    media_id: v.videoId,
+    url: `https://www.youtube.com/watch?v=${v.videoId}`,
+    caption: v.title,
+    media_url: v.thumbnailUrl,
+    thumbnails: { url: v.thumbnailUrl },
+    taken_at: v.publishedAt
+      ? Math.floor(new Date(v.publishedAt).getTime() / 1000)
+      : null,
+    engagement: {
+      likes: v.likeCount,
+      comments: v.commentCount,
+      views: v.viewCount,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

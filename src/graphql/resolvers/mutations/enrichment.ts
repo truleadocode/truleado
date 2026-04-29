@@ -33,6 +33,11 @@ import {
   type EnrichmentModeDb,
   type PriorEnrichmentLedgerRow,
 } from '@/lib/influencers-club/enrichment-helpers';
+import {
+  enrichYoutubeOfficial,
+  shouldUseYoutubeOfficial,
+  YOUTUBE_OFFICIAL_PROVIDER,
+} from './enrichment-youtube';
 
 // ---------------------------------------------------------------------------
 // Modes
@@ -80,6 +85,15 @@ type CreatorProfileRow = {
   raw_data: unknown;
 };
 
+/**
+ * Look up a cached profile by (platform, handle), platform-aware about
+ * which providers to consider. For YouTube we prefer 'youtube_official'
+ * rows (richer data, free upstream); for every other platform only IC
+ * has data.
+ *
+ * Mode-rank logic (in isProfileFreshFor) still applies on top of this —
+ * a returned row may not satisfy a higher-tier request.
+ */
 async function findCachedProfileByHandle(
   platform: string,
   handle: string
@@ -88,11 +102,22 @@ async function findCachedProfileByHandle(
   const { data } = await supabaseAdmin
     .from('creator_profiles')
     .select('*')
-    .eq('provider', 'influencers_club')
     .eq('platform', platform)
     .ilike('username', lookup)
-    .maybeSingle();
-  return (data as CreatorProfileRow | null) ?? null;
+    .order('last_enriched_at', { ascending: false })
+    .limit(5);
+
+  const rows = (data as CreatorProfileRow[] | null) ?? [];
+  if (rows.length === 0) return null;
+
+  // Provider preference: YouTube prefers youtube_official; everything else
+  // is IC-only today. If the preferred row exists, return it; otherwise
+  // fall back to the freshest available.
+  if (platform === 'youtube') {
+    const ytRow = rows.find((r) => r.provider === 'youtube_official');
+    if (ytRow) return ytRow;
+  }
+  return rows[0];
 }
 
 function toGraphQLProfile(row: CreatorProfileRow) {
@@ -297,7 +322,26 @@ export async function enrichCreator(
     let pictureUrl: string | undefined;
     let audienceBlocks: Array<Record<string, unknown>> | undefined;
 
-    if (args.mode === 'RAW') {
+    // YouTube + RAW/FULL → bypass IC and use Google's API directly.
+    // FULL_WITH_AUDIENCE always falls through to IC (Google has no
+    // audience demographics endpoint).
+    const useYoutubeOfficial =
+      args.mode !== 'FULL_WITH_AUDIENCE' &&
+      shouldUseYoutubeOfficial({
+        platform,
+        mode: dbMode as 'raw' | 'full',
+      });
+
+    if (useYoutubeOfficial) {
+      const yt = await enrichYoutubeOfficial({
+        handle: args.handle,
+        mode: dbMode as 'raw' | 'full',
+        agencyId: args.agencyId,
+      });
+      profileRow = yt.profileRow;
+      icCreditsCost = 0; // No IC call.
+      pictureUrl = yt.channel.thumbnailUrl;
+    } else if (args.mode === 'RAW') {
       const raw = await enrichHandleRaw({ platform, handle: args.handle });
       icCreditsCost = raw.credits_cost;
       const exists = (raw.result as Record<string, unknown>).exists;
@@ -328,7 +372,7 @@ export async function enrichCreator(
     // Fire-and-forget image mirror for persisted profile.
     if (pictureUrl) {
       mirrorAndPersist({
-        provider: 'influencers_club',
+        provider: profileRow.provider,
         platform,
         providerUserId: profileRow.provider_user_id,
         pictureUrl,
