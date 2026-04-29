@@ -995,6 +995,8 @@ export const queries = {
         tiktokHandle
         facebookHandle
         linkedinHandle
+        twitterHandle
+        twitchHandle
         notes
         isActive
         followers
@@ -1017,6 +1019,8 @@ export const queries = {
         tiktokHandle
         facebookHandle
         linkedinHandle
+        twitterHandle
+        twitchHandle
         notes
         isActive
         createdAt

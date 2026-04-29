@@ -41,12 +41,40 @@ interface Creator {
   tiktokHandle: string | null
   facebookHandle: string | null
   linkedinHandle: string | null
+  twitterHandle: string | null
+  twitchHandle: string | null
   notes: string | null
   isActive: boolean
   followers: number | null
   engagementRate: number | null
   avgLikes: number | null
   createdAt: string
+}
+
+const PLATFORMS = ['instagram', 'youtube', 'tiktok', 'twitter', 'twitch'] as const
+type PlatformTab = (typeof PLATFORMS)[number]
+
+const PLATFORM_LABELS: Record<PlatformTab, string> = {
+  instagram: 'Instagram',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  twitter: 'Twitter / X',
+  twitch: 'Twitch',
+}
+
+function getCreatorHandle(creator: Creator, platform: PlatformTab): string | null {
+  switch (platform) {
+    case 'instagram':
+      return creator.instagramHandle
+    case 'youtube':
+      return creator.youtubeHandle
+    case 'tiktok':
+      return creator.tiktokHandle
+    case 'twitter':
+      return creator.twitterHandle
+    case 'twitch':
+      return creator.twitchHandle
+  }
 }
 
 export default function CreatorsPage() {
@@ -58,7 +86,7 @@ export default function CreatorsPage() {
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [showInactive, setShowInactive] = useState(false)
-  const [platformTab, setPlatformTab] = useState<'instagram' | 'youtube' | 'tiktok'>('instagram')
+  const [platformTab, setPlatformTab] = useState<PlatformTab>('instagram')
   const [fetchingIds, setFetchingIds] = useState<Set<string>>(new Set())
 
   const fetchCreators = useCallback(async () => {
@@ -84,22 +112,19 @@ export default function CreatorsPage() {
     fetchCreators()
   }, [fetchCreators])
 
-  const platformFilteredCreators = creators.filter((creator) => {
-    if (platformTab === 'instagram') return !!creator.instagramHandle
-    if (platformTab === 'youtube') return !!creator.youtubeHandle
-    if (platformTab === 'tiktok') return !!creator.tiktokHandle
-    return false
-  })
+  const platformFilteredCreators = creators.filter(
+    (creator) => !!getCreatorHandle(creator, platformTab)
+  )
 
   const filteredCreators = platformFilteredCreators.filter((creator) => {
     const query = searchQuery.toLowerCase()
-    return (
-      creator.displayName.toLowerCase().includes(query) ||
-      (creator.email && creator.email.toLowerCase().includes(query)) ||
-      (creator.instagramHandle && creator.instagramHandle.toLowerCase().includes(query)) ||
-      (creator.youtubeHandle && creator.youtubeHandle.toLowerCase().includes(query)) ||
-      (creator.tiktokHandle && creator.tiktokHandle.toLowerCase().includes(query))
-    )
+    if (!query) return true
+    if (creator.displayName.toLowerCase().includes(query)) return true
+    if (creator.email && creator.email.toLowerCase().includes(query)) return true
+    return PLATFORMS.some((p) => {
+      const h = getCreatorHandle(creator, p)
+      return h ? h.toLowerCase().includes(query) : false
+    })
   })
 
   const handleDeactivate = async (creator: Creator) => {
@@ -122,10 +147,10 @@ export default function CreatorsPage() {
   }
 
   const getHandle = (creator: Creator) => {
-    if (platformTab === 'instagram') return creator.instagramHandle ? `@${creator.instagramHandle}` : null
-    if (platformTab === 'youtube') return creator.youtubeHandle
-    if (platformTab === 'tiktok') return creator.tiktokHandle ? `@${creator.tiktokHandle}` : null
-    return null
+    const h = getCreatorHandle(creator, platformTab)
+    if (!h) return null
+    if (platformTab === 'youtube') return h
+    return `@${h.replace(/^@/, '')}`
   }
 
   const getInitials = (name: string) =>
@@ -195,20 +220,14 @@ export default function CreatorsPage() {
       filteredCount={filteredCreators.length}
       filterBar={
         <div className="flex items-center gap-4">
-          <Tabs value={platformTab} onValueChange={(v) => setPlatformTab(v as typeof platformTab)}>
+          <Tabs value={platformTab} onValueChange={(v) => setPlatformTab(v as PlatformTab)}>
             <TabsList>
-              <TabsTrigger value="instagram" className="gap-1.5">
-                <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />
-                Instagram
-              </TabsTrigger>
-              <TabsTrigger value="youtube" className="gap-1.5">
-                <PlatformIcon platform="youtube" className="h-3.5 w-3.5" />
-                YouTube
-              </TabsTrigger>
-              <TabsTrigger value="tiktok" className="gap-1.5">
-                <PlatformIcon platform="tiktok" className="h-3.5 w-3.5" />
-                TikTok
-              </TabsTrigger>
+              {PLATFORMS.map((p) => (
+                <TabsTrigger key={p} value={p} className="gap-1.5">
+                  <PlatformIcon platform={p} className="h-3.5 w-3.5" />
+                  {PLATFORM_LABELS[p]}
+                </TabsTrigger>
+              ))}
             </TabsList>
           </Tabs>
           <Button
@@ -280,26 +299,28 @@ export default function CreatorsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={fetchingIds.has(creator.id)}
-                              onClick={() => handleFetchData(creator.id)}
-                            >
-                              {fetchingIds.has(creator.id) ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <RefreshCw className="h-4 w-4" />
-                              )}
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Fetch social data</TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
+                      {platformTab === 'instagram' || platformTab === 'youtube' ? (
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={fetchingIds.has(creator.id)}
+                                onClick={() => handleFetchData(creator.id)}
+                              >
+                                {fetchingIds.has(creator.id) ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Fetch social data</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : null}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">

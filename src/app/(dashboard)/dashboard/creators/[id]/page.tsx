@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   MoreHorizontal,
@@ -45,6 +45,18 @@ import { SocialDashboardTab } from '@/components/creators/social-dashboard-tab'
 import { InstagramTab } from '@/components/creators/instagram-tab'
 import { YouTubeTab } from '@/components/creators/youtube-tab'
 import { CreatorRatesForm, type CreatorRateDraft } from '@/components/creators/creator-rates-form'
+import {
+  parseInstagramEnrichment,
+  parseYouTubeEnrichment,
+  parseTikTokEnrichment,
+  parseTwitterEnrichment,
+  parseTwitchEnrichment,
+  InstagramPanel,
+  YouTubePanel,
+  TikTokPanel,
+  TwitterPanel,
+  TwitchPanel,
+} from '@/components/discovery/enriched-data'
 import { useAuth } from '@/contexts/auth-context'
 import { useCurrency } from '@/hooks/use-currency'
 
@@ -109,6 +121,8 @@ interface Creator {
   tiktokHandle: string | null
   facebookHandle: string | null
   linkedinHandle: string | null
+  twitterHandle: string | null
+  twitchHandle: string | null
   notes: string | null
   isActive: boolean
   createdAt: string
@@ -154,10 +168,20 @@ interface SocialPost {
   publishedAt: string | null
 }
 
-type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'facebook' | 'linkedin'
+type Tab = 'dashboard' | 'instagram' | 'youtube' | 'tiktok' | 'twitter' | 'twitch' | 'facebook' | 'linkedin'
+
+interface EnrichedProfile {
+  id: string
+  platform: string
+  username: string
+  rawData: unknown
+  enrichmentMode: string | null
+  lastEnrichedAt: string | null
+}
 
 export default function CreatorDetailPage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const { currentAgency } = useAuth()
   const { format: formatMoney } = useCurrency()
@@ -167,6 +191,7 @@ export default function CreatorDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('dashboard')
+  const [enrichedProfiles, setEnrichedProfiles] = useState<EnrichedProfile[]>([])
 
   // Social data state
   const [socialProfiles, setSocialProfiles] = useState<SocialProfile[]>([])
@@ -284,16 +309,52 @@ export default function CreatorDetailPage() {
     }
   }, [creatorId])
 
+  const fetchEnrichedProfiles = useCallback(async () => {
+    try {
+      const data = await graphqlRequest<{ creatorEnrichedProfiles: EnrichedProfile[] }>(
+        queries.creatorEnrichedProfiles,
+        { creatorId }
+      )
+      setEnrichedProfiles(data.creatorEnrichedProfiles || [])
+    } catch {
+      // Silent — the legacy social-profiles tabs still work without enrichment data.
+      setEnrichedProfiles([])
+    }
+  }, [creatorId])
+
   useEffect(() => {
     fetchCreator()
   }, [fetchCreator])
 
-  // Fetch social data once creator is loaded
+  // Fetch social data + enriched profiles once creator is loaded
   useEffect(() => {
     if (creator) {
       fetchSocialData()
+      fetchEnrichedProfiles()
     }
-  }, [creator, fetchSocialData])
+  }, [creator, fetchSocialData, fetchEnrichedProfiles])
+
+  // Honour the ?platform= query param on initial mount (and when handle
+  // info finishes loading). Falls back to dashboard if the requested
+  // platform isn't one this creator has a handle on.
+  useEffect(() => {
+    if (!creator) return
+    const requested = searchParams?.get('platform')?.toLowerCase()
+    if (!requested) return
+    const handleMap: Record<string, string | null> = {
+      instagram: creator.instagramHandle,
+      youtube: creator.youtubeHandle,
+      tiktok: creator.tiktokHandle,
+      twitter: creator.twitterHandle,
+      twitch: creator.twitchHandle,
+      facebook: creator.facebookHandle,
+      linkedin: creator.linkedinHandle,
+    }
+    if (handleMap[requested]) {
+      setActiveTab(requested as Tab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creator?.id, searchParams])
 
   const handleTriggerFetch = useCallback(
     async (platform: string, jobType: string) => {
@@ -450,12 +511,23 @@ export default function CreatorDetailPage() {
   const hasInstagram = !!creator.instagramHandle
   const hasYouTube = !!creator.youtubeHandle
   const hasTikTok = !!creator.tiktokHandle
+  const hasTwitter = !!creator.twitterHandle
+  const hasTwitch = !!creator.twitchHandle
   const hasFacebook = !!creator.facebookHandle
   const hasLinkedIn = !!creator.linkedinHandle
-  const hasSocialTabs = hasInstagram || hasYouTube || hasTikTok || hasFacebook || hasLinkedIn
+  const hasSocialTabs =
+    hasInstagram || hasYouTube || hasTikTok || hasTwitter || hasTwitch || hasFacebook || hasLinkedIn
 
   const igProfile = socialProfiles.find((p) => p.platform === 'instagram') || null
   const ytProfile = socialProfiles.find((p) => p.platform === 'youtube') || null
+
+  const enrichedFor = (platform: string): EnrichedProfile | null =>
+    enrichedProfiles.find((p) => p.platform.toLowerCase() === platform) || null
+  const igEnriched = enrichedFor('instagram')
+  const ytEnriched = enrichedFor('youtube')
+  const ttEnriched = enrichedFor('tiktok')
+  const twitterEnriched = enrichedFor('twitter')
+  const twitchEnriched = enrichedFor('twitch')
 
   return (
     <>
@@ -630,11 +702,24 @@ export default function CreatorDetailPage() {
                 YouTube
               </TabsTrigger>
             )}
-            <TabsTrigger value="tiktok" disabled className="opacity-60">
-              <PlatformIcon platform="tiktok" className="mr-2 h-4 w-4" />
-              TikTok
-              <Badge variant="secondary" className="ml-2 px-1.5 py-0.5 text-[10px]">Soon</Badge>
-            </TabsTrigger>
+            {hasTikTok && (
+              <TabsTrigger value="tiktok">
+                <PlatformIcon platform="tiktok" className="mr-2 h-4 w-4" />
+                TikTok
+              </TabsTrigger>
+            )}
+            {hasTwitter && (
+              <TabsTrigger value="twitter">
+                <PlatformIcon platform="twitter" className="mr-2 h-4 w-4" />
+                Twitter / X
+              </TabsTrigger>
+            )}
+            {hasTwitch && (
+              <TabsTrigger value="twitch">
+                <PlatformIcon platform="twitch" className="mr-2 h-4 w-4" />
+                Twitch
+              </TabsTrigger>
+            )}
             <TabsTrigger value="facebook" disabled className="opacity-60">
               <PlatformIcon platform="facebook" className="mr-2 h-4 w-4" />
               Facebook
@@ -660,6 +745,14 @@ export default function CreatorDetailPage() {
                 onTriggerFetch={(jobType) => handleTriggerFetch('instagram', jobType)}
                 fetching={isPollingPlatform('instagram')}
               />
+              {igEnriched ? (
+                <Card className="mt-6">
+                  <CardContent className="p-0">
+                    <EnrichedSubsectionHeader profile={igEnriched} />
+                    <InstagramPanel data={parseInstagramEnrichment(igEnriched.rawData)} />
+                  </CardContent>
+                </Card>
+              ) : null}
             </TabsContent>
           )}
 
@@ -672,6 +765,59 @@ export default function CreatorDetailPage() {
                 onTriggerFetch={(jobType) => handleTriggerFetch('youtube', jobType)}
                 fetching={isPollingPlatform('youtube')}
               />
+              {ytEnriched ? (
+                <Card className="mt-6">
+                  <CardContent className="p-0">
+                    <EnrichedSubsectionHeader profile={ytEnriched} />
+                    <YouTubePanel data={parseYouTubeEnrichment(ytEnriched.rawData)} />
+                  </CardContent>
+                </Card>
+              ) : null}
+            </TabsContent>
+          )}
+
+          {hasTikTok && (
+            <TabsContent value="tiktok">
+              {ttEnriched ? (
+                <Card>
+                  <CardContent className="p-0">
+                    <EnrichedSubsectionHeader profile={ttEnriched} />
+                    <TikTokPanel data={parseTikTokEnrichment(ttEnriched.rawData)} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <NoEnrichmentEmpty handle={creator.tiktokHandle} platform="tiktok" />
+              )}
+            </TabsContent>
+          )}
+
+          {hasTwitter && (
+            <TabsContent value="twitter">
+              {twitterEnriched ? (
+                <Card>
+                  <CardContent className="p-0">
+                    <EnrichedSubsectionHeader profile={twitterEnriched} />
+                    <TwitterPanel data={parseTwitterEnrichment(twitterEnriched.rawData)} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <NoEnrichmentEmpty handle={creator.twitterHandle} platform="twitter" />
+              )}
+            </TabsContent>
+          )}
+
+          {hasTwitch && (
+            <TabsContent value="twitch">
+              {twitchEnriched ? (
+                <Card>
+                  <CardContent className="p-0">
+                    <EnrichedSubsectionHeader profile={twitchEnriched} />
+                    <TwitchPanel data={parseTwitchEnrichment(twitchEnriched.rawData)} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <NoEnrichmentEmpty handle={creator.twitchHandle} platform="twitch" />
+              )}
             </TabsContent>
           )}
         </Tabs>
@@ -844,5 +990,47 @@ export default function CreatorDetailPage() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function EnrichedSubsectionHeader({ profile }: { profile: EnrichedProfile }) {
+  return (
+    <div className="flex items-center justify-between border-b border-border px-6 py-3 text-xs text-muted-foreground">
+      <div>
+        <span className="font-semibold uppercase tracking-wider">Rich enrichment</span>
+        {profile.lastEnrichedAt ? (
+          <span className="ml-2">
+            · Last enriched {new Date(profile.lastEnrichedAt).toLocaleDateString()}
+          </span>
+        ) : null}
+      </div>
+      {profile.enrichmentMode ? (
+        <Badge variant="secondary" className="text-[10px]">
+          {profile.enrichmentMode}
+        </Badge>
+      ) : null}
+    </div>
+  )
+}
+
+function NoEnrichmentEmpty({
+  handle,
+  platform,
+}: {
+  handle: string | null
+  platform: string
+}) {
+  return (
+    <Card>
+      <CardContent className="p-8 text-center text-sm text-muted-foreground">
+        <p>
+          No {platform} enrichment data yet for{' '}
+          <span className="font-medium">@{handle ?? '—'}</span>.
+        </p>
+        <p className="mt-1 text-xs">
+          Enrich this creator from the Discovery sidebar to see rich {platform} data here.
+        </p>
+      </CardContent>
+    </Card>
   )
 }
