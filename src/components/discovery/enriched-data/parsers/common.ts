@@ -37,7 +37,24 @@ export function parseTopLevelCommon(rawData: unknown): CommonTopLevel {
     aiBrandCollaborations: parseWeightedList(r.ai_brand_collaborations, 'brand'),
     linksInBio: safeStringArray(r.links_in_bio),
     otherLinks: safeStringArray(r.other_links),
+    creatorHas: parseCreatorHas(r.creator_has),
   };
+}
+
+/**
+ * `creator_has` is an object whose values are booleans (and sometimes
+ * `null` / strings — we coerce to bool). Drops keys whose value isn't
+ * truthy so consumers can simply check `Object.keys(...).length > 0` to
+ * decide whether the cross-platform summary block is worth rendering.
+ */
+function parseCreatorHas(v: unknown): Record<string, boolean> {
+  const dict = safeDict(v);
+  if (!dict) return {};
+  const out: Record<string, boolean> = {};
+  for (const [k, val] of Object.entries(dict)) {
+    if (val === true || val === 'true' || val === 1) out[k] = true;
+  }
+  return out;
 }
 
 /**

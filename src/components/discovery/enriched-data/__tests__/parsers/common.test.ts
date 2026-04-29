@@ -71,3 +71,38 @@ describe('parseTopLevelCommon', () => {
     expect(out.aiNiches).toEqual([]);
   });
 });
+
+describe('parseTopLevelCommon — creator_has cross-platform booleans', () => {
+  it('returns {} when creator_has is absent (IG / Twitter / Twitch)', () => {
+    expect(parseTopLevelCommon(enrichmentFullSamples.instagram.result).creatorHas).toEqual({});
+    expect(parseTopLevelCommon(enrichmentFullSamples.twitter.result).creatorHas).toEqual({});
+    expect(parseTopLevelCommon(enrichmentFullSamples.twitch.result).creatorHas).toEqual({});
+  });
+
+  it('extracts truthy keys from YouTube fixture (MrBeast has IG + Twitter + YT)', () => {
+    const out = parseTopLevelCommon(enrichmentFullSamples.youtube.result);
+    expect(Object.keys(out.creatorHas).length).toBeGreaterThan(0);
+    for (const v of Object.values(out.creatorHas)) {
+      expect(v).toBe(true);
+    }
+  });
+
+  it('extracts truthy keys from TikTok fixture (@khaby.lame)', () => {
+    const out = parseTopLevelCommon(enrichmentFullSamples.tiktok.result);
+    // TT fixture has creator_has populated
+    expect(Object.keys(out.creatorHas).length).toBeGreaterThan(0);
+  });
+
+  it('drops false / null / non-boolean values', () => {
+    const out = parseTopLevelCommon({
+      creator_has: { instagram: true, twitter: false, youtube: null, tiktok: 'maybe' },
+    });
+    expect(out.creatorHas).toEqual({ instagram: true });
+  });
+
+  it('returns {} when creator_has is not a dict', () => {
+    expect(parseTopLevelCommon({ creator_has: 'oops' }).creatorHas).toEqual({});
+    expect(parseTopLevelCommon({ creator_has: [] }).creatorHas).toEqual({});
+    expect(parseTopLevelCommon({ creator_has: null }).creatorHas).toEqual({});
+  });
+});

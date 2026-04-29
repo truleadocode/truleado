@@ -33,6 +33,13 @@ export interface CommonTopLevel {
   aiBrandCollaborations: Array<{ name: string; percentage: number | null }>;
   linksInBio: string[];
   otherLinks: string[];
+  /**
+   * Booleans flagging which other platforms IC believes the creator is
+   * verifiably on. Populated for YouTube + TikTok enrichments only; absent
+   * for IG / Twitter / Twitch (the dict is just empty in those cases).
+   * Keys are platform names exactly as IC returns them (lowercase).
+   */
+  creatorHas: Record<string, boolean>;
 }
 
 export interface PostSummary {

@@ -40,3 +40,18 @@ export { YouTubePanel } from './panels/youtube-panel';
 export { TikTokPanel } from './panels/tiktok-panel';
 export { TwitterPanel } from './panels/twitter-panel';
 export { TwitchPanel } from './panels/twitch-panel';
+
+// Charts
+export { GrowthLine, ErHistogram, PostsPerMonthBar, IncomeCard } from './charts';
+export type { GrowthPoint } from './charts';
+
+// Sidebar blocks (Phase 3 IC-style left meta column)
+export {
+  CrossPlatformSummary,
+  LinksUsed,
+  MetaColumn,
+  StatList,
+  buildStandardStatList,
+  TopHashtags,
+} from './sidebar-blocks';
+export type { StatListEntry } from './sidebar-blocks';
