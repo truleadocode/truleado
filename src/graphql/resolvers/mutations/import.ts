@@ -50,9 +50,8 @@ interface CreatorProfileRow {
 // ---------------------------------------------------------------------------
 // Handle-column selection
 // ---------------------------------------------------------------------------
-// The creators table only has handle columns for instagram/youtube/tiktok.
-// For twitter/twitch we leave all handle columns null and rely on (provider,
-// provider_user_id) to uniquely identify the creator.
+// All five Truleado-supported platforms have a corresponding `<platform>_handle`
+// column on the creators table after migration 00060.
 
 export function handleColumnFor(platform: string): string | null {
   switch (platform.toLowerCase()) {
@@ -62,8 +61,12 @@ export function handleColumnFor(platform: string): string | null {
       return 'youtube_handle';
     case 'tiktok':
       return 'tiktok_handle';
+    case 'twitter':
+      return 'twitter_handle';
+    case 'twitch':
+      return 'twitch_handle';
     default:
-      return null; // twitter/twitch — no column to populate
+      return null;
   }
 }
 

@@ -608,6 +608,8 @@ export const typeDefs = gql`
     tiktokHandle: String
     facebookHandle: String
     linkedinHandle: String
+    twitterHandle: String
+    twitchHandle: String
     profilePictureUrl: String
     notes: String
     platform: String
@@ -1665,6 +1667,12 @@ export const typeDefs = gql`
     # CTA between "Enrich" and "View in Creator DB".
     creatorIdByProfileId(agencyId: ID!, creatorProfileId: ID!): ID
 
+    # Look up enriched creator_profiles rows for every platform a given
+    # roster creator has a handle on. Used to render rich per-platform
+    # panels on /dashboard/creators/[id]. Returns up to 5 rows (one per
+    # platform). Read-only — no IC calls, no credit charges.
+    creatorEnrichedProfiles(creatorId: ID!): [CreatorProfile!]!
+
     # Paginated log of enrichments paid for by this agency, across all modes.
     # cache_hit=true rows are those where Truleado served cached data but
     # still charged the agency (margin model).
@@ -2188,6 +2196,8 @@ export const typeDefs = gql`
       tiktokHandle: String
       facebookHandle: String
       linkedinHandle: String
+      twitterHandle: String
+      twitchHandle: String
       notes: String
       rates: [CreatorRateInput!]
     ): Creator!

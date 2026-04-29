@@ -1778,6 +1778,35 @@ export const queries = {
     }
   `,
 
+  creatorEnrichedProfiles: `
+    query CreatorEnrichedProfiles($creatorId: ID!) {
+      creatorEnrichedProfiles(creatorId: $creatorId) {
+        id
+        provider
+        platform
+        providerUserId
+        username
+        fullName
+        followers
+        engagementPercent
+        biography
+        nichePrimary
+        nicheSecondary
+        email
+        location
+        language
+        isVerified
+        isBusiness
+        isCreator
+        profilePictureUrl
+        enrichmentMode
+        lastEnrichedAt
+        firstSeenAt
+        rawData
+      }
+    }
+  `,
+
   creatorEnrichmentHistory: `
     query CreatorEnrichmentHistory(
       $agencyId: ID!, $mode: EnrichmentMode, $platform: DiscoveryPlatform,

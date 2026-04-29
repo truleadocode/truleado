@@ -23,16 +23,18 @@ describe('handleColumnFor', () => {
     expect(handleColumnFor('tiktok')).toBe('tiktok_handle');
   });
 
-  it('returns null for twitter (no column on creators table)', () => {
-    expect(handleColumnFor('twitter')).toBeNull();
+  it('maps twitter -> twitter_handle (added in migration 00060)', () => {
+    expect(handleColumnFor('twitter')).toBe('twitter_handle');
+    expect(handleColumnFor('Twitter')).toBe('twitter_handle');
   });
 
-  it('returns null for twitch (no column on creators table)', () => {
-    expect(handleColumnFor('twitch')).toBeNull();
+  it('maps twitch -> twitch_handle (added in migration 00060)', () => {
+    expect(handleColumnFor('twitch')).toBe('twitch_handle');
   });
 
   it('returns null for unknown platforms', () => {
     expect(handleColumnFor('linkedin')).toBeNull();
+    expect(handleColumnFor('facebook')).toBeNull();
     expect(handleColumnFor('')).toBeNull();
   });
 });
